@@ -1,23 +1,21 @@
-import os
-import asyncio
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import os
 from telegram import Update, Bot
 from .bot import application
-from .db import Base, engine
+from .db import engine, Base
 from .utils import setup_webhook
 
-# تهيئة قاعدة البيانات
 Base.metadata.create_all(bind=engine)
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 bot = Bot(token=TOKEN)
 
-app = FastAPI(title="Telegram Bot")
+app = FastAPI()
 
 @app.get("/")
-def index():
+def home():
     return {"status": "ok"}
 
 @app.post(WEBHOOK_PATH)
@@ -26,13 +24,15 @@ async def webhook(request: Request):
         data = await request.json()
         update = Update.de_json(data, bot)
         await application.update_queue.put(update)
-        return {"ok": True}
+        return JSONResponse({"ok": True})
     except Exception as e:
-        print("Error handling update:", e)
-        return {"ok": False}
+        print("❌ Webhook error:", e)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
-# عند تشغيل السيرفر مباشرة (محليًا)
-if __name__ == "__main__":
-    import uvicorn
-    setup_webhook(bot)
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+@app.on_event("startup")
+async def on_startup():
+    try:
+        url = setup_webhook(bot)
+        print("✅ Webhook set to:", url)
+    except Exception as e:
+        print("⚠️ Webhook setup failed:", e)
