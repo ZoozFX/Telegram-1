@@ -29,7 +29,8 @@ if not TOKEN:
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
-# 🟢 1. /start لاختيار اللغة
+
+# 🟢 1. /start → اختيار اللغة
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -47,7 +48,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=reply_markup)
 
 
-# 🟣 2. إظهار الأقسام الرئيسية بعد اختيار اللغة
+# 🟣 2. عرض الأقسام الرئيسية بعد اختيار اللغة
 async def show_main_sections(update: Update, lang: str):
     if lang == "ar":
         sections = [
@@ -56,6 +57,7 @@ async def show_main_sections(update: Update, lang: str):
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
         text = "✅ تم اختيار اللغة العربية 🇪🇬\n\nاختر القسم الذي ترغب به 👇"
+        back_button = ("🔙 الرجوع لاختيار اللغة", "back_language")
     else:
         sections = [
             ("💹 Forex Trading", "forex_main"),
@@ -63,16 +65,16 @@ async def show_main_sections(update: Update, lang: str):
             ("🤝 YesFX Partnership", "agency_main"),
         ]
         text = "✅ English language selected 🇺🇸\n\nPlease choose a section 👇"
+        back_button = ("🔙 Back to language selection", "back_language")
 
-    keyboard = [
-        [InlineKeyboardButton(name, callback_data=callback)]
-        for name, callback in sections
-    ]
+    keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
+    keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
 
 
-# 🟢 3. التعامل مع اللغة المختارة
+# 🟢 3. عند اختيار اللغة
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -81,12 +83,23 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_sections(update, lang)
 
 
-# 🟡 4. التعامل مع الأقسام الفرعية
+# 🟡 4. التعامل مع الأقسام الفرعية + زر الرجوع
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
+    # الرجوع لاختيار اللغة
+    if query.data == "back_language":
+        await start(update, context)
+        return
+
+    # الرجوع إلى القائمة الرئيسية
+    if query.data == "back_main":
+        await show_main_sections(update, lang)
+        return
+
+    # الأقسام
     if query.data == "forex_main":
         if lang == "ar":
             options = [
@@ -95,6 +108,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("📰 الأخبار الاقتصادية", "forex_news")
             ]
             text = "💹 قسم تداول الفوركس:\nاختر الخدمة 👇"
+            back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [
                 ("📊 Copy Trading", "forex_copy"),
@@ -102,6 +116,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("📰 Economic News", "forex_news")
             ]
             text = "💹 Forex Trading Section:\nChoose a service 👇"
+            back_label = "🔙 Back to main menu"
 
     elif query.data == "dev_main":
         if lang == "ar":
@@ -112,6 +127,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("🌐 برمجة مواقع الويب", "dev_web")
             ]
             text = "💻 قسم خدمات البرمجة:\nاختر نوع الخدمة 👇"
+            back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [
                 ("📈 Indicators Development", "dev_indicators"),
@@ -120,28 +136,32 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("🌐 Web Development", "dev_web")
             ]
             text = "💻 Programming Services:\nChoose the type 👇"
+            back_label = "🔙 Back to main menu"
 
     elif query.data == "agency_main":
         if lang == "ar":
             options = [("📄 طلب وكالة YesFX", "agency_request")]
             text = "🤝 قسم طلب وكالة:\nاختر 👇"
+            back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [("📄 Request YesFX Partnership", "agency_request")]
             text = "🤝 Partnership Section:\nChoose 👇"
+            back_label = "🔙 Back to main menu"
 
     else:
-        text = "🔹 سيتم إضافة هذه الميزة قريبًا!"
-        options = []
+        # عرض رسالة مؤقتة عند اختيار خدمة نهائية
+        await query.edit_message_text(
+            text=f"🔹 {'تم اختيار الخدمة' if lang=='ar' else 'Service selected'}: {query.data}\n\n"
+                 f"{'سيتم إضافة التفاصيل قريبًا...' if lang=='ar' else 'Details will be added soon...'}"
+        )
+        return
 
-    if options:
-        keyboard = [
-            [InlineKeyboardButton(name, callback_data=callback)]
-            for name, callback in options
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=text, reply_markup=reply_markup)
-    else:
-        await query.edit_message_text(text=text)
+    # أزرار الخيارات + زر الرجوع
+    keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in options]
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(text=text, reply_markup=reply_markup)
 
 
 # 🔗 Handlers
