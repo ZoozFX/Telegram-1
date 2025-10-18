@@ -20,12 +20,12 @@ def index():
     return "OK"
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
-def webhook():
+async def webhook():
     if request.headers.get("content-type") != "application/json":
         abort(403)
     update = Update.de_json(request.get_json(force=True), bot)
     # Put update into PTB application update queue
-    application.update_queue.put(update)
+    await application.update_queue.put(update)
     return "OK", 200
 
 if __name__ == '__main__':
