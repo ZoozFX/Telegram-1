@@ -1,87 +1,84 @@
 import os
-import logging
 from fastapi import FastAPI, Request
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from app.utils import setup_webhook
 from app.db import Base, engine
 
-# إعداد logging واضح للـ Render logs
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# إنشاء الجداول في قاعدة البيانات (إذا لزم)
+# إنشاء الجداول في قاعدة البيانات
 Base.metadata.create_all(bind=engine)
 
-# متغيرات بيئة
+# إعداد المتغيرات
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-if not TOKEN:
-    logger.error("TELEGRAM_TOKEN is not set! Set it in environment variables.")
-
-# تهيئة application (PTB)
+# تهيئة البوت والتطبيق
+bot = Bot(token=TOKEN)
 application = ApplicationBuilder().token(TOKEN).build()
 
-# ------------------ Handlers ------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    lang = (user.language_code or "en").lower()
-    if lang.startswith("ar"):
-        msg = f"👋 أهلاً {user.first_name}! مرحباً بك في البوت!"
-    else:
-        msg = f"👋 Hello {user.first_name}! Welcome to the bot!"
-    await update.message.reply_text(msg)
-
-application.add_handler(CommandHandler("start", start))
-# -----------------------------------------------
-
-# FastAPI app
 app = FastAPI()
 
+
+# 🟢 دالة /start — تظهر واجهة اختيار اللغة
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar"),
+            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    text = (
+        "👋 أهلاً بك!\n\n"
+        "Welcome!\n\n"
+        "Please choose your language below 👇\n"
+        "الرجاء اختيار لغتك أدناه 👇"
+    )
+    await update.message.reply_text(text, reply_markup=reply_markup)
+
+
+# 🟣 دالة لمعالجة اختيار اللغة
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "lang_ar":
+        msg = "✅ تم اختيار اللغة العربية 🇪🇬"
+    else:
+        msg = "✅ English language selected 🇺🇸"
+
+    await query.edit_message_text(msg)
+
+
+# 🔵 ربط الأوامر والمعالجات
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(set_language))
+
+
+# 🟣 صفحة الفحص الأساسية
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
 
-# webhook endpoint
+
+# 🟢 مسار الـ webhook
 @app.post(WEBHOOK_PATH)
 async def process_webhook(request: Request):
     try:
         data = await request.json()
-        logger.info("Received update: %s", data.get("update_id", "<no id>"))
-        update = Update.de_json(data, application.bot)  # use application.bot
-        # process update via application
+        update = Update.de_json(data, bot)
         await application.process_update(update)
         return {"ok": True}
     except Exception as e:
-        # Log full exception with stacktrace so we can see root cause in Render logs
-        logger.exception("❌ Webhook error while processing update")
+        print("❌ Webhook error:", e)
         return {"ok": False, "error": str(e)}
 
-# startup: initialize and start the PTB application and set webhook
+
+# 🟣 تشغيل الـ webhook عند بدء التطبيق
 @app.on_event("startup")
 async def on_startup():
-    try:
-        logger.info("Starting telegram Application (initialize + startup)...")
-        await application.initialize()  # prepares the app (listeners, job queue, etc.)
-        await application.startup()     # runs startup tasks
-        # set webhook using application.bot (bot ready after initialize)
-        if WEBHOOK_URL and WEBHOOK_PATH:
-            full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-            await application.bot.set_webhook(full_url)
-            logger.info("✅ Webhook set to %s", full_url)
-        else:
-            logger.warning("WEBHOOK_URL or BOT_WEBHOOK_PATH not set; webhook not configured.")
-    except Exception as e:
-        logger.exception("Failed during startup")
-
-# shutdown: gracefully stop the application
-@app.on_event("shutdown")
-async def on_shutdown():
-    try:
-        logger.info("Shutting down telegram Application (shutdown + stop)...")
-        await application.shutdown()
-        await application.stop()
-    except Exception:
-        logger.exception("Error during application shutdown")
+    full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+    await bot.set_webhook(full_url)
+    print(f"✅ Webhook set to {full_url}")
