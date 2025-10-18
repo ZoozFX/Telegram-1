@@ -1,0 +1,8 @@
+Flask>=2.1
+python-telegram-bot>=20.4
+SQLAlchemy>=1.4
+psycopg2-binary
+alembic
+python-dotenv
+gunicorn
+pytest
