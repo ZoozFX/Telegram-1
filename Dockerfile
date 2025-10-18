@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install --no-cache-dir fastapi uvicorn python-telegram-bot[webhooks] SQLAlchemy psycopg2-binary
+# تثبيت المتطلبات
+RUN pip install --no-cache-dir fastapi uvicorn gunicorn python-telegram-bot[webhooks] SQLAlchemy psycopg2-binary python-dotenv alembic
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
+# تشغيل FastAPI باستخدام Gunicorn + Uvicorn worker
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:5000"]
