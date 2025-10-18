@@ -41,9 +41,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
         "👋 أهلاً بك!\n\n"
+        "الرجاء اختيار اللغة 👇\n\n"
         "Welcome!\n\n"
-        "Please choose your language below 👇\n"
-        "الرجاء اختيار لغتك أدناه 👇"
+        "Please select a language 👇"
     )
     await update.message.reply_text(text, reply_markup=reply_markup)
 
@@ -63,9 +63,9 @@ async def show_language_selection_via_query(update: Update, context: ContextType
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
             "👋 أهلاً بك!\n\n"
+            "الرجاء اختيار اللغة 👇\n\n"
             "Welcome!\n\n"
-            "Please choose your language below 👇\n"
-            "الرجاء اختيار لغتك أدناه 👇"
+            "Please select a language 👇"
         )
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
