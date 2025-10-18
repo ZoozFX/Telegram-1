@@ -1,4 +1,0 @@
-[
-  {"user_id": 1, "text": "Hello from seed", "tag": "greeting"},
-  {"user_id": 0, "text": "مرحبا من الملف", "tag": "welcome"}
-]
