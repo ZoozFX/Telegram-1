@@ -1,4 +1,5 @@
 import os
+import asyncio
 from fastapi import FastAPI, Request
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -13,7 +14,7 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# تهيئة البوت
+# تهيئة البوت والتطبيق
 bot = Bot(token=TOKEN)
 application = ApplicationBuilder().token(TOKEN).build()
 
@@ -36,13 +37,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(CommandHandler("start", start))
 
 
-# 🟣 نقطة الدخول الأساسية (فقط لاختبار الصفحة)
+# 🟣 صفحة اختبار بسيطة
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
 
 
-# 🟢 مسار الـ webhook الذي يتصل به Telegram
+# 🟢 استقبال رسائل الـ Webhook من Telegram
 @app.post(WEBHOOK_PATH)
 async def process_webhook(request: Request):
     try:
@@ -55,9 +56,12 @@ async def process_webhook(request: Request):
         return {"ok": False, "error": str(e)}
 
 
-# 🟣 تشغيل webhook عند بدء التطبيق
+# 🟣 عند تشغيل التطبيق، ضبط الـ Webhook
 @app.on_event("startup")
 async def on_startup():
-    full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-    bot.set_webhook(full_url)
-    print(f"✅ Webhook set to {full_url}")
+    try:
+        full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+        await bot.set_webhook(full_url)  # ✅ يجب استخدام await هنا
+        print(f"✅ Webhook set to {full_url}")
+    except Exception as e:
+        print(f"❌ Failed to set webhook: {e}")
