@@ -10,7 +10,9 @@ from telegram.ext import (
 )
 from app.db import Base, engine
 
+# -------------------------------
 # إعداد السجلات
+# -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -29,8 +31,9 @@ if not TOKEN:
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
-
+# ===============================
 # 🟢 1. /start → واجهة اختيار اللغة
+# ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -40,19 +43,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
-        "👋 أهلاً بك!\n\n"
+        "╔════════════════════╗\n"
+        "👋 أهلاً بك في بوت YesFX!\n"
+        "╚════════════════════╝\n\n"
         "الرجاء اختيار اللغة 👇\n\n"
-        "Welcome!\n\n"
+        "╔════════════════════╗\n"
+        "Welcome to YesFX Bot!\n"
+        "╚════════════════════╝\n"
         "Please select a language 👇"
     )
     await update.message.reply_text(text, reply_markup=reply_markup)
 
-
-# 🆕 دالة عرض اختيار اللغة عند الضغط على زر الرجوع
+# ===============================
+# 🆕 2. عرض اختيار اللغة عند الرجوع
+# ===============================
 async def show_language_selection_via_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    عرض واجهة اختيار اللغة باستخدام edit_message_text عند وجود callback_query.
-    """
     if update.callback_query:
         keyboard = [
             [
@@ -62,9 +67,13 @@ async def show_language_selection_via_query(update: Update, context: ContextType
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
-            "👋 أهلاً بك!\n\n"
+            "╔════════════════════╗\n"
+            "👋 مرحبًا مجددًا!\n"
+            "╚════════════════════╝\n\n"
             "الرجاء اختيار اللغة 👇\n\n"
-            "Welcome!\n\n"
+            "╔════════════════════╗\n"
+            "Welcome again!\n"
+            "╚════════════════════╝\n"
             "Please select a language 👇"
         )
         await update.callback_query.answer()
@@ -72,8 +81,9 @@ async def show_language_selection_via_query(update: Update, context: ContextType
     else:
         await start(update, context)
 
-
-# 🟣 2. عرض الأقسام الرئيسية بعد اختيار اللغة
+# ===============================
+# 🟣 3. عرض الأقسام الرئيسية بعد اختيار اللغة
+# ===============================
 async def show_main_sections(update: Update, lang: str):
     if lang == "ar":
         sections = [
@@ -81,25 +91,35 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        text = "اختر القسم الذي ترغب به 👇"
-        back_button = ("🔙 الرجوع ", "back_language")
+        text = (
+            "╔════════════════════╗\n"
+            "🏷️ الأقسام الرئيسية\n"
+            "╚════════════════════╝\n"
+            "اختر القسم الذي ترغب به 👇"
+        )
+        back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
             ("💹 Forex Trading", "forex_main"),
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        text = "Please choose a section 👇"
-        back_button = ("🔙 Back ", "back_language")
+        text = (
+            "╔════════════════════╗\n"
+            "🏷️ Main Sections\n"
+            "╚════════════════════╝\n"
+            "Please choose a section 👇"
+        )
+        back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
 
-    await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-
-
-# 🟢 3. عند اختيار اللغة
+# ===============================
+# 🟢 4. عند اختيار اللغة
+# ===============================
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -107,8 +127,9 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["lang"] = lang
     await show_main_sections(update, lang)
 
-
-# 🟡 4. التعامل مع الأقسام الفرعية + زر الرجوع
+# ===============================
+# 🟡 5. التعامل مع الأقسام الفرعية + زر الرجوع
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -132,7 +153,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 قناة التوصيات", "forex_signals"),
                 ("📰 الأخبار الاقتصادية", "forex_news")
             ]
-            text = "💹 قسم تداول الفوركس:\nاختر الخدمة 👇"
+            text = (
+                "╔════════════════════╗\n"
+                "💹 قسم تداول الفوركس\n"
+                "╚════════════════════╝\n"
+                "اختر الخدمة 👇"
+            )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [
@@ -140,7 +166,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 Signals Channel", "forex_signals"),
                 ("📰 Economic News", "forex_news")
             ]
-            text = "💹 Forex Trading Section:\nChoose a service 👇"
+            text = (
+                "╔════════════════════╗\n"
+                "💹 Forex Trading Section\n"
+                "╚════════════════════╝\n"
+                "Choose a service 👇"
+            )
             back_label = "🔙 Back to main menu"
 
     elif query.data == "dev_main":
@@ -151,7 +182,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 برمجة بوتات التليجرام", "dev_bots"),
                 ("🌐 برمجة مواقع الويب", "dev_web")
             ]
-            text = "💻 قسم خدمات البرمجة:\nاختر نوع الخدمة 👇"
+            text = (
+                "╔════════════════════╗\n"
+                "💻 قسم خدمات البرمجة\n"
+                "╚════════════════════╝\n"
+                "اختر نوع الخدمة 👇"
+            )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [
@@ -160,21 +196,36 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 Telegram Bots", "dev_bots"),
                 ("🌐 Web Development", "dev_web")
             ]
-            text = "💻 Programming Services:\nChoose the type 👇"
+            text = (
+                "╔════════════════════╗\n"
+                "💻 Programming Services\n"
+                "╚════════════════════╝\n"
+                "Choose the type 👇"
+            )
             back_label = "🔙 Back to main menu"
 
     elif query.data == "agency_main":
         if lang == "ar":
             options = [("📄 طلب وكالة YesFX", "agency_request")]
-            text = "🤝 قسم طلب وكالة:\nاختر 👇"
+            text = (
+                "╔════════════════════╗\n"
+                "🤝 قسم طلب وكالة\n"
+                "╚════════════════════╝\n"
+                "اختر 👇"
+            )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [("📄 Request YesFX Partnership", "agency_request")]
-            text = "🤝 Partnership Section:\nChoose 👇"
+            text = (
+                "╔════════════════════╗\n"
+                "🤝 Partnership Section\n"
+                "╚════════════════════╝\n"
+                "Choose 👇"
+            )
             back_label = "🔙 Back to main menu"
 
     else:
-        # خدمات فرعية (placeholder)
+        # خدمات فرعية placeholder
         await query.edit_message_text(
             text=f"🔹 {'تم اختيار الخدمة' if lang=='ar' else 'Service selected'}: {query.data}\n\n"
                  f"{'سيتم إضافة التفاصيل قريبًا...' if lang=='ar' else 'Details will be added soon...'}"
@@ -185,23 +236,25 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in options]
     keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     await query.edit_message_text(text=text, reply_markup=reply_markup)
 
-
+# ===============================
 # 🔗 Handlers
+# ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 
-
+# ===============================
 # 🟣 صفحة الفحص
+# ===============================
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
 
-
-# 🟢 webhook
+# ===============================
+# 🟢 Webhook
+# ===============================
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
     try:
@@ -213,8 +266,9 @@ async def webhook(request: Request):
         logger.exception("Webhook error")
         return {"ok": False, "error": str(e)}
 
-
+# ===============================
 # 🚀 Startup
+# ===============================
 @app.on_event("startup")
 async def on_startup():
     logger.info("🚀 Starting bot...")
@@ -226,8 +280,9 @@ async def on_startup():
     else:
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set")
 
-
+# ===============================
 # 🛑 Shutdown
+# ===============================
 @app.on_event("shutdown")
 async def on_shutdown():
     logger.info("🛑 Bot shutting down...")
