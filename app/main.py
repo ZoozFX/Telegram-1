@@ -44,11 +44,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
         "╔════════════════════╗\n"
-        "👋 أهلاً بك في بوت YesFX!\n"
+        "       أهلا بك في بوت YesFX! 👋\n"
         "╚════════════════════╝\n\n"
         "الرجاء اختيار اللغة 👇\n\n"
         "╔════════════════════╗\n"
-        "Welcome to YesFX Bot!\n"
+        "       Welcome to YesFX Bot!\n"
         "╚════════════════════╝\n"
         "Please select a language 👇"
     )
@@ -68,11 +68,11 @@ async def show_language_selection_via_query(update: Update, context: ContextType
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
             "╔════════════════════╗\n"
-            "👋 مرحبًا مجددًا!\n"
+            "   👋 مرحبًا مجددًا!\n"
             "╚════════════════════╝\n\n"
             "الرجاء اختيار اللغة 👇\n\n"
             "╔════════════════════╗\n"
-            "Welcome again!\n"
+            "  👋 Welcome again!\n"
             "╚════════════════════╝\n"
             "Please select a language 👇"
         )
@@ -93,7 +93,7 @@ async def show_main_sections(update: Update, lang: str):
         ]
         text = (
             "╔════════════════════╗\n"
-            "🏷️ الأقسام الرئيسية\n"
+            "   🏷️ الأقسام الرئيسية\n"
             "╚════════════════════╝\n"
             "اختر القسم الذي ترغب به 👇"
         )
@@ -106,7 +106,7 @@ async def show_main_sections(update: Update, lang: str):
         ]
         text = (
             "╔════════════════════╗\n"
-            "🏷️ Main Sections\n"
+            "  🏷️ Main Sections\n"
             "╚════════════════════╝\n"
             "Please choose a section 👇"
         )
@@ -155,7 +155,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             text = (
                 "╔════════════════════╗\n"
-                "💹 قسم تداول الفوركس\n"
+                "  💹 قسم تداول الفوركس\n"
                 "╚════════════════════╝\n"
                 "اختر الخدمة 👇"
             )
@@ -168,7 +168,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             text = (
                 "╔════════════════════╗\n"
-                "💹 Forex Trading Section\n"
+                "  💹 Forex Trading Section\n"
                 "╚════════════════════╝\n"
                 "Choose a service 👇"
             )
@@ -184,7 +184,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             text = (
                 "╔════════════════════╗\n"
-                "💻 قسم خدمات البرمجة\n"
+                "   💻 قسم خدمات البرمجة\n"
                 "╚════════════════════╝\n"
                 "اختر نوع الخدمة 👇"
             )
@@ -198,7 +198,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             text = (
                 "╔════════════════════╗\n"
-                "💻 Programming Services\n"
+                "   💻 Programming Services\n"
                 "╚════════════════════╝\n"
                 "Choose the type 👇"
             )
@@ -209,7 +209,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             options = [("📄 طلب وكالة YesFX", "agency_request")]
             text = (
                 "╔════════════════════╗\n"
-                "🤝 قسم طلب وكالة\n"
+                "   🤝 قسم طلب وكالة\n"
                 "╚════════════════════╝\n"
                 "اختر 👇"
             )
@@ -218,7 +218,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             options = [("📄 Request YesFX Partnership", "agency_request")]
             text = (
                 "╔════════════════════╗\n"
-                "🤝 Partnership Section\n"
+                "   🤝 Partnership Section\n"
                 "╚════════════════════╝\n"
                 "Choose 👇"
             )
