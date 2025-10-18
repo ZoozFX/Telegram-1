@@ -1,38 +1,63 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 import os
+from fastapi import FastAPI, Request
 from telegram import Update, Bot
-from .bot import application
-from .db import engine, Base
-from .utils import setup_webhook
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from app.utils import setup_webhook
+from app.db import Base, engine
 
+# إنشاء الجداول في قاعدة البيانات
 Base.metadata.create_all(bind=engine)
 
+# إعداد المتغيرات
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
-bot = Bot(token=TOKEN)
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+# تهيئة البوت
+bot = Bot(token=TOKEN)
+application = ApplicationBuilder().token(TOKEN).build()
+
+# إنشاء FastAPI app
 app = FastAPI()
 
-@app.get("/")
-def home():
-    return {"status": "ok"}
 
+# 🟢 أوامر البوت
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    lang = (user.language_code or "en").lower()
+    if lang.startswith("ar"):
+        msg = f"👋 أهلاً {user.first_name}! مرحباً بك في البوت!"
+    else:
+        msg = f"👋 Hello {user.first_name}! Welcome to the bot!"
+    await update.message.reply_text(msg)
+
+
+# ربط الأوامر
+application.add_handler(CommandHandler("start", start))
+
+
+# 🟣 نقطة الدخول الأساسية (فقط لاختبار الصفحة)
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Bot is running"}
+
+
+# 🟢 مسار الـ webhook الذي يتصل به Telegram
 @app.post(WEBHOOK_PATH)
-async def webhook(request: Request):
+async def process_webhook(request: Request):
     try:
         data = await request.json()
         update = Update.de_json(data, bot)
-        await application.update_queue.put(update)
-        return JSONResponse({"ok": True})
+        await application.process_update(update)
+        return {"ok": True}
     except Exception as e:
         print("❌ Webhook error:", e)
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+        return {"ok": False, "error": str(e)}
 
+
+# 🟣 تشغيل webhook عند بدء التطبيق
 @app.on_event("startup")
 async def on_startup():
-    try:
-        url = setup_webhook(bot)
-        print("✅ Webhook set to:", url)
-    except Exception as e:
-        print("⚠️ Webhook setup failed:", e)
+    full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+    bot.set_webhook(full_url)
+    print(f"✅ Webhook set to {full_url}")
