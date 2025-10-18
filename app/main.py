@@ -33,18 +33,23 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
-# 📏 دالة لتنسيق النص العربي داخل صندوق
+# 📏 دالة لتنسيق النص داخل صندوق ASCII مع محاذاة مثالية للوسط
 # ===============================
-def create_boxed_text(text: str, width: int = 25, icon: str = "") -> str:
-    """إنشاء صندوق ASCII للنص العربي أو الإنجليزي مع محاذاة مركزية."""
+def create_boxed_text(text: str, width: int = 40, icon: str = "") -> str:
+    """إنشاء صندوق ASCII للنص مع محاذاة وسط دقيقة."""
     lines = text.split("\n")
     boxed_lines = []
     border = "═" * width
     boxed_lines.append(f"╔{border}╗")
     for line in lines:
         line_content = f"{icon} {line}" if icon else line
-        padded = line_content.center(width)
-        boxed_lines.append(f"║{padded}║")
+        # حساب طول الأحرف المرئية بدون أي رمز زائف
+        visible_len = sum(2 if ord(c) > 127 else 1 for c in line_content)
+        total_padding = width - visible_len
+        left_padding = total_padding // 2
+        right_padding = total_padding - left_padding
+        padded_line = " " * left_padding + line_content + " " * right_padding
+        boxed_lines.append(f"║{padded_line}║")
     boxed_lines.append(f"╚{border}╝")
     return "\n".join(boxed_lines)
 
@@ -107,7 +112,7 @@ async def show_main_sections(update: Update, lang: str):
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # تأثير ASCII متحرك: نجوم تتغير
+    # تأثير ASCII ديناميكي للعنوان
     animated_text = text.replace("🏷️", "✨🏷️✨")
     await update.callback_query.edit_message_text(animated_text, reply_markup=reply_markup)
 
