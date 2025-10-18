@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -43,14 +44,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = (
-        "╔════════════════════════════╗\n"
-        "║       👋 أهلاً بك في بوت YesFX!      ║\n"
-        "╠════════════════════════════╣\n"
-        "║      👋 Welcome to YesFX Bot!     ║\n"
-        "╚════════════════════════════╝"
-    )
-    await update.message.reply_text(text, reply_markup=reply_markup)
+    frames = [
+        "╔════════════════════════════╗\n║       أهلاً بك في بوت YesFX! 👋       ║\n╚════════════════════════════╝",
+        "╔════════════════════════════╗\n║        👋 Welcome to YesFX Bot!       ║\n╚════════════════════════════╝"
+    ]
+    # إرسال أول إطار
+    msg = await update.message.reply_text(frames[0])
+    # تأخير بسيط لإظهار الإطار الثاني (تأثير حركة)
+    await asyncio.sleep(0.3)
+    await msg.edit_text(frames[1])
+    # إظهار أزرار اللغة بعد الإطار المتحرك
+    await asyncio.sleep(0.2)
+    await msg.edit_text(frames[1], reply_markup=reply_markup)
 
 
 # ===============================
@@ -65,15 +70,14 @@ async def show_language_selection_via_query(update: Update, context: ContextType
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = (
-            "╔════════════════════════════╗\n"
-            "║   👋 مرحبًا مجددًا! اختر لغتك:   ║\n"
-            "╠════════════════════════════╣\n"
-            "║    👋 Welcome again! Select your language: ║\n"
-            "╚════════════════════════════╝"
-        )
+        frames = [
+            "╔════════════════════════════╗\n║   👋 مرحبًا مجددًا! اختر لغتك:  ║\n╚════════════════════════════╝",
+            "╔════════════════════════════╗\n║  👋 Welcome again! Select your language: ║\n╚════════════════════════════╝"
+        ]
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+        msg = await update.callback_query.edit_message_text(frames[0])
+        await asyncio.sleep(0.3)
+        await msg.edit_text(frames[1], reply_markup=reply_markup)
     else:
         await start(update, context)
 
@@ -88,13 +92,10 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        text = (
-            "╔════════════════════════════╗\n"
-            "║        🏷️ الأقسام الرئيسية         ║\n"
-            "╠════════════════════════════╣\n"
-            "║   اختر القسم الذي ترغب به 👇      ║\n"
-            "╚════════════════════════════╝"
-        )
+        text_frame = [
+            "╔════════════════════════════╗\n║        🏷️ الأقسام الرئيسية        ║\n╚════════════════════════════╝",
+            "╔════════════════════════════╗\n║ اختر القسم الذي ترغب به 👇        ║\n╚════════════════════════════╝"
+        ]
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -102,19 +103,20 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        text = (
-            "╔════════════════════════════╗\n"
-            "║        🏷️ Main Sections         ║\n"
-            "╠════════════════════════════╣\n"
-            "║   Please choose a section 👇    ║\n"
-            "╚════════════════════════════╝"
-        )
+        text_frame = [
+            "╔════════════════════════════╗\n║        🏷️ Main Sections         ║\n╚════════════════════════════╝",
+            "╔════════════════════════════╗\n║ Please choose a section 👇      ║\n╚════════════════════════════╝"
+        ]
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+
+    # عرض الإطارات بشكل متحرك
+    msg = await update.callback_query.edit_message_text(text_frame[0])
+    await asyncio.sleep(0.2)
+    await msg.edit_text(text_frame[1], reply_markup=reply_markup)
 
 
 # ===============================
@@ -146,7 +148,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, lang)
         return
 
-    # الأقسام الرئيسية مع إطار ASCII محسّن
+    # الأقسام الرئيسية
+    options = []
+    back_label = ""
+    text_frames = []
+
     if query.data == "forex_main":
         if lang == "ar":
             options = [
@@ -154,28 +160,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 قناة التوصيات", "forex_signals"),
                 ("📰 الأخبار الاقتصادية", "forex_news")
             ]
-            text = (
-                "╔════════════════════════════╗\n"
-                "║       💹 تداول الفوركس        ║\n"
-                "╟────────────────────────────╢\n"
-                "║ اختر الخدمة التي تريدها 👇    ║\n"
-                "╚════════════════════════════╝"
-            )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
+            text_frames = [
+                "╔════════════════════════════╗\n║       💹 تداول الفوركس        ║\n╚════════════════════════════╝",
+                "╔════════════════════════════╗\n║ اختر الخدمة التي تريدها 👇      ║\n╚════════════════════════════╝"
+            ]
         else:
             options = [
                 ("📊 Copy Trading", "forex_copy"),
                 ("💬 Signals Channel", "forex_signals"),
                 ("📰 Economic News", "forex_news")
             ]
-            text = (
-                "╔════════════════════════════╗\n"
-                "║       💹 Forex Trading      ║\n"
-                "╟────────────────────────────╢\n"
-                "║ Choose the service you want 👇║\n"
-                "╚════════════════════════════╝"
-            )
             back_label = "🔙 Back to main menu"
+            text_frames = [
+                "╔════════════════════════════╗\n║       💹 Forex Trading      ║\n╚════════════════════════════╝",
+                "╔════════════════════════════╗\n║ Choose the service you want 👇║\n╚════════════════════════════╝"
+            ]
 
     elif query.data == "dev_main":
         if lang == "ar":
@@ -185,14 +185,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 برمجة بوتات التليجرام", "dev_bots"),
                 ("🌐 برمجة مواقع الويب", "dev_web")
             ]
-            text = (
-                "╔════════════════════════════╗\n"
-                "║       💻 خدمات البرمجة        ║\n"
-                "╟────────────────────────────╢\n"
-                "║ اختر نوع الخدمة 👇           ║\n"
-                "╚════════════════════════════╝"
-            )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
+            text_frames = [
+                "╔════════════════════════════╗\n║       💻 خدمات البرمجة        ║\n╚════════════════════════════╝",
+                "╔════════════════════════════╗\n║ اختر نوع الخدمة 👇           ║\n╚════════════════════════════╝"
+            ]
         else:
             options = [
                 ("📈 Indicators Development", "dev_indicators"),
@@ -200,36 +197,27 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("💬 Telegram Bots", "dev_bots"),
                 ("🌐 Web Development", "dev_web")
             ]
-            text = (
-                "╔════════════════════════════╗\n"
-                "║   💻 Programming Services    ║\n"
-                "╟────────────────────────────╢\n"
-                "║ Choose the type 👇           ║\n"
-                "╚════════════════════════════╝"
-            )
             back_label = "🔙 Back to main menu"
+            text_frames = [
+                "╔════════════════════════════╗\n║   💻 Programming Services    ║\n╚════════════════════════════╝",
+                "╔════════════════════════════╗\n║ Choose the type 👇           ║\n╚════════════════════════════╝"
+            ]
 
     elif query.data == "agency_main":
         if lang == "ar":
             options = [("📄 طلب وكالة YesFX", "agency_request")]
-            text = (
-                "╔════════════════════════════╗\n"
-                "║       🤝 طلب وكالة YesFX      ║\n"
-                "╟────────────────────────────╢\n"
-                "║ اختر ما تريد 👇             ║\n"
-                "╚════════════════════════════╝"
-            )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
+            text_frames = [
+                "╔════════════════════════════╗\n║       🤝 طلب وكالة YesFX      ║\n╚════════════════════════════╝",
+                "╔════════════════════════════╗\n║ اختر ما تريد 👇             ║\n╚════════════════════════════╝"
+            ]
         else:
             options = [("📄 Request YesFX Partnership", "agency_request")]
-            text = (
-                "╔════════════════════════════╗\n"
-                "║   🤝 YesFX Partnership       ║\n"
-                "╟────────────────────────────╢\n"
-                "║ Choose your option 👇        ║\n"
-                "╚════════════════════════════╝"
-            )
             back_label = "🔙 Back to main menu"
+            text_frames = [
+                "╔════════════════════════════╗\n║   🤝 YesFX Partnership       ║\n╚════════════════════════════╝",
+                "╔════════════════════════════╗\n║ Choose what you want 👇      ║\n╚════════════════════════════╝"
+            ]
 
     else:
         # خدمات فرعية placeholder
@@ -243,7 +231,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in options]
     keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text=text, reply_markup=reply_markup)
+
+    # إظهار إطارات ASCII متحركة
+    msg = await query.edit_message_text(text_frames[0])
+    await asyncio.sleep(0.25)
+    await msg.edit_text(text_frames[1], reply_markup=reply_markup)
 
 
 # ===============================
@@ -253,14 +245,12 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 
-
 # ===============================
 # 🟣 صفحة الفحص
 # ===============================
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
-
 
 # ===============================
 # 🟢 Webhook
@@ -276,7 +266,6 @@ async def webhook(request: Request):
         logger.exception("Webhook error")
         return {"ok": False, "error": str(e)}
 
-
 # ===============================
 # 🚀 Startup
 # ===============================
@@ -290,7 +279,6 @@ async def on_startup():
         logger.info(f"✅ Webhook set to {full_url}")
     else:
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set")
-
 
 # ===============================
 # 🛑 Shutdown
