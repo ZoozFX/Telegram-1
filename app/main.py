@@ -44,13 +44,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
         "╔════════════════════╗\n"
-        "       أهلا بك في بوت YesFX! 👋\n"
+        "         أهلا بك في بوت YesFX! 👋\n"
         "╚════════════════════╝\n\n"
-        "الرجاء اختيار اللغة 👇\n\n"
         "╔════════════════════╗\n"
-        "       Welcome to YesFX Bot!\n"
-        "╚════════════════════╝\n"
-        "Please select a language 👇"
+        "     👋 Welcome to YesFX Bot!\n"
+        "╚════════════════════╝"
     )
     await update.message.reply_text(text, reply_markup=reply_markup)
 
@@ -70,11 +68,9 @@ async def show_language_selection_via_query(update: Update, context: ContextType
             "╔════════════════════╗\n"
             "   👋 مرحبًا مجددًا!\n"
             "╚════════════════════╝\n\n"
-            "الرجاء اختيار اللغة 👇\n\n"
             "╔════════════════════╗\n"
             "  👋 Welcome again!\n"
-            "╚════════════════════╝\n"
-            "Please select a language 👇"
+            "╚════════════════════╝"
         )
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
@@ -94,8 +90,7 @@ async def show_main_sections(update: Update, lang: str):
         text = (
             "╔════════════════════╗\n"
             "   🏷️ الأقسام الرئيسية\n"
-            "╚════════════════════╝\n"
-            "اختر القسم الذي ترغب به 👇"
+            "╚════════════════════╝"
         )
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
@@ -107,8 +102,7 @@ async def show_main_sections(update: Update, lang: str):
         text = (
             "╔════════════════════╗\n"
             "  🏷️ Main Sections\n"
-            "╚════════════════════╝\n"
-            "Please choose a section 👇"
+            "╚════════════════════╝"
         )
         back_button = ("🔙 Back to language", "back_language")
 
@@ -156,8 +150,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 "╔════════════════════╗\n"
                 "  💹 قسم تداول الفوركس\n"
-                "╚════════════════════╝\n"
-                "اختر الخدمة 👇"
+                "╚════════════════════╝"
             )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
@@ -169,8 +162,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 "╔════════════════════╗\n"
                 "  💹 Forex Trading Section\n"
-                "╚════════════════════╝\n"
-                "Choose a service 👇"
+                "╚════════════════════╝"
             )
             back_label = "🔙 Back to main menu"
 
@@ -185,8 +177,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 "╔════════════════════╗\n"
                 "   💻 قسم خدمات البرمجة\n"
-                "╚════════════════════╝\n"
-                "اختر نوع الخدمة 👇"
+                "╚════════════════════╝"
             )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
@@ -199,8 +190,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 "╔════════════════════╗\n"
                 "   💻 Programming Services\n"
-                "╚════════════════════╝\n"
-                "Choose the type 👇"
+                "╚════════════════════╝"
             )
             back_label = "🔙 Back to main menu"
 
@@ -210,8 +200,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 "╔════════════════════╗\n"
                 "   🤝 قسم طلب وكالة\n"
-                "╚════════════════════╝\n"
-                "اختر 👇"
+                "╚════════════════════╝"
             )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
@@ -219,8 +208,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 "╔════════════════════╗\n"
                 "   🤝 Partnership Section\n"
-                "╚════════════════════╝\n"
-                "Choose 👇"
+                "╚════════════════════╝"
             )
             back_label = "🔙 Back to main menu"
 
