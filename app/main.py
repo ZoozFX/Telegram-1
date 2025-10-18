@@ -33,6 +33,22 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
+# 📏 دالة لتنسيق النص العربي داخل صندوق
+# ===============================
+def create_boxed_text(text: str, width: int = 25, icon: str = "") -> str:
+    """إنشاء صندوق ASCII للنص العربي أو الإنجليزي مع محاذاة مركزية."""
+    lines = text.split("\n")
+    boxed_lines = []
+    border = "═" * width
+    boxed_lines.append(f"╔{border}╗")
+    for line in lines:
+        line_content = f"{icon} {line}" if icon else line
+        padded = line_content.center(width)
+        boxed_lines.append(f"║{padded}║")
+    boxed_lines.append(f"╚{border}╝")
+    return "\n".join(boxed_lines)
+
+# ===============================
 # 🟢 1. /start → واجهة اختيار اللغة
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -43,15 +59,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = (
-        "╔════════════════════╗\n"
-        "   🌟 أهلا بك في بوت YesFX! 🌟\n"
-        "╚════════════════════╝\n\n"
-        "╔════════════════════╗\n"
-        "   👋 Welcome to YesFX Bot!\n"
-        "╚════════════════════╝"
-    )
-    await update.message.reply_text(text, reply_markup=reply_markup)
+    text_ar = create_boxed_text("أهلا بك في بوت YesFX!", icon="🌟")
+    text_en = create_boxed_text("Welcome to YesFX Bot!", icon="👋")
+    await update.message.reply_text(f"{text_ar}\n{text_en}", reply_markup=reply_markup)
 
 # ===============================
 # 🆕 2. عرض اختيار اللغة عند الرجوع
@@ -65,16 +75,10 @@ async def show_language_selection_via_query(update: Update, context: ContextType
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = (
-            "╔════════════════════╗\n"
-            "   🔁 مرحبًا مجددًا!\n"
-            "╚════════════════════╝\n\n"
-            "╔════════════════════╗\n"
-            "   🔁 Welcome again!\n"
-            "╚════════════════════╝"
-        )
+        text_ar = create_boxed_text("مرحبًا مجددًا!", icon="🔁")
+        text_en = create_boxed_text("Welcome again!", icon="🔁")
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+        await update.callback_query.edit_message_text(f"{text_ar}\n{text_en}", reply_markup=reply_markup)
     else:
         await start(update, context)
 
@@ -88,11 +92,7 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        text = (
-            "╔════════════════════╗\n"
-            "   🏷️ الأقسام الرئيسية 🏷️\n"
-            "╚════════════════════╝"
-        )
+        text = create_boxed_text("الأقسام الرئيسية", icon="🏷️")
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -100,20 +100,16 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        text = (
-            "╔════════════════════╗\n"
-            "   🏷️ Main Sections 🏷️\n"
-            "╚════════════════════╝"
-        )
+        text = create_boxed_text("Main Sections", icon="🏷️")
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # تأثير نصي بسيط (خط متحرك)
-    animated_text = "".join([c + "\u200b" for c in text])  # إضافة zero-width spaces لإعطاء تأثير الحركة
-    await update.callback_query.edit_message_text(text=animated_text, reply_markup=reply_markup)
+    # تأثير ASCII متحرك: نجوم تتغير
+    animated_text = text.replace("🏷️", "✨🏷️✨")
+    await update.callback_query.edit_message_text(animated_text, reply_markup=reply_markup)
 
 # ===============================
 # 🟢 4. عند اختيار اللغة
@@ -144,106 +140,47 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # الأقسام الرئيسية
-    if query.data == "forex_main":
-        if lang == "ar":
-            options = [
-                ("📊 نسخ الصفقات", "forex_copy"),
-                ("💬 قناة التوصيات", "forex_signals"),
-                ("📰 الأخبار الاقتصادية", "forex_news")
-            ]
-            text = (
-                "╔════════════════════╗\n"
-                "   💹 تداول الفوركس 💹\n"
-                "╠════════════════════╣\n"
-                "   اختر الخدمة التي تريدها:\n"
-                "╚════════════════════╝"
-            )
-            back_label = "🔙 الرجوع للقائمة الرئيسية"
-        else:
-            options = [
-                ("📊 Copy Trading", "forex_copy"),
-                ("💬 Signals Channel", "forex_signals"),
-                ("📰 Economic News", "forex_news")
-            ]
-            text = (
-                "╔════════════════════╗\n"
-                "   💹 Forex Trading 💹\n"
-                "╠════════════════════╣\n"
-                "   Choose your service:\n"
-                "╚════════════════════╝"
-            )
-            back_label = "🔙 Back to main menu"
+    sections_data = {
+        "forex_main": {
+            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
+            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
+            "title_ar": "تداول الفوركس",
+            "title_en": "Forex Trading"
+        },
+        "dev_main": {
+            "ar": ["📈 برمجة المؤشرات", "🤖 برمجة الاكسبيرتات", "💬 بوتات التليجرام", "🌐 مواقع الويب"],
+            "en": ["📈 Indicators", "🤖 Expert Advisors", "💬 Telegram Bots", "🌐 Web Development"],
+            "title_ar": "خدمات البرمجة",
+            "title_en": "Programming Services"
+        },
+        "agency_main": {
+            "ar": ["📄 طلب وكالة YesFX"],
+            "en": ["📄 Request YesFX Partnership"],
+            "title_ar": "طلب وكالة",
+            "title_en": "Partnership"
+        }
+    }
 
-    elif query.data == "dev_main":
-        if lang == "ar":
-            options = [
-                ("📈 برمجة المؤشرات", "dev_indicators"),
-                ("🤖 برمجة الاكسبيرتات", "dev_experts"),
-                ("💬 برمجة بوتات التليجرام", "dev_bots"),
-                ("🌐 برمجة مواقع الويب", "dev_web")
-            ]
-            text = (
-                "╔════════════════════╗\n"
-                "   💻 خدمات البرمجة 💻\n"
-                "╠════════════════════╣\n"
-                "   اختر الخدمة التي تريدها:\n"
-                "╚════════════════════╝"
-            )
-            back_label = "🔙 الرجوع للقائمة الرئيسية"
-        else:
-            options = [
-                ("📈 Indicators Development", "dev_indicators"),
-                ("🤖 Expert Advisors", "dev_experts"),
-                ("💬 Telegram Bots", "dev_bots"),
-                ("🌐 Web Development", "dev_web")
-            ]
-            text = (
-                "╔════════════════════╗\n"
-                "   💻 Programming Services 💻\n"
-                "╠════════════════════╣\n"
-                "   Choose your service:\n"
-                "╚════════════════════╝"
-            )
-            back_label = "🔙 Back to main menu"
+    if query.data in sections_data:
+        data = sections_data[query.data]
+        options = data[lang]
+        title = data[f"title_{lang}"]
+        text = create_boxed_text(title, icon="💠")
+        back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
-    elif query.data == "agency_main":
-        if lang == "ar":
-            options = [("📄 طلب وكالة YesFX", "agency_request")]
-            text = (
-                "╔════════════════════╗\n"
-                "   🤝 طلب وكالة 🤝\n"
-                "╠════════════════════╣\n"
-                "   اختر الخدمة التي تريدها:\n"
-                "╚════════════════════╝"
-            )
-            back_label = "🔙 الرجوع للقائمة الرئيسية"
-        else:
-            options = [("📄 Request YesFX Partnership", "agency_request")]
-            text = (
-                "╔════════════════════╗\n"
-                "   🤝 Partnership 🤝\n"
-                "╠════════════════════╣\n"
-                "   Choose your service:\n"
-                "╚════════════════════╝"
-            )
-            back_label = "🔙 Back to main menu"
+        keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
+        keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-    else:
-        # خدمات فرعية placeholder
-        await query.edit_message_text(
-            text=f"🔹 {'تم اختيار الخدمة' if lang=='ar' else 'Service selected'}: {query.data}\n\n"
-                 f"{'سيتم إضافة التفاصيل قريبًا...' if lang=='ar' else 'Details will be added soon...'}"
-        )
+        # تأثير ASCII ديناميكي للعنوان
+        animated_text = text.replace("💠", "✨💠✨")
+        await query.edit_message_text(animated_text, reply_markup=reply_markup)
         return
 
-    # أزرار الخيارات + زر الرجوع
-    keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in options]
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # تأثير نصي بسيط عند عرض القسم
-    animated_text = "".join([c + "\u200b" for c in text])
-    await query.edit_message_text(text=animated_text, reply_markup=reply_markup)
+    # خدمات فرعية placeholder
+    placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
+    details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
+    await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}")
 
 # ===============================
 # 🔗 Handlers
