@@ -31,6 +31,7 @@ if not TOKEN:
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
+
 # ===============================
 # 🟢 1. /start → واجهة اختيار اللغة
 # ===============================
@@ -43,14 +44,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
-        "╔════════════════════╗\n"
-        "         أهلا بك في بوت YesFX! 👋\n"
-        "╚════════════════════╝\n\n"
-        "╔════════════════════╗\n"
-        "     👋 Welcome to YesFX Bot!\n"
-        "╚════════════════════╝"
+        "╔════════════════════════════╗\n"
+        "║       👋 أهلاً بك في بوت YesFX!      ║\n"
+        "╠════════════════════════════╣\n"
+        "║      👋 Welcome to YesFX Bot!     ║\n"
+        "╚════════════════════════════╝"
     )
     await update.message.reply_text(text, reply_markup=reply_markup)
+
 
 # ===============================
 # 🆕 2. عرض اختيار اللغة عند الرجوع
@@ -65,17 +66,17 @@ async def show_language_selection_via_query(update: Update, context: ContextType
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
-            "╔════════════════════╗\n"
-            "   👋 مرحبًا مجددًا!\n"
-            "╚════════════════════╝\n\n"
-            "╔════════════════════╗\n"
-            "  👋 Welcome again!\n"
-            "╚════════════════════╝"
+            "╔════════════════════════════╗\n"
+            "║   👋 مرحبًا مجددًا! اختر لغتك:   ║\n"
+            "╠════════════════════════════╣\n"
+            "║    👋 Welcome again! Select your language: ║\n"
+            "╚════════════════════════════╝"
         )
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
     else:
         await start(update, context)
+
 
 # ===============================
 # 🟣 3. عرض الأقسام الرئيسية بعد اختيار اللغة
@@ -88,9 +89,11 @@ async def show_main_sections(update: Update, lang: str):
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
         text = (
-            "╔════════════════════╗\n"
-            "   🏷️ الأقسام الرئيسية\n"
-            "╚════════════════════╝"
+            "╔════════════════════════════╗\n"
+            "║        🏷️ الأقسام الرئيسية         ║\n"
+            "╠════════════════════════════╣\n"
+            "║   اختر القسم الذي ترغب به 👇      ║\n"
+            "╚════════════════════════════╝"
         )
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
@@ -100,9 +103,11 @@ async def show_main_sections(update: Update, lang: str):
             ("🤝 YesFX Partnership", "agency_main"),
         ]
         text = (
-            "╔════════════════════╗\n"
-            "  🏷️ Main Sections\n"
-            "╚════════════════════╝"
+            "╔════════════════════════════╗\n"
+            "║        🏷️ Main Sections         ║\n"
+            "╠════════════════════════════╣\n"
+            "║   Please choose a section 👇    ║\n"
+            "╚════════════════════════════╝"
         )
         back_button = ("🔙 Back to language", "back_language")
 
@@ -110,6 +115,7 @@ async def show_main_sections(update: Update, lang: str):
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
+
 
 # ===============================
 # 🟢 4. عند اختيار اللغة
@@ -120,6 +126,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = "ar" if query.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
     await show_main_sections(update, lang)
+
 
 # ===============================
 # 🟡 5. التعامل مع الأقسام الفرعية + زر الرجوع
@@ -139,7 +146,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, lang)
         return
 
-    # الأقسام الرئيسية
+    # الأقسام الرئيسية مع إطار ASCII محسّن
     if query.data == "forex_main":
         if lang == "ar":
             options = [
@@ -148,9 +155,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("📰 الأخبار الاقتصادية", "forex_news")
             ]
             text = (
-                "╔════════════════════╗\n"
-                "  💹 قسم تداول الفوركس\n"
-                "╚════════════════════╝"
+                "╔════════════════════════════╗\n"
+                "║       💹 تداول الفوركس        ║\n"
+                "╟────────────────────────────╢\n"
+                "║ اختر الخدمة التي تريدها 👇    ║\n"
+                "╚════════════════════════════╝"
             )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
@@ -160,9 +169,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("📰 Economic News", "forex_news")
             ]
             text = (
-                "╔════════════════════╗\n"
-                "  💹 Forex Trading Section\n"
-                "╚════════════════════╝"
+                "╔════════════════════════════╗\n"
+                "║       💹 Forex Trading      ║\n"
+                "╟────────────────────────────╢\n"
+                "║ Choose the service you want 👇║\n"
+                "╚════════════════════════════╝"
             )
             back_label = "🔙 Back to main menu"
 
@@ -175,9 +186,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("🌐 برمجة مواقع الويب", "dev_web")
             ]
             text = (
-                "╔════════════════════╗\n"
-                "   💻 قسم خدمات البرمجة\n"
-                "╚════════════════════╝"
+                "╔════════════════════════════╗\n"
+                "║       💻 خدمات البرمجة        ║\n"
+                "╟────────────────────────────╢\n"
+                "║ اختر نوع الخدمة 👇           ║\n"
+                "╚════════════════════════════╝"
             )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
@@ -188,9 +201,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ("🌐 Web Development", "dev_web")
             ]
             text = (
-                "╔════════════════════╗\n"
-                "   💻 Programming Services\n"
-                "╚════════════════════╝"
+                "╔════════════════════════════╗\n"
+                "║   💻 Programming Services    ║\n"
+                "╟────────────────────────────╢\n"
+                "║ Choose the type 👇           ║\n"
+                "╚════════════════════════════╝"
             )
             back_label = "🔙 Back to main menu"
 
@@ -198,17 +213,21 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if lang == "ar":
             options = [("📄 طلب وكالة YesFX", "agency_request")]
             text = (
-                "╔════════════════════╗\n"
-                "   🤝 قسم طلب وكالة\n"
-                "╚════════════════════╝"
+                "╔════════════════════════════╗\n"
+                "║       🤝 طلب وكالة YesFX      ║\n"
+                "╟────────────────────────────╢\n"
+                "║ اختر ما تريد 👇             ║\n"
+                "╚════════════════════════════╝"
             )
             back_label = "🔙 الرجوع للقائمة الرئيسية"
         else:
             options = [("📄 Request YesFX Partnership", "agency_request")]
             text = (
-                "╔════════════════════╗\n"
-                "   🤝 Partnership Section\n"
-                "╚════════════════════╝"
+                "╔════════════════════════════╗\n"
+                "║   🤝 YesFX Partnership       ║\n"
+                "╟────────────────────────────╢\n"
+                "║ Choose your option 👇        ║\n"
+                "╚════════════════════════════╝"
             )
             back_label = "🔙 Back to main menu"
 
@@ -226,6 +245,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=text, reply_markup=reply_markup)
 
+
 # ===============================
 # 🔗 Handlers
 # ===============================
@@ -233,12 +253,14 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 
+
 # ===============================
 # 🟣 صفحة الفحص
 # ===============================
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
+
 
 # ===============================
 # 🟢 Webhook
@@ -254,6 +276,7 @@ async def webhook(request: Request):
         logger.exception("Webhook error")
         return {"ok": False, "error": str(e)}
 
+
 # ===============================
 # 🚀 Startup
 # ===============================
@@ -267,6 +290,7 @@ async def on_startup():
         logger.info(f"✅ Webhook set to {full_url}")
     else:
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set")
+
 
 # ===============================
 # 🛑 Shutdown
