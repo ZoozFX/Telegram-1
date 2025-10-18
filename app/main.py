@@ -1,44 +1,38 @@
 import os
-import argparse
-from flask import Flask, request, abort
+import asyncio
+from fastapi import FastAPI, Request
 from telegram import Update, Bot
 from .bot import application
-from .db import engine, Base
+from .db import Base, engine
 from .utils import setup_webhook
 
-app = Flask(__name__)
-
-# create tables if not exist
+# تهيئة قاعدة البيانات
 Base.metadata.create_all(bind=engine)
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 bot = Bot(token=TOKEN)
 
-@app.route("/", methods=["GET"])
+app = FastAPI(title="Telegram Bot")
+
+@app.get("/")
 def index():
-    return "OK"
+    return {"status": "ok"}
 
-@app.route(WEBHOOK_PATH, methods=["POST"])
-async def webhook():
-    if request.headers.get("content-type") != "application/json":
-        abort(403)
-    update = Update.de_json(request.get_json(force=True), bot)
-    # Put update into PTB application update queue
-    await application.update_queue.put(update)
-    return "OK", 200
+@app.post(WEBHOOK_PATH)
+async def webhook(request: Request):
+    try:
+        data = await request.json()
+        update = Update.de_json(data, bot)
+        await application.update_queue.put(update)
+        return {"ok": True}
+    except Exception as e:
+        print("Error handling update:", e)
+        return {"ok": False}
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['polling', 'webhook'], default='webhook')
-    args = parser.parse_args()
-
-    if args.mode == 'polling':
-        # Run locally using polling for development
-        application.run_polling()
-    else:
-        # When running under gunicorn/Render, the Flask app will be used and
-        # we should ensure webhook is set
-        url = setup_webhook(bot)
-        print("Webhook set to:", url)
-        # Flask app will be served by gunicorn (app variable)
+# عند تشغيل السيرفر مباشرة (محليًا)
+if __name__ == "__main__":
+    import uvicorn
+    setup_webhook(bot)
+    uvicorn.run(app, host="0.0.0.0", port=5000)
