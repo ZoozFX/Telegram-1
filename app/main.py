@@ -193,7 +193,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    labels = ["🇪🇬 العربية", "🇺🇸 English"]
+    labels = ["🇺🇸 English", "🇪🇬 العربية"]
 
     # ميزة التمييز: استخدم إيموجي مختلف لكل لغة لتمييز العناوين بصريًا
     header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
