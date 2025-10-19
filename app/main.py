@@ -109,13 +109,17 @@ def build_header_html(
     width_padding: int = 1,
     align: str = "center",
     manual_shift: int = 0,
-    underline_char: str = "━",     # 👈 الحرف المستخدم كخط سفلي
-    underline_enabled: bool = True # 👈 لتفعيل أو تعطيل الخط السفلي
+    underline_char: str = "━",     # الحرف المستخدم كخط سفلي
+    underline_enabled: bool = True, # لتفعيل أو تعطيل الخط السفلي
+    underline_length: int = 25      # 👈 طول الخط السفلي الثابت
 ) -> str:
     """
-    نسخة محسّنة من ترويسة الأقسام: تضيف خطًا سفليًا تحت العنوان.
+    نسخة محسّنة:
+    - تضيف خطًا سفليًا ثابت الطول وموسّطًا أسفل العنوان.
+    - تتعامل مع العربية والإنجليزية وتوسيط دقيق بالنسب إلى الأزرار.
     """
 
+    import re
     NBSP = "\u00A0"
     RLM = "\u200F"
     LRM = "\u200E"
@@ -123,7 +127,6 @@ def build_header_html(
     full_title = f"{header_emoji} {title} {header_emoji}"
 
     # كشف اللغة العربية لتصحيح الاتجاه
-    import re
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
     if is_arabic:
         full_title = f"{RLM}{full_title}{RLM}"
@@ -149,14 +152,18 @@ def build_header_html(
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
-    # سطر العنوان الرئيسي
+    # سطر العنوان
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    # ✅ سطر الخط السفلي
+    # ✅ سطر الخط السفلي الثابت
     underline_line = ""
     if underline_enabled:
-        line_length = max(display_width(remove_emoji(full_title)) + 2, underline_min)
-        underline_line = f"\n{underline_char * line_length}"
+        line = underline_char * underline_length
+        # نحسب الفرق بين طول العنوان والخط لتوسيطه
+        diff = max(0, target_width - underline_length)
+        pad_left_line = diff // 2
+        pad_right_line = diff - pad_left_line
+        underline_line = f"\n{NBSP * pad_left_line}{line}{NBSP * pad_right_line}"
 
     return centered_line + underline_line
 
