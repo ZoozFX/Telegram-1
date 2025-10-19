@@ -34,77 +34,48 @@ app = FastAPI()
 # -------------------------------
 # إعدادات قابلة للتعديل - محسنة
 # -------------------------------
-HEADER_EMOJI = ""                      # الإيموجي الموجود داخل العنوان
-KEEP_EMOJI_IN_MEASUREMENT = False        # إذا False => الإيموجي لا يُحتسب عند حساب التوسيط
+HEADER_EMOJI = "🔰"                      # الإيموجي الموجود داخل العنوان
 HEADER_STYLE = "modern"                  # "modern" أو "classic" أو "minimal"
 HEADER_DECORATION = "✦"                  # رمز الزخرفة
 HEADER_LINE_CHAR = "─"                   # رمز الخط
-HEADER_CORNER = "┌┐"                     # زوايا الإطار
 
 # -------------------------------
-# مساعدة: إزالة الإيموجي (لمجرد القياس إن لزم)
-# -------------------------------
-def remove_emoji(text: str) -> str:
-    """
-    حذف الأحرف التي على الأرجح إيموجي أو رموز واسعة من النص — لأغراض القياس فقط.
-    """
-    out = []
-    for ch in text:
-        o = ord(ch)
-        if (
-            0x1F300 <= o <= 0x1F5FF or
-            0x1F600 <= o <= 0x1F64F or
-            0x1F680 <= o <= 0x1F6FF or
-            0x1F900 <= o <= 0x1F9FF or
-            0x2600 <= o <= 0x26FF or
-            0x2700 <= o <= 0x27BF or
-            0x1FA70 <= o <= 0x1FAFF or
-            o == 0xFE0F
-        ):
-            continue
-        out.append(ch)
-    return "".join(out)
-
-# -------------------------------
-# مساعدة: قياس العرض المرئي للنص (تقريبي)
+# مساعدة: قياس العرض المرئي للنص (محسّن)
 # -------------------------------
 def display_width(text: str) -> int:
+    """
+    قياس العرض المرئي للنص مع دعم أفضل للغة العربية والإيموجي
+    """
     if not text:
         return 0
+    
     width = 0
-    for ch in text:
-        if unicodedata.combining(ch):
+    for char in text:
+        # تجاهل أحرف التحكم والتجميع
+        if unicodedata.category(char) in ('Mn', 'Me', 'Cf', 'Cc'):
             continue
-        ea = unicodedata.east_asian_width(ch)
-        if ea in ("F", "W"):
+            
+        # تحديد عرض الحرف
+        east_asian_width = unicodedata.east_asian_width(char)
+        
+        if east_asian_width in ('F', 'W'):
             width += 2
-            continue
-        o = ord(ch)
-        if (
-            0x1F300 <= o <= 0x1F5FF
-            or 0x1F600 <= o <= 0x1F64F
-            or 0x1F680 <= o <= 0x1F6FF
-            or 0x1F900 <= o <= 0x1F9FF
-            or 0x2600 <= o <= 0x26FF
-            or 0x2700 <= o <= 0x27BF
-            or o == 0xFE0F
-        ):
-            width += 2
-            continue
-        width += 1
+        else:
+            # معظم الحروف العربية والعادية تأخذ عرض 1
+            width += 1
+            
     return width
 
 def max_button_width(labels: List[str]) -> int:
     if not labels:
         return 0
-    return max(display_width(lbl) for lbl in labels)
+    return max(display_width(str(lbl)) for lbl in labels)
 
 # -------------------------------
 # بناء رأس HTML محسن ومهني
 # -------------------------------
 def build_header_html(title: str, keyboard_labels: List[str], 
                       header_emoji: str = HEADER_EMOJI,
-                      keep_emoji_in_measurement: bool = KEEP_EMOJI_IN_MEASUREMENT,
                       style: str = HEADER_STYLE,
                       decoration: str = HEADER_DECORATION,
                       line_char: str = HEADER_LINE_CHAR) -> str:
@@ -112,45 +83,47 @@ def build_header_html(title: str, keyboard_labels: List[str],
     يعيد سلسلة HTML بعنوان محسن ومهني بأنماط مختلفة.
     """
     # العنوان الفعلي الظاهر
-    full_title = f"{header_emoji} {title}"
+    full_title = f"{header_emoji} {title}" if header_emoji else title
     
-    # نسخة للحساب (قد نزيل الإيموجي من القياس)
-    if keep_emoji_in_measurement:
-        title_for_measure = full_title
-    else:
-        title_for_measure = remove_emoji(full_title)
-
-    title_width = display_width(title_for_measure)
-    target_width = max(15, max_button_width(keyboard_labels))
+    # حساب عرض العنوان
+    title_width = display_width(full_title)
     
-    # حساب العرض النهائي مع هامش إضافي
-    final_width = max(title_width + 4, target_width + 2)
+    # حساب عرض الأزرار مع هامش إضافي
+    button_width = max_button_width(keyboard_labels) if keyboard_labels else 0
+    target_width = max(title_width + 4, button_width + 4, 20)  # حد أدنى 20
     
     if style == "modern":
-        # النمط الحديث مع إطار علوي
-        top_line = f"┌{line_char * (final_width - 2)}┐"
-        title_line = f"│ {full_title}{' ' * (final_width - title_width - 3)}│"
-        bottom_line = f"└{line_char * (final_width - 2)}┘"
+        # النمط الحديث مع إطار كامل - محسّن للتوسيط
+        # حساب المسافات المطلوبة للتوسيط
+        total_padding = max(0, target_width - title_width - 2)  # -2 للزوايا
+        left_padding = total_padding // 2
+        right_padding = total_padding - left_padding
+        
+        top_line = f"┌{line_char * (target_width - 2)}┐"
+        title_line = f"│{' ' * left_padding}{full_title}{' ' * right_padding}│"
+        bottom_line = f"└{line_char * (target_width - 2)}┘"
+        
         header_html = f"<b>{top_line}\n{title_line}\n{bottom_line}</b>"
     
     elif style == "minimal":
         # النمط البسيط والأنيق
-        padding = (final_width - title_width) // 2
-        left_pad = " " * max(0, padding - 1)
-        right_pad = " " * max(0, final_width - title_width - padding - 1)
-        header_html = f"<b>{decoration * 2}{left_pad}{full_title}{right_pad}{decoration * 2}</b>"
+        total_padding = max(0, target_width - title_width - 4)  # -4 للزخارف
+        left_padding = total_padding // 2
+        right_padding = total_padding - left_padding
+        
+        header_html = f"<b>{decoration * 2}{' ' * left_padding}{full_title}{' ' * right_padding}{decoration * 2}</b>"
     
-    else:  # classic (النمط الكلاسيكي المحسن)
-        # نموسقة كلاسيكية مع خطوط وزخارف
-        line_length = max(title_width + 6, final_width)
-        top_decoration = f"{decoration * 3}"
-        bottom_decoration = f"{line_char * line_length}"
+    else:  # classic
+        # النمط الكلاسيكي المحسن
+        line_length = max(title_width + 8, target_width)
+        total_padding = max(0, line_length - title_width - 6)  # -6 للزخارف والمسافات
+        left_padding = total_padding // 2
+        right_padding = total_padding - left_padding
         
-        # توسيط النص
-        space_needed = max(0, line_length - title_width - 6)
-        left_pad = " " * (space_needed // 2)
+        top_line = f"{decoration * 3}{' ' * left_padding}{full_title}{' ' * right_padding}{decoration * 3}"
+        bottom_line = f"{line_char * line_length}"
         
-        header_html = f"<b>{top_decoration}{left_pad} {full_title} {left_pad}{top_decoration if space_needed % 2 == 0 else top_decoration[:-1]}</b>\n{bottom_decoration}"
+        header_html = f"<b>{top_line}</b>\n{bottom_line}"
 
     return header_html
 
@@ -167,7 +140,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     labels = ["🇪🇬 العربية", "🇺🇸 English"]
-
     header = build_header_html("اللغة | Language", labels)
 
     if update.callback_query:
@@ -223,7 +195,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 # ===============================
 # 3. اختيار اللغة
-# =========================------
+# ===============================
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -273,20 +245,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        labels = options + ([ "🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
-        box = build_header_html(title, labels)
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
+        labels = options + [back_label]
+        
+        header = build_header_html(title, labels)
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await query.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
+    # معالجة الأزرار الفرعية
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     try:
