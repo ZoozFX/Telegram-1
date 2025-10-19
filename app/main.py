@@ -112,8 +112,8 @@ def build_header_html(
     underline_char: str = "━",
     underline_enabled: bool = True,
     underline_length: int = 25,
-    extra_lines: int = 1,           # 👈 عدد الأسطر الفارغة أو المخفية أسفل الخط
-    invisible_space: bool = True    # 👈 إذا True نستخدم NBSP بدل فراغ عادي
+    extra_lines: int = 3,           # 👈 عدد الأسطر الفارغة أو المخفية أسفل الخط
+    invisible_space: bool = False    # 👈 إذا True نستخدم NBSP بدل فراغ عادي
 ) -> str:
     """
     نسخة محسّنة:
