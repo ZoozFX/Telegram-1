@@ -104,86 +104,76 @@ def build_header_html(
     header_emoji: str = "🔰",
     underline_mode="auto",
     underline_min: int = 10,
-    arabic_rtl_bias: float | None = None,  # نسبة التحييز الافتراضية (None => تحييز ذكي تلقائي)
-    width_padding: int = 1
+    arabic_rtl_bias: float | None = None,
+    width_padding: int = 1,
+    align: str = "center",          # 🆕 "left", "right", "center"
+    manual_shift: int = 0           # 🆕 إزاحة يدوية موجبة/سالبة
 ) -> str:
     """
-    دالة محسّنة: تقصّر الخط العرضي وتطبق انزياحًا بصريًا لليسار عند وجود نص عربي
-    بحيث يظهر النص العربي داخل الإطار بشكل متناسق (لا يخرج عن اليمين).
-
+    🔹 دالة لإنشاء ترويسة منسقة بإطار زخرفي، مع تحكم كامل بالمحاذاة والإزاحة.
+    
     Args:
-        title: نص العنوان
-        keyboard_labels: لتقدير الحد الأدنى للعرض إن لزم
-        underline_mode: "auto" أو عدد صحيح لعرض ثابت
-        underline_min: الحد الأدنى للعرض
-        arabic_rtl_bias: إذا أعطيت قيمة (0..1) فهي نسبة من space_needed التي تُحوّل
-                         من pad_left إلى pad_right. None => حساب تلقائي.
-        width_padding: عدد الخانات الإضافية فوق طول النص لراحة بصرية.
+        title: النص الرئيسي.
+        keyboard_labels: قائمة لتقدير العرض الأدنى.
+        align: 'left' أو 'right' أو 'center' (افتراضي).
+        manual_shift: رقم صحيح (عدد NBSP) لتحريك النص يسارًا أو يمينًا يدويًا.
+                      - موجب: يحرك النص يمينًا (يبدأ أبكر)
+                      - سالب: يحركه يسارًا (يدخل داخل الإطار أكثر)
     """
     NBSP = "\u00A0"
 
-    # توليد العنوان (بدون أي NBSP مضافة هنا)
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
 
-    # اكتشاف وجود أحرف عربية (نطاق أساسي)
+    # اكتشاف العربية
     has_arabic = any("\u0600" <= ch <= "\u06FF" for ch in title)
 
-    # حساب العرض المقاس (نستعمل الوظائف التي لديك: remove_emoji, display_width)
+    # قياس العرض التقريبي للنص (بدون الإيموجي)
     title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
-    # حد العرض المستهدف
+    # حساب عرض الإطار
     target_width = max(max_button_width(keyboard_labels), underline_min)
     if isinstance(underline_mode, int):
         underline_width = max(underline_mode, underline_min)
     else:
         underline_width = max(title_width + width_padding, target_width, underline_min)
 
-    # نرسم الحدود
+    # بناء الإطار
     top_border = "┏" + "━" * underline_width + "┓"
     bottom_border = "┗" + "━" * underline_width + "┛"
 
-    # المساحة المتبقية التي يجب توزيعها كـ padding
     space_needed = max(0, underline_width - title_width)
+    pad_left = space_needed // 2
+    pad_right = space_needed - pad_left
 
-    # التوسيط الرياضي الأساسي
-    base_left = space_needed // 2
-    base_right = space_needed - base_left
-
-    # إذا النص عربي، نطبق انزياح لليمين (أي نقل NBSP من اليسار إلى اليمين)
+    # ⚙️ تحييز بصري تلقائي للنص العربي (يدخل يسار أكثر)
     if has_arabic and space_needed > 0:
-        # حساب ذكي لنسبة التحويل إذا المستخدم لم يحدد arabic_rtl_bias
         if arabic_rtl_bias is None:
-            # قاعدة عملية:
-            # - إذا space_needed صغير (<6) نأخذ تحييز أكبر نسبيًا للحساسية البصرية
-            # - إذا كبير نأخذ نسبة ثابتة تتناقص بزيادة العرض
-            if space_needed <= 6:
-                bias_ratio = 0.6  # نقل 60% من الفائض اليساري تقريبا
-            elif space_needed <= 12:
-                bias_ratio = 0.45
-            else:
-                # عند المساحات الكبيرة نطبّع التحويل (لا نريد مبالغة)
-                bias_ratio = 0.30
+            bias_ratio = 0.45 if space_needed > 4 else 0.6
         else:
-            # إذا المُستخدم حدّد نسبة صريحة (بين 0 و1)
             bias_ratio = max(0.0, min(1.0, float(arabic_rtl_bias)))
 
-        # نحسب عدد NBSP التي ننقل من اليسار لليمين
-        # نقيّم على الأقل NBSP واحد إن كان هناك مساحة كافية
-        shift = math.ceil(base_left * bias_ratio)
-        shift = min(shift, base_left)  # لا نأخذ أكثر من الموجود
+        shift = math.ceil(pad_left * bias_ratio)
+        shift = min(shift, pad_left)
+        pad_left -= shift
+        pad_right += shift
 
-        pad_left = base_left - shift
-        pad_right = base_right + shift
-    else:
-        pad_left = base_left
-        pad_right = base_right
+    # ⚙️ التحكم اليدوي بالمحاذاة
+    if align.lower() == "left":
+        pad_left = 1
+        pad_right = max(0, underline_width - title_width - pad_left)
+    elif align.lower() == "right":
+        pad_right = 1
+        pad_left = max(0, underline_width - title_width - pad_right)
+    # center هو الوضع الافتراضي فلا تغيير عليه
 
-    # بناء السطر المركز (نستخدم NBSP لتثبيت العرض داخل Telegram)
-    left_padding = NBSP * pad_left
-    right_padding = NBSP * pad_right
+    # ⚙️ إزاحة يدوية (بإضافة أو طرح NBSP)
+    if manual_shift != 0:
+        pad_left = max(0, pad_left + manual_shift)
+        pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
-    centered_line = f"{left_padding}<b>{full_title}</b>{right_padding}"
+    # بناء السطر النهائي
+    centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     return f"{top_border}\n{centered_line}\n{bottom_border}"
 # ===============================
