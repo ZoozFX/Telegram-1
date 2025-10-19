@@ -104,18 +104,18 @@ def build_header_html(
     side_mark: str = "◾",
     header_emoji: str = "💥💥",
     underline_mode: int | str = 25,
-    underline_min: int = 17,
+    underline_min: int = 25,
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
     align: str = "center",
-    manual_shift: int = 50,
+    manual_shift: int = 0,
     underline_char: str = "━",
     underline_enabled: bool = True,
     underline_length: int = 25,
-    extra_lines: int = 8,           # 👈 عدد الأسطر الفارغة أو المخفية أسفل الخط
+    extra_lines: int = 0,           # 👈 عدد الأسطر الفارغة أو المخفية أسفل الخط
     invisible_space: bool = False,  # 👈 إذا True نستخدم NBSP بدل فراغ عادي
-    arabic_indent: int = 50,         # 👈 عدد الفراغات قبل النص العربي
-    english_indent: int = 50         # 👈 عدد الفراغات قبل النص الإنجليزي
+    arabic_indent: int = 25,         # 👈 عدد الفراغات قبل النص العربي
+    english_indent: int = 25         # 👈 عدد الفراغات قبل النص الإنجليزي
 ) -> str:
     """
     نسخة محسّنة:
