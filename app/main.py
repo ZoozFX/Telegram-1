@@ -33,17 +33,25 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
-# 📏 دالة لتنسيق النص داخل صندوق ASCII مع محاذاة مثالية للوسط
+# 📏 دالة لتنسيق النص داخل صندوق ASCII مع محاذاة الوسط بدقة
 # ===============================
 def create_boxed_text(text: str, width: int = 40, icon: str = "") -> str:
-    """إنشاء صندوق ASCII للنص مع محاذاة وسط دقيقة."""
+    """
+    إنشاء صندوق ASCII للنص مع محاذاة وسط دقيقة حتى مع الرموز والأحرف العربية.
+    """
     lines = text.split("\n")
     boxed_lines = []
     border = "═" * width
     boxed_lines.append(f"╔{border}╗")
     for line in lines:
         line_content = f"{icon} {line}" if icon else line
-        visible_len = sum(2 if ord(c) > 127 else 1 for c in line_content)
+        # حساب الطول المرئي بدقة
+        visible_len = 0
+        for c in line_content:
+            if ord(c) > 127:
+                visible_len += 2  # الأحرف العربية والرموز
+            else:
+                visible_len += 1  # أحرف لاتينية
         total_padding = width - visible_len
         left_padding = total_padding // 2
         right_padding = total_padding - left_padding
@@ -56,14 +64,16 @@ def create_boxed_text(text: str, width: int = 40, icon: str = "") -> str:
 # 🔹 دالة لتأثير ASCII متحرك على العنوان
 # ===============================
 async def animated_box(update: Update, title: str, icon: str = "💠", width: int = 40, reply_markup=None):
-    """عرض صندوق مع تأثير ASCII متحرك على العنوان."""
+    """
+    عرض صندوق مع تأثير ASCII متحرك على العنوان.
+    """
     frames = [
         f"✨{icon}✨",
         f" {icon}✨ ",
         f"✨ {icon} ",
         f" {icon} ",
     ]
-    for frame in frames * 2:  # تكرار الحركات
+    for frame in frames * 2:  # تكرار الحركة
         text = create_boxed_text(title, width=width, icon=frame)
         if update.callback_query:
             await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
