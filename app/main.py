@@ -1,5 +1,7 @@
 import os
 import logging
+import unicodedata
+from typing import List
 
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -30,27 +32,83 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # -------------------------------
-# إعدادات واجهة / تنسيق العناوين الخفيفة
+# مساعدة: قياس العرض المرئي للنص (تقريبي)
+# يدعم الإيموجي، الحروف واسعة العرض، وcombining marks
 # -------------------------------
-# سنستخدم الشكل: ◾ 🔰 العنوان ◾
-# هذا الشكل ثابت وبسيط ولا يتأثر بعرض الإيموجي أو اتجاه النص.
-def build_dynamic_box(text: str) -> str:
+def display_width(text: str) -> int:
+    if not text:
+        return 0
+    width = 0
+    for ch in text:
+        # combining marks لا تضيف عرضًا مستقلاً
+        if unicodedata.combining(ch):
+            continue
+        ea = unicodedata.east_asian_width(ch)
+        if ea in ("F", "W"):
+            width += 2
+            continue
+        o = ord(ch)
+        # نطاقات إيموجي شائعة نعاملها بعرض 2
+        if (
+            0x1F300 <= o <= 0x1F5FF
+            or 0x1F600 <= o <= 0x1F64F
+            or 0x1F680 <= o <= 0x1F6FF
+            or 0x1F900 <= o <= 0x1F9FF
+            or 0x2600 <= o <= 0x26FF
+            or 0x2700 <= o <= 0x27BF
+            or o == 0xFE0F
+        ):
+            width += 2
+            continue
+        width += 1
+    return width
+
+# -------------------------------
+# بناء رأس HTML متمركز تقريبًا بالنسبة لعرض أزرار الكيبورد
+# سيُنتج HTML مع <b> للعريض، وسطر تحتي من ━ لعمل underline بصري.
+# نحاول توسيط العنوان بواسطة NBSP (\u00A0) من اليسار.
+# -------------------------------
+NBSP = "\u00A0"
+
+def max_button_width(labels: List[str]) -> int:
+    """أرجع أقصى عرض مرئي بين مجموعة تسميات الأزرار (بالأعمدة)."""
+    if not labels:
+        return 0
+    return max(display_width(lbl) for lbl in labels)
+
+def build_header_html(title: str, keyboard_labels: List[str], side_mark: str = "◾") -> str:
     """
-    يعيد عنوانًا مُنسقًا بشكل خفيف بثنائية الجانبين:
-    مثال: "◾ 🔰 خدمات البرمجة ◾"
+    نشكّل عنوانًا HTML بالهيئة: ◾ 🔰 Title ◾
+    ونضيف سطرًا تحتانيًا من ━ بطول مناسب، ونحاول التوسيط بصريًا مقابل أوسع زر.
     """
-    title = text.strip()
-    return f"◾ {title} ◾"
+    # شكل العنوان داخل البلوك (نحسب عرضه المرئي)
+    full_title = f"{side_mark} 🔰 {title} {side_mark}"
+    title_width = display_width(full_title)
+
+    # نحسب أقصى عرض بين أزرار الكيبورد — هذا هدف التوسيط
+    target_width = max(10, max_button_width(keyboard_labels))
+
+    # نريد أن يكون السطر السفلي عريضًا بما يكفي: على الأقل عرض العنوان، أو عرض الزر الأوسع
+    underline_width = max(title_width, target_width)
+
+    # نحسب عدد NBSP المطلوب لإزاحة العنوان لليسار بهدف التوسيط فوق underline_width
+    # NB: NBSP تعتبر عرضًا واحدًا، لذلك نحسب الفرق بالعمدان المرئية ونحوّله لعدد NBSP
+    space_needed = max(0, underline_width - title_width)
+    pad_left = space_needed // 2
+
+    left_padding = NBSP * pad_left
+    # نبني سطر التحتي من ━ (هذا بصريًا مثل underline)
+    underline = "━" * underline_width
+
+    # عنوان عريض (HTML)
+    # نرجع عنوان مضافًا إليه padding يساري من NBSP حتى يبدو مُوسَطًا
+    header_html = f"{left_padding}<b>{full_title}</b>\n{underline}"
+    return header_html
 
 # ===============================
 # 1. /start → واجهة اختيار اللغة
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /start يدعم كلتا الحالتين:
-    - رسالة نصية (update.message)
-    - نداء عبر callback (update.callback_query) — لذلك زر "الرجوع للغة" يعمل.
-    """
     keyboard = [
         [
             InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar"),
@@ -59,31 +117,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # نستخدم التنسيق الجديد لكل العناوين
-    ar_box = build_dynamic_box("🔰 الأقسام الرئيسية")
-    en_box = build_dynamic_box("🔰 Main Sections")
-
-    msg = f"{ar_box}\n\n{en_box}"
+    # نجمع تسميات الأزرار لقياس العرض
+    labels = ["🇪🇬 العربية", "🇺🇸 English"]
+    header = build_header_html("الأقسام الرئيسية", labels)
 
     if update.callback_query:
         query = update.callback_query
         await query.answer()
         try:
-            await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            # إذا لم نتمكن من التعديل نرسل رسالة جديدة للحماية
-            await context.bot.send_message(chat_id=query.message.chat_id, text=msg, reply_markup=reply_markup, disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
         if update.message:
-            await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+            await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 # ===============================
 # 2. عرض الأقسام الرئيسية بعد اختيار اللغة
 # ===============================
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
-    """
-    يعرض الأقسام الرئيسية بعد اختيار اللغة. يتلقى update, context, lang
-    """
     if not update.callback_query:
         return
 
@@ -96,7 +148,8 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        box = build_dynamic_box("🔰 الأقسام الرئيسية")
+        labels = [name for name, _ in sections]
+        header = build_header_html("الأقسام الرئيسية", labels)
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -104,7 +157,8 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        box = build_dynamic_box("🔰 Main Sections")
+        labels = [name for name, _ in sections]
+        header = build_header_html("Main Sections", labels)
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = []
@@ -114,9 +168,9 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, disable_web_page_preview=True)
+        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 # ===============================
 # 3. اختيار اللغة
@@ -170,8 +224,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        # نضع الإيموجي والعنوان داخل الصندوق الخفيف الجديد
-        box = build_dynamic_box(f"🔰 {title}")
+        labels = options + (["🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
+        box = build_header_html(title, labels)
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
@@ -179,15 +233,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+            await query.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
+    # رسالة اختيار خدمة عادية
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     try:
-        await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}", parse_mode=None, disable_web_page_preview=True)
+        await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
         await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
 
