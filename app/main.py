@@ -33,53 +33,20 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
-# 📏 دالة لتنسيق النص داخل صندوق ASCII مع محاذاة الوسط بدقة
+# 📏 دالة لتنسيق النص العربي داخل صندوق
 # ===============================
-def create_boxed_text(text: str, width: int = 40, icon: str = "") -> str:
-    """
-    إنشاء صندوق ASCII للنص مع محاذاة وسط دقيقة حتى مع الرموز والأحرف العربية.
-    """
+def create_boxed_text(text: str, width: int = 25, icon: str = "") -> str:
+    """إنشاء صندوق ASCII للنص العربي أو الإنجليزي مع محاذاة مركزية."""
     lines = text.split("\n")
     boxed_lines = []
     border = "═" * width
     boxed_lines.append(f"╔{border}╗")
     for line in lines:
         line_content = f"{icon} {line}" if icon else line
-        # حساب الطول المرئي بدقة
-        visible_len = 0
-        for c in line_content:
-            if ord(c) > 127:
-                visible_len += 2  # الأحرف العربية والرموز
-            else:
-                visible_len += 1  # أحرف لاتينية
-        total_padding = width - visible_len
-        left_padding = total_padding // 2
-        right_padding = total_padding - left_padding
-        padded_line = " " * left_padding + line_content + " " * right_padding
-        boxed_lines.append(f"║{padded_line}║")
+        padded = line_content.center(width)
+        boxed_lines.append(f"║{padded}║")
     boxed_lines.append(f"╚{border}╝")
     return "\n".join(boxed_lines)
-
-# ===============================
-# 🔹 دالة لتأثير ASCII متحرك على العنوان
-# ===============================
-async def animated_box(update: Update, title: str, icon: str = "💠", width: int = 40, reply_markup=None):
-    """
-    عرض صندوق مع تأثير ASCII متحرك على العنوان.
-    """
-    frames = [
-        f"✨{icon}✨",
-        f" {icon}✨ ",
-        f"✨ {icon} ",
-        f" {icon} ",
-    ]
-    for frame in frames * 2:  # تكرار الحركة
-        text = create_boxed_text(title, width=width, icon=frame)
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup)
-        else:
-            await update.message.reply_text(text)
-        await asyncio.sleep(0.3)  # سرعة الحركة
 
 # ===============================
 # 🟢 1. /start → واجهة اختيار اللغة
@@ -92,8 +59,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await animated_box(update, "أهلا بك في بوت YesFX!", icon="🌟", reply_markup=reply_markup)
-    await animated_box(update, "Welcome to YesFX Bot!", icon="👋", reply_markup=reply_markup)
+    text_ar = create_boxed_text("أهلا بك في بوت YesFX!", icon="🌟")
+    text_en = create_boxed_text("Welcome to YesFX Bot!", icon="👋")
+    await update.message.reply_text(f"{text_ar}\n{text_en}", reply_markup=reply_markup)
 
 # ===============================
 # 🆕 2. عرض اختيار اللغة عند الرجوع
@@ -107,8 +75,10 @@ async def show_language_selection_via_query(update: Update, context: ContextType
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await animated_box(update, "مرحبًا مجددًا!", icon="🔁", reply_markup=reply_markup)
-        await animated_box(update, "Welcome again!", icon="🔁", reply_markup=reply_markup)
+        text_ar = create_boxed_text("مرحبًا مجددًا!", icon="🔁")
+        text_en = create_boxed_text("Welcome again!", icon="🔁")
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(f"{text_ar}\n{text_en}", reply_markup=reply_markup)
     else:
         await start(update, context)
 
@@ -122,21 +92,24 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
+        text = create_boxed_text("الأقسام الرئيسية", icon="🏷️")
         back_button = ("🔙 الرجوع للغة", "back_language")
-        title = "الأقسام الرئيسية"
     else:
         sections = [
             ("💹 Forex Trading", "forex_main"),
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
+        text = create_boxed_text("Main Sections", icon="🏷️")
         back_button = ("🔙 Back to language", "back_language")
-        title = "Main Sections"
 
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await animated_box(update, title, icon="🏷️", reply_markup=reply_markup)
+
+    # تأثير ASCII متحرك: نجوم تتغير
+    animated_text = text.replace("🏷️", "✨🏷️✨")
+    await update.callback_query.edit_message_text(animated_text, reply_markup=reply_markup)
 
 # ===============================
 # 🟢 4. عند اختيار اللغة
@@ -156,13 +129,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
+    # 🔙 الرجوع لاختيار اللغة
     if query.data == "back_language":
         await show_language_selection_via_query(update, context)
         return
+
+    # 🔙 الرجوع إلى القائمة الرئيسية
     if query.data == "back_main":
         await show_main_sections(update, lang)
         return
 
+    # الأقسام الرئيسية
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -188,16 +165,19 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
+        text = create_boxed_text(title, icon="💠")
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await animated_box(update, title, icon="💠", reply_markup=reply_markup)
+        # تأثير ASCII ديناميكي للعنوان
+        animated_text = text.replace("💠", "✨💠✨")
+        await query.edit_message_text(animated_text, reply_markup=reply_markup)
         return
 
-    # Placeholder for sub-services
+    # خدمات فرعية placeholder
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}")
