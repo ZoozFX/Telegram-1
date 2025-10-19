@@ -196,7 +196,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     labels = ["🇪🇬 العربية", "🇺🇸 English"]
 
     # ميزة التمييز: استخدم إيموجي مختلف لكل لغة لتمييز العناوين بصريًا
-    header = build_header_html("اللغة | Language", labels, header_emoji=HEADER_EMOJI)
+    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
 
     if update.callback_query:
         query = update.callback_query
