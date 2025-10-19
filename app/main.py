@@ -102,32 +102,33 @@ def build_header_html(
     keyboard_labels: List[str],
     side_mark: str = "◾",
     header_emoji: str = "🔰",
-    underline_mode: int | str = UNDERLINE_MODE,  # 👈 الطول الافتراضي للخط
-    underline_min: int = UNDERLINE_MIN,          # 👈 الحد الأدنى للطول
+    underline_mode: int | str = UNDERLINE_MODE,
+    underline_min: int = UNDERLINE_MIN,
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
-    align: str = "left",         # 👈 محاذاة لليسار افتراضيًا
-    manual_shift: int = 36        # 👈 لا يوجد إزاحة يدوية افتراضيًا
+    align: str = "left",         # الافتراضي لليسار (للإنجليزية)
+    manual_shift: int = 0
 ) -> str:
     NBSP = "\u00A0"
 
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
 
-    # اكتشاف العربية
+    # 🔍 اكتشاف اللغة العربية
     has_arabic = any("\u0600" <= ch <= "\u06FF" for ch in title)
 
-    # قياس العرض التقريبي للنص
+    # 🧮 قياس العرض التقريبي
     title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
-    # حساب عرض الإطار
+    # 📏 حساب عرض الخط
     target_width = max(max_button_width(keyboard_labels), underline_min)
-    if isinstance(underline_mode, int):
-        underline_width = max(underline_mode, underline_min)
-    else:
-        underline_width = max(title_width + width_padding, target_width, underline_min)
+    underline_width = max(
+        underline_mode if isinstance(underline_mode, int) else title_width + width_padding,
+        target_width,
+        underline_min
+    )
 
-    # بناء الإطار
+    # 🧱 بناء الإطار
     top_border = "┏" + "━" * underline_width + "┓"
     bottom_border = "┗" + "━" * underline_width + "┛"
 
@@ -135,26 +136,17 @@ def build_header_html(
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    # تحييز بصري للنص العربي
-    if has_arabic and space_needed > 0:
-        if arabic_rtl_bias is None:
-            bias_ratio = 0.45 if space_needed > 4 else 0.6
-        else:
-            bias_ratio = max(0.0, min(1.0, float(arabic_rtl_bias)))
-        shift = math.ceil(pad_left * bias_ratio)
-        shift = min(shift, pad_left)
-        pad_left -= shift
-        pad_right += shift
-
-    # التحكم بالمحاذاة
-    if align.lower() == "left":
-        pad_left = 1
-        pad_right = max(0, underline_width - title_width - pad_left)
-    elif align.lower() == "right":
+    # ⚙️ ضبط المحاذاة التلقائية حسب اللغة
+    if has_arabic:
+        # إذا كان النص عربيًا → محاذاة يمين
         pad_right = 1
         pad_left = max(0, underline_width - title_width - pad_right)
+    else:
+        # إذا كان النص إنجليزيًا → محاذاة يسار (افتراضي)
+        pad_left = 1
+        pad_right = max(0, underline_width - title_width - pad_left)
 
-    # إزاحة يدوية
+    # ✋ إزاحة يدوية (اختيارية)
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
