@@ -33,18 +33,30 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
-# 📏 دالة لتنسيق النص العربي داخل صندوق
+# 📏 دالة لتنسيق النص داخل صندوق متناسق (تلجرام)
 # ===============================
-def create_boxed_text(text: str, width: int = 25, icon: str = "") -> str:
-    """إنشاء صندوق ASCII للنص العربي أو الإنجليزي مع محاذاة مركزية."""
+def create_boxed_text(text: str, width: int = 27, icon: str = "") -> str:
+    """
+    إنشاء صندوق ASCII مناسب لعرض Telegram.
+    يحافظ على شكل متناسق حتى مع الإيموجي والنص العربي.
+    """
     lines = text.split("\n")
     boxed_lines = []
     border = "═" * width
     boxed_lines.append(f"╔{border}╗")
+
     for line in lines:
         line_content = f"{icon} {line}" if icon else line
-        padded = line_content.center(width)
+        # إزالة المسافات الزائدة
+        line_content = line_content.strip()
+        # حساب الطول الفعلي (نسبة تقريبية لحروف مختلفة العرض)
+        visual_length = len(line_content.encode('utf-8')) // 2
+        padding_total = max(width - visual_length, 0)
+        left_padding = padding_total // 2
+        right_padding = padding_total - left_padding
+        padded = f"{' ' * left_padding}{line_content}{' ' * right_padding}"
         boxed_lines.append(f"║{padded}║")
+
     boxed_lines.append(f"╚{border}╝")
     return "\n".join(boxed_lines)
 
@@ -107,7 +119,6 @@ async def show_main_sections(update: Update, lang: str):
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # تأثير ASCII متحرك: نجوم تتغير
     animated_text = text.replace("🏷️", "✨🏷️✨")
     await update.callback_query.edit_message_text(animated_text, reply_markup=reply_markup)
 
@@ -139,7 +150,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, lang)
         return
 
-    # الأقسام الرئيسية
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -172,12 +182,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # تأثير ASCII ديناميكي للعنوان
         animated_text = text.replace("💠", "✨💠✨")
         await query.edit_message_text(animated_text, reply_markup=reply_markup)
         return
 
-    # خدمات فرعية placeholder
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}")
