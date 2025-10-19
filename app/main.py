@@ -107,7 +107,7 @@ def build_header_html(
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
     align: str = "left",         # 👈 محاذاة لليسار افتراضيًا
-    manual_shift: int = 0        # 👈 لا يوجد إزاحة يدوية افتراضيًا
+    manual_shift: int = 36        # 👈 لا يوجد إزاحة يدوية افتراضيًا
 ) -> str:
     NBSP = "\u00A0"
 
