@@ -101,7 +101,7 @@ def build_header_html(
     title: str,
     keyboard_labels: List[str],
     side_mark: str = "◾",
-    header_emoji: str = "💥💥💥",
+    header_emoji: str = "💥💥",
     underline_mode: int | str = UNDERLINE_MODE,
     underline_min: int = UNDERLINE_MIN,
     arabic_rtl_bias: float | None = None,
