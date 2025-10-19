@@ -1,7 +1,5 @@
 import os
 import logging
-import unicodedata
-from typing import Optional
 
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -32,140 +30,17 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # -------------------------------
-# إعدادات واجهة / صندوق العرض المتكيّف
+# إعدادات واجهة / تنسيق العناوين الخفيفة
 # -------------------------------
-BOX_MIN_WIDTH = 10
-BOX_MAX_WIDTH = 45
-BOX_PADDING = 2  # مسافات داخلية افتراضية
-
-# -------------------------------
-# عرض عرض الحرف (display width) الذكي
-# -------------------------------
-def display_width(text: str) -> int:
+# سنستخدم الشكل: ◾ 🔰 العنوان ◾
+# هذا الشكل ثابت وبسيط ولا يتأثر بعرض الإيموجي أو اتجاه النص.
+def build_dynamic_box(text: str) -> str:
     """
-    تقريب عرض النص على الشاشة (عدد أعمدة العرض) مع دعم للإيموجي،
-    الحروف واسعة العرض (East Asian), والـ combining marks.
-    لا يعتمد بالكامل على len() لأن بعض الرموز تأخذ عمودين وما يليها لا يزيد العرض.
+    يعيد عنوانًا مُنسقًا بشكل خفيف بثنائية الجانبين:
+    مثال: "◾ 🔰 خدمات البرمجة ◾"
     """
-    if not text:
-        return 0
-
-    width = 0
-    for ch in text:
-        # تجاهل combining marks (لا تضيف عرضًا مستقلًا)
-        if unicodedata.combining(ch):
-            continue
-
-        # بعض حروف east asian تعتبر واسعة (width 2)
-        ea = unicodedata.east_asian_width(ch)
-        if ea in ("F", "W"):
-            width += 2
-            continue
-
-        o = ord(ch)
-        # نطاقات إيموجي شائعة نجعلها عرضاً 2 عمودًا
-        if (
-            0x1F300 <= o <= 0x1F5FF  # symbols & pictographs
-            or 0x1F600 <= o <= 0x1F64F  # emoticons
-            or 0x1F680 <= o <= 0x1F6FF  # transport & map
-            or 0x1F900 <= o <= 0x1F9FF  # supplemental symbols & pictographs
-            or 0x2600 <= o <= 0x26FF    # misc symbols
-            or 0x2700 <= o <= 0x27BF    # dingbats
-            or 0xFE0F == o              # variation selector
-        ):
-            width += 2
-            continue
-
-        # الحروف الافتراضية نعتبرها بعرض 1
-        width += 1
-
-    return width
-
-def slice_by_display_width(text: str, max_width: int) -> str:
-    """
-    يقطع النص بحيث يكون عرضه <= max_width (بالأعمدة المرئية).
-    يحترم الـ combining marks — لا يكسرها.
-    """
-    if display_width(text) <= max_width:
-        return text
-
-    result_chars = []
-    acc = 0
-    for ch in text:
-        ch_width = 0
-        if unicodedata.combining(ch):
-            # إضافة combining marking إلى النتيجة دون تغيير العرض
-            result_chars.append(ch)
-            continue
-        ea = unicodedata.east_asian_width(ch)
-        if ea in ("F", "W"):
-            ch_width = 2
-        else:
-            o = ord(ch)
-            if (
-                0x1F300 <= o <= 0x1F5FF
-                or 0x1F600 <= o <= 0x1F64F
-                or 0x1F680 <= o <= 0x1F6FF
-                or 0x1F900 <= o <= 0x1F9FF
-                or 0x2600 <= o <= 0x26FF
-                or 0x2700 <= o <= 0x27BF
-                or 0xFE0F == o
-            ):
-                ch_width = 2
-            else:
-                ch_width = 1
-
-        if acc + ch_width > max_width:
-            break
-        result_chars.append(ch)
-        acc += ch_width
-
-    return "".join(result_chars)
-
-def build_dynamic_box(text: str, min_width: int = BOX_MIN_WIDTH, max_width: int = BOX_MAX_WIDTH, padding: int = BOX_PADDING) -> str:
-    """
-    يبني صندوقًا يتكيف عرضيًا مع النص ويقوم بتوسيطه دائمًا بغض النظر عن اللغة أو الإيموجي.
-    - القص عند الحاجة مع "..."
-    - إعادة النص مع حواف مرئية باستخدام حروف Unicode
-    """
-    line = text.strip()
-
-    # طول المحتوى الحقيقي بالمقياس العرضي
-    content_len = display_width(line)
-    required_width = content_len + (padding * 2)
-
-    # ضبط العرض ضمن الحدود (عرض الصندوق بالـ columns)
-    width = max(min_width, min(required_width, max_width))
-
-    # المساحة الداخلية المتاحة للنص
-    inner_space = width - (padding * 2)
-
-    if content_len > inner_space:
-        # نضيف "..." لكن يجب أن نحترم عرض النقاط (3 أعمدة)
-        ellipsis = "..."
-        ellipsis_width = display_width(ellipsis)
-        visible_width = max(0, inner_space - ellipsis_width)
-        visible_text = slice_by_display_width(line, visible_width)
-        line = visible_text + ellipsis
-        content_len = display_width(line)
-
-    # الآن نحسب الوسائط بناءً على العرض المرئي
-    total_padding_space = width - content_len
-    # نريد توزيع padding على اليسار واليمين بحيث يكون التوسيط بصريًا
-    pad_left = total_padding_space // 2
-    pad_right = total_padding_space - pad_left
-
-    # نجعل المسافات الداخلية padding ثابتة (padding من الإعداد) ثم نضيف pad_left/pad_right
-    # لكن pad_left/pad_right هنا هي أعمدة عرضية — سنبنيها بمسافات عادية لأن المسافة بعرض 1
-    left_spaces = " " * pad_left
-    right_spaces = " " * pad_right
-
-    border = "═" * width
-    top = f"╔{border}╗"
-    middle = f"{left_spaces}{line}{right_spaces}"
-    bottom = f"╚{border}╝"
-
-    return f"{top}\n{middle}\n{bottom}"
+    title = text.strip()
+    return f"◾ {title} ◾"
 
 # ===============================
 # 1. /start → واجهة اختيار اللغة
@@ -184,7 +59,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # أضفت ايموجي في العناوين كما طلبت
+    # نستخدم التنسيق الجديد لكل العناوين
     ar_box = build_dynamic_box("🔰 الأقسام الرئيسية")
     en_box = build_dynamic_box("🔰 Main Sections")
 
@@ -295,7 +170,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        # نضع ايموجي في عنوان الصفحة الفرعية أيضًا
+        # نضع الإيموجي والعنوان داخل الصندوق الخفيف الجديد
         box = build_dynamic_box(f"🔰 {title}")
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
