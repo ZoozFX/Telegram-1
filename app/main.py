@@ -107,48 +107,37 @@ def build_header_html(
     underline_min: int = UNDERLINE_MIN,
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
-    align: str = "center",  # توسيط افتراضي
-    manual_shift: int = 0
+    align: str = "center",
+    manual_shift: int = 0,
+    underline_char: str = "━",     # 👈 الحرف المستخدم كخط سفلي
+    underline_enabled: bool = True # 👈 لتفعيل أو تعطيل الخط السفلي
 ) -> str:
     """
-    نسخة مبسطة: بدون خطوط علوية أو سفلية،
-    فقط الإيموجي والنص بشكل منسق ومحاذى حسب الإعداد.
-
-    تحسينات:
-    - كشف تلقائي للغة (عربي أم لا) لتطبيق علامات اتجاه يونكود عند الحاجة
-      وذلك لإصلاح مشاكل الـ RTL التي تجعل النص يبدو محاذياً لليمين بدلاً من التوسيط.
-    - يدعم align = "left"|"center"|"right"
+    نسخة محسّنة من ترويسة الأقسام: تضيف خطًا سفليًا تحت العنوان.
     """
 
     NBSP = "\u00A0"
-
-    # النص الكامل الذي سيُعرض (يمكن تخصيص الإيموجي حسب اللغة عند الاستدعاء)
-    full_title = f"{header_emoji} {title} {header_emoji}"
-
-    # كشف وجود حروف عربية في العنوان (نطبق تصحيح اتجاه إذا وجدنا عربية)
-    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
-    # علامات اتجاه يونكود: RLM (Right-to-Left Mark) أفضل للعنوان العربي
     RLM = "\u200F"
     LRM = "\u200E"
 
+    full_title = f"{header_emoji} {title} {header_emoji}"
+
+    # كشف اللغة العربية لتصحيح الاتجاه
+    import re
+    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
     if is_arabic:
-        # نلف العنوان بعلامة اتجاه يميني لمنع تداخل اتجاهات الإيموجي/المسافات
         full_title = f"{RLM}{full_title}{RLM}"
     else:
-        # للعناوين اللاتينية نضيف علامات يسارية صغيرة لضمان اتساق العرض عند الحاجة
         full_title = f"{LRM}{full_title}{LRM}"
 
-    # قياس عرض النص بدون إيموجي لأننا نستخدم remove_emoji للقياس الواقعي
+    # حساب العرض النسبي
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    # تطبيق نوع المحاذاة
-    if align.lower() == "center":
-        pass
-    elif align.lower() == "left":
+    if align.lower() == "left":
         pad_left = 0
         pad_right = max(0, target_width - title_width)
     elif align.lower() == "right":
@@ -160,11 +149,16 @@ def build_header_html(
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
-    # نستخدم NBSP لضمان مساحة متساوية عندما يعرض Telegram الرسائل
+    # سطر العنوان الرئيسي
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    return centered_line
+    # ✅ سطر الخط السفلي
+    underline_line = ""
+    if underline_enabled:
+        line_length = max(display_width(remove_emoji(full_title)) + 2, underline_min)
+        underline_line = f"\n{underline_char * line_length}"
 
+    return centered_line + underline_line
 
 # ===============================
 # 1. /start → اختيار اللغة
