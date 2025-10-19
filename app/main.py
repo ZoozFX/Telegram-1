@@ -29,62 +29,43 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # -------------------------------
-# إعدادات واجهة / صندوق العرض
+# إعدادات واجهة / صندوق العرض المتكيّف
 # -------------------------------
-# يمكن تغيير الحد الأقصى/الأدنى للصندوق حسب الرغبة
 BOX_MIN_WIDTH = 10
 BOX_MAX_WIDTH = 45
-BOX_PADDING = 2  # مسافة داخلية (مسافات حول النص)
-
-def contains_arabic(s: str) -> bool:
-    """يرجع True إن وجد حرف عربي في النص."""
-    for ch in s:
-        # نطاقات الحروف العربية الأساسية (يمكن توسيعها إذا أردت)
-        if '\u0600' <= ch <= '\u06FF' or '\u0750' <= ch <= '\u077F' or '\u08A0' <= ch <= '\u08FF':
-            return True
-    return False
+BOX_PADDING = 2  # مسافات داخلية افتراضية
 
 def build_dynamic_box(text: str, min_width: int = BOX_MIN_WIDTH, max_width: int = BOX_MAX_WIDTH, padding: int = BOX_PADDING) -> str:
     """
-    يبني صندوقاً يتكيّف طولياً مع النص:
-    - يحسب العرض بناءً على طول النص + padding.
-    - يحد العرض بقيم min/max.
-    - إذا كان النص عربيًا، يصنفه كـ RTL ويقوم بمحاذاة يمين داخل الصندوق.
-    - إرجاع سلسلة نصية تمثل الصندوق مع الحواف.
+    يبني صندوقًا يتكيف طوليًا مع النص ويقوم بتوسيطه دائمًا بغض النظر عن اللغة أو الإيموجي.
+    - trimming عند الحاجة مع "..."
+    - إعادة النص مع حواف مرئية باستخدام حروف Unicode
     """
     line = text.strip()
-    # حساب العرض المطلوب بناءً على عدد الأحرف + padding مزدوج (يمين + يسار)
+
+    # طول المحتوى بالمقياس الحرفي (مقبول كنهج عملي هنا)
     content_len = len(line)
     required_width = content_len + (padding * 2)
 
-    # قصر/تقييد العرض ضمن الحدود
+    # ضبط العرض ضمن الحدود
     width = max(min_width, min(required_width, max_width))
 
-    # لو النص أطول من العرض الأقصى نقتطع ونضيف "..."
-    if content_len > (width - (padding * 2)):
-        # نقتطع بما يكفي لإضافة ثلاث نقاط
-        visible_len = width - (padding * 2) - 3
-        if visible_len < 0:
-            visible_len = 0
+    # لو النص أطول من المساحة المتاحة داخل الصندوق، نقصه
+    inner_space = width - (padding * 2)
+    if content_len > inner_space:
+        # نخصم 3 حروف للمقطع "..."
+        visible_len = max(0, inner_space - 3)
         line = line[:visible_len] + "..."
         content_len = len(line)
 
-    # بناء الحواف
+    # محاذاة مركزية ثابتة
+    pad_left = (width - content_len) // 2
+    pad_right = width - content_len - pad_left
+
     border = "═" * width
     top = f"╔{border}╗"
-    bottom = f"╚{border}╝"
-
-    # تحديد المحاذاة: إذا وجدنا حروف عربية - محاذاة يمين، وإلا نحاذي بشكل مركزي
-    if contains_arabic(line) and not any(ch.isascii() for ch in line):
-        # محاذاة يمين بسيطة: نضع مسافة padding على اليسار ومساحة متبقية على اليمين
-        pad_left = padding
-        pad_right = width - content_len - pad_left
-    else:
-        # محاذاة مركزية (افتراضية)
-        pad_left = (width - content_len) // 2
-        pad_right = width - content_len - pad_left
-
     middle = f"{' ' * pad_left}{line}{' ' * pad_right}"
+    bottom = f"╚{border}╝"
 
     return f"{top}\n{middle}\n{bottom}"
 
@@ -93,9 +74,9 @@ def build_dynamic_box(text: str, min_width: int = BOX_MIN_WIDTH, max_width: int 
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    يدعم كلتا الحالتين:
-    - أمر /start (update.message موجود)
-    - استدعاء عبر callback (update.callback_query موجود)
+    /start يدعم كلتا الحالتين:
+    - رسالة نصية (update.message)
+    - نداء عبر callback (update.callback_query) — لذلك زر "الرجوع للغة" يعمل.
     """
     keyboard = [
         [
@@ -105,8 +86,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    ar_box = build_dynamic_box("الأقسام الرئيسية")
-    en_box = build_dynamic_box("Main Sections")
+    # أضفت ايموجي في العناوين كما طلبت
+    ar_box = build_dynamic_box("🔰 الأقسام الرئيسية")
+    en_box = build_dynamic_box("🔰 Main Sections")
 
     msg = f"{ar_box}\n\n{en_box}"
 
@@ -116,7 +98,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
         except Exception:
-            # لو لم نتمكن من التعديل (مثلاً الرسالة غير قابلة للتعديل)، أرسل رسالة جديدة
+            # إذا لم نتمكن من التعديل نرسل رسالة جديدة للحماية
             await context.bot.send_message(chat_id=query.message.chat_id, text=msg, reply_markup=reply_markup, disable_web_page_preview=True)
     else:
         if update.message:
@@ -127,8 +109,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ===============================
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     """
-    يعرض الأقسام الرئيسية بعد اختيار اللغة.
-    يأخذ update و context و lang
+    يعرض الأقسام الرئيسية بعد اختيار اللغة. يتلقى update, context, lang
     """
     if not update.callback_query:
         return
@@ -142,7 +123,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        box = build_dynamic_box("الأقسام الرئيسية")
+        box = build_dynamic_box("🔰 الأقسام الرئيسية")
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -150,7 +131,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        box = build_dynamic_box("Main Sections")
+        box = build_dynamic_box("🔰 Main Sections")
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = []
@@ -182,7 +163,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
-    # زر العودة للغة الآن يعمل لأن دالة start تدعم callback
+    # زر العودة للغة
     if query.data == "back_language":
         await start(update, context)
         return
@@ -216,7 +197,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        box = build_dynamic_box(title)
+        # نضع ايموجي في عنوان الصفحة الفرعية أيضًا
+        box = build_dynamic_box(f"🔰 {title}")
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
