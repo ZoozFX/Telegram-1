@@ -32,12 +32,13 @@ app = FastAPI()
 # -------------------------------
 # إعدادات واجهة / صندوق العرض
 # -------------------------------
-BOX_WIDTH = 33  # ✅ تم تقليص العرض ليبدو أقصر وأكثر تناسقًا على الشاشات
+# عدّل هذا الرقم لتصغير/تكبير طول الصندوق (العرض)
+BOX_WIDTH = 33  # <-- أصغر طول للصندوق كما طلبت
 
 def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
     """
     ينشئ صندوقًا بسيطًا بعرض ثابت ومحاذاة في المنتصف بدون استخدام <pre>
-    يحافظ على حواف ثابتة ويقتصر النص الطويل بنقوص (...)
+    يقص النص الطويل ويضعه في منتصف السطر.
     """
     line = text.strip()
     if len(line) > width:
@@ -58,7 +59,9 @@ def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    يدعم /start من الأمر النصي أو من زر "الرجوع للغة"
+    يدعم كلتا الحالتين:
+    - أمر /start (update.message موجود)
+    - استدعاء عبر callback (update.callback_query موجود)
     """
     keyboard = [
         [
@@ -77,26 +80,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         try:
-            await query.edit_message_text(
-                msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True
-            )
+            await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=msg,
-                reply_markup=reply_markup,
-                disable_web_page_preview=True
-            )
+            # لو لم نتمكن من التعديل (مثلاً الرسالة غير قابلة للتعديل)، أرسل رسالة جديدة
+            await context.bot.send_message(chat_id=query.message.chat_id, text=msg, reply_markup=reply_markup, disable_web_page_preview=True)
     else:
         if update.message:
-            await update.message.reply_text(
-                msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True
-            )
+            await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
 
 # ===============================
 # 2. عرض الأقسام الرئيسية بعد اختيار اللغة
 # ===============================
-async def show_main_sections(update: Update, lang: str):
+async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
+    """
+    يعرض الأقسام الرئيسية بعد اختيار اللغة.
+    الآن يحصل على context لتجنّب الاستثناءات عند المحاولة بإرسال رسالة جديدة.
+    """
     if not update.callback_query:
         return
 
@@ -139,7 +138,8 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = "ar" if query.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
-    await show_main_sections(update, lang)
+    # الآن نمرّر context أيضاً
+    await show_main_sections(update, context, lang)
 
 # ===============================
 # 4. الأقسام الفرعية + الرجوع
@@ -149,12 +149,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
+    # زر العودة للغة الآن يعمل لأن دالة start تدعم callback
     if query.data == "back_language":
         await start(update, context)
         return
 
     if query.data == "back_main":
-        await show_main_sections(update, lang)
+        # نمرّر context أيضاً هنا
+        await show_main_sections(update, context, lang)
         return
 
     sections_data = {
