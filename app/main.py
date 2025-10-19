@@ -41,7 +41,7 @@ def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
     """
     line = text.strip()
     if len(line) > width:
-        line = line[: width - 3] + "..."
+        line = line[: width - 1] + "..."
 
     border = "═" * width
     top = f"╔{border}╗"
