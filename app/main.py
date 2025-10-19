@@ -3,7 +3,6 @@ import logging
 import unicodedata
 from typing import List
 import math
-from typing import List
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -37,9 +36,10 @@ app = FastAPI()
 # -------------------------------
 SIDE_MARK = "◾"
 HEADER_EMOJI = "🔰"
-UNDERLINE_MODE = "auto"     # يمكن جعله عدد ثابت مثل 33 لمظهر موحّد
-UNDERLINE_MIN = 20
+UNDERLINE_MODE = 5          # 👈 الطول الافتراضي للخط
+UNDERLINE_MIN = 5           # 👈 الحد الأدنى للطول أيضًا 5
 NBSP = "\u00A0"
+DEFAULT_HEADER_WIDTH = 5
 
 # -------------------------------
 # مساعدة: إزالة الإيموجي لأغراض القياس
@@ -102,24 +102,13 @@ def build_header_html(
     keyboard_labels: List[str],
     side_mark: str = "◾",
     header_emoji: str = "🔰",
-    underline_mode="auto",
-    underline_min: int = 10,
+    underline_mode: int | str = UNDERLINE_MODE,  # 👈 الطول الافتراضي للخط
+    underline_min: int = UNDERLINE_MIN,          # 👈 الحد الأدنى للطول
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
-    align: str = "right",          # 🆕 "left", "right", "center"
-    manual_shift: int = 55           # 🆕 إزاحة يدوية موجبة/سالبة
+    align: str = "left",         # 👈 محاذاة لليسار افتراضيًا
+    manual_shift: int = 0        # 👈 لا يوجد إزاحة يدوية افتراضيًا
 ) -> str:
-    """
-    🔹 دالة لإنشاء ترويسة منسقة بإطار زخرفي، مع تحكم كامل بالمحاذاة والإزاحة.
-    
-    Args:
-        title: النص الرئيسي.
-        keyboard_labels: قائمة لتقدير العرض الأدنى.
-        align: 'left' أو 'right' أو 'center' (افتراضي).
-        manual_shift: رقم صحيح (عدد NBSP) لتحريك النص يسارًا أو يمينًا يدويًا.
-                      - موجب: يحرك النص يمينًا (يبدأ أبكر)
-                      - سالب: يحركه يسارًا (يدخل داخل الإطار أكثر)
-    """
     NBSP = "\u00A0"
 
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
@@ -127,7 +116,7 @@ def build_header_html(
     # اكتشاف العربية
     has_arabic = any("\u0600" <= ch <= "\u06FF" for ch in title)
 
-    # قياس العرض التقريبي للنص (بدون الإيموجي)
+    # قياس العرض التقريبي للنص
     title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
@@ -146,36 +135,34 @@ def build_header_html(
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    # ⚙️ تحييز بصري تلقائي للنص العربي (يدخل يسار أكثر)
+    # تحييز بصري للنص العربي
     if has_arabic and space_needed > 0:
         if arabic_rtl_bias is None:
             bias_ratio = 0.45 if space_needed > 4 else 0.6
         else:
             bias_ratio = max(0.0, min(1.0, float(arabic_rtl_bias)))
-
         shift = math.ceil(pad_left * bias_ratio)
         shift = min(shift, pad_left)
         pad_left -= shift
         pad_right += shift
 
-    # ⚙️ التحكم اليدوي بالمحاذاة
+    # التحكم بالمحاذاة
     if align.lower() == "left":
         pad_left = 1
         pad_right = max(0, underline_width - title_width - pad_left)
     elif align.lower() == "right":
         pad_right = 1
         pad_left = max(0, underline_width - title_width - pad_right)
-    # center هو الوضع الافتراضي فلا تغيير عليه
 
-    # ⚙️ إزاحة يدوية (بإضافة أو طرح NBSP)
+    # إزاحة يدوية
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
-    # بناء السطر النهائي
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     return f"{top_border}\n{centered_line}\n{bottom_border}"
+
 # ===============================
 # 1. /start → اختيار اللغة
 # ===============================
