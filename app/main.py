@@ -113,32 +113,36 @@ def build_header_html(
     underline_enabled: bool = True,
     underline_length: int = 25,
     extra_lines: int = 3,           # 👈 عدد الأسطر الفارغة أو المخفية أسفل الخط
-    invisible_space: bool = False    # 👈 إذا True نستخدم NBSP بدل فراغ عادي
+    invisible_space: bool = False,  # 👈 إذا True نستخدم NBSP بدل فراغ عادي
+    arabic_indent: int = 50,         # 👈 عدد الفراغات قبل النص العربي
+    english_indent: int = 50         # 👈 عدد الفراغات قبل النص الإنجليزي
 ) -> str:
     """
     نسخة محسّنة:
     - تضيف خطًا سفليًا ثابت الطول وموسّطًا.
     - تعالج مشكلة محاذاة النصوص العربية (RTL misalignment).
     - تضيف أسطر فارغة أو مخفية أسفل الخط للتحكم في التباعد.
+    - تضيف إمكانية تحديد عدد المسافات قبل النص العربي والإنجليزي (بما في ذلك قبل الإيموجي).
     """
 
-    import re
     NBSP = "\u00A0"
     RLM = "\u200F"   # Right-to-Left Mark
     LRM = "\u200E"   # Left-to-Right Mark
     RLE = "\u202B"   # Right-to-Left Embedding
     PDF = "\u202C"   # Pop Directional Formatting
 
-    # تحديد ما إذا كان العنوان بالعربية
+    import re
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # نلف النص العربي بعلامات اتجاه واضحة
+    # 👇 هنا نضيف المسافات (قبل الإيموجي)
     if is_arabic:
-        full_title = f"{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+        indent_spaces = NBSP * arabic_indent
+        full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
+        indent_spaces = NBSP * english_indent
+        full_title = f"{indent_spaces}{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
-    # حساب العرض التقريبي
+    # حساب العرض
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
     space_needed = max(0, target_width - title_width)
@@ -153,7 +157,7 @@ def build_header_html(
         pad_right = 0
         pad_left = max(0, target_width - title_width)
 
-    # الإزاحة اليدوية
+    # إزاحة يدوية
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
@@ -161,7 +165,7 @@ def build_header_html(
     # سطر العنوان
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    # سطر الخط السفلي الثابت
+    # الخط السفلي
     underline_line = ""
     if underline_enabled:
         line = underline_char * underline_length
@@ -170,13 +174,12 @@ def build_header_html(
         pad_right_line = diff - pad_left_line
         underline_line = f"\n{NBSP * pad_left_line}{line}{NBSP * pad_right_line}"
 
-    # الأسطر الفارغة أو المخفية أسفل الخط
+    # الأسطر الإضافية تحت الخط
     extra_section = ""
     if extra_lines > 0:
         spacer = NBSP if invisible_space else ""
         extra_section = ("\n" + spacer) * extra_lines
 
-    # الإخراج النهائي
     return centered_line + underline_line + extra_section
 
 # ===============================
