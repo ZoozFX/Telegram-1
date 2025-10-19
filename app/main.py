@@ -1,7 +1,7 @@
 import os
 import logging
 import unicodedata
-from typing import List, Optional
+from typing import List
 
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -34,25 +34,19 @@ app = FastAPI()
 # -------------------------------
 # إعدادات قابلة للتعديل
 # -------------------------------
-SIDE_MARK = "◾"                          # الرمز الجانبي
-HEADER_EMOJI = "🔰"                      # الإيموجي الموجود داخل العنوان
-KEEP_EMOJI_IN_MEASUREMENT = False        # إذا False => الإيموجي لا يُحتسب عند حساب التوسيط (يبقى ظاهرًا)
-UNDERLINE_MODE = "auto"                  # "auto" أو عدد صحيح لعرض ثابت
-UNDERLINE_MIN = 20                       # الحد الأدنى لطول السطر في حالة "auto"
+SIDE_MARK = "◾"
+HEADER_EMOJI = "🔰"
+UNDERLINE_MODE = "auto"     # يمكن جعله عدد ثابت مثل 33 لمظهر موحّد
+UNDERLINE_MIN = 20
 NBSP = "\u00A0"
 
 # -------------------------------
-# مساعدة: إزالة الإيموجي (لمجرد القياس إن لزم)
+# مساعدة: إزالة الإيموجي لأغراض القياس
 # -------------------------------
 def remove_emoji(text: str) -> str:
-    """
-    حذف الأحرف التي على الأرجح إيموجي أو رموز واسعة من النص — لأغراض القياس فقط.
-    هذه دالة تقريبية لكنها فعّالة للتعامل مع تأثير الإيموجي على توسيط النص.
-    """
     out = []
     for ch in text:
         o = ord(ch)
-        # نطاقات شائعة للإيموجي والرموز
         if (
             0x1F300 <= o <= 0x1F5FF or
             0x1F600 <= o <= 0x1F64F or
@@ -67,10 +61,8 @@ def remove_emoji(text: str) -> str:
         out.append(ch)
     return "".join(out)
 
-
 # -------------------------------
-# مساعدة: قياس العرض المرئي للنص (تقريبي)
-# يدعم الإيموجي، الحروف واسعة العرض، وcombining marks
+# قياس العرض المرئي التقريبي للنص
 # -------------------------------
 def display_width(text: str) -> int:
     if not text:
@@ -78,7 +70,6 @@ def display_width(text: str) -> int:
     width = 0
     for ch in text:
         if unicodedata.combining(ch):
-            # علامات التجميع لا تضيف عرض إضافي مستقلة
             continue
         ea = unicodedata.east_asian_width(ch)
         if ea in ("F", "W"):
@@ -94,82 +85,58 @@ def display_width(text: str) -> int:
             or 0x2700 <= o <= 0x27BF
             or o == 0xFE0F
         ):
-            # الإيموجي نعتبره بعرض عرضين (تقريبًا)
             width += 2
             continue
         width += 1
     return width
 
 def max_button_width(labels: List[str]) -> int:
-    if not labels:
-        return 0
-    return max(display_width(lbl) for lbl in labels)
+    return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# بناء رأس HTML متمركز ومحاط بإطار احترافي
-# - نعرض عنوانًا بارزًا بخط عريض.
-# - نضع إطارًا علويًا وسفليًا (box style).
-# - نحسب الحشوات اليسرى واليمنى ليظهر العنوان مركزيًا بصريًا
-# - نتعامل مع إزالة الإيموجي للحساب إذا لزم
+# ✅ النسخة المحسّنة من build_header_html
 # -------------------------------
-def build_header_html(title: str,
-                      keyboard_labels: List[str],
-                      side_mark: str = SIDE_MARK,
-                      header_emoji: str = HEADER_EMOJI,
-                      keep_emoji_in_measurement: bool = KEEP_EMOJI_IN_MEASUREMENT,
-                      underline_mode = UNDERLINE_MODE,
-                      underline_min: int = UNDERLINE_MIN) -> str:
+def build_header_html(
+    title: str,
+    keyboard_labels: List[str],
+    side_mark: str = SIDE_MARK,
+    header_emoji: str = HEADER_EMOJI,
+    underline_mode = UNDERLINE_MODE,
+    underline_min: int = UNDERLINE_MIN,
+) -> str:
     """
-    يعيد سلسلة HTML: إطار علوي، سطر عنوان (<b>...</b>) مركز بصريًا، وخط سفلي من ━.
-    تحاول الدالة أن تمنح مظهرًا احترافيًا وموحدًا عبر جميع اللوحات.
+    إصدار بصري احترافي — بدون الخطين الجانبيين ┃┃
+    يعرض العنوان بشكل متناسق في Telegram مع توسيط بصري فعلي.
     """
-    # النص الفعّال الظاهر للمستخدم (يتضمن الرموز)
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
 
-    # نسخة مخصصة للحساب (قد نزيل الإيموجي من القياس لتفادي الإزاحة)
-    if keep_emoji_in_measurement:
-        title_for_measure = full_title
-    else:
-        title_for_measure = remove_emoji(full_title)
-
+    # حساب الطول الفعلي مع إزالة الإيموجي من القياس
+    title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
-    # نهدف إلى أن يكون الحد الأدنى مساويًا لأعرض زر أو UNDERLINE_MIN
-    target_width = max(10, max_button_width(keyboard_labels))
-
-    # تحديد عرض السطر/الخط الأساسي بحسب الوضع
+    # تحديد عرض السطر حسب الإعداد
+    target_width = max(max_button_width(keyboard_labels), underline_min)
     if isinstance(underline_mode, int):
         underline_width = max(underline_mode, underline_min)
     else:
-        # "auto": نأخذ أكبر قيمة بين عنوان المستخدم أو أكبر زر أو الحد الأدنى
         underline_width = max(title_width, target_width, underline_min)
 
-    # حساب الحشوات اليسرى واليمنى (نوزع الباقي بالتساوي)
-    space_needed = max(0, underline_width - title_width)
-    pad_left = space_needed // 2
-    pad_right = space_needed - pad_left
-
-    left_padding = NBSP * pad_left
-    right_padding = NBSP * pad_right
-
-    # بناء الإطار العلوي والسفلي
+    # توليد الإطار العلوي والسفلي
     top_border = "┏" + "━" * underline_width + "┓"
     bottom_border = "┗" + "━" * underline_width + "┛"
-    # سطر العنوان (محاط بمساحة داخلية) — نضع العلامات الجانبية والايقونة داخل <b>
-    # نستخدم NBSP للحشوات لكي نضمن توافق العرض في Telegram
-    title_line = f"┃{left_padding}<b>{full_title}</b>{right_padding}┃"
 
-    # بالإضافة لسطر الـ underline (خيار قد يكون مفيداً كفاصل أيضاً)
-    underline = "━" * underline_width
+    # حشوات التوسيط
+    space_needed = max(0, underline_width - title_width)
+    pad_left = NBSP * (space_needed // 2)
+    pad_right = NBSP * (space_needed - space_needed // 2)
 
-    # نجمع المكونات مع فصل واضح؛ نستخدم parse_mode="HTML" عند الإرسال
-    header_html = f"{top_border}\n{title_line}\n{bottom_border}\n"
-    # سطر توضيحي (مختصر) تحت الصندوق — يمكن إزالته أو تخصيصه لاحقًا
-    # نتركه فارغًا هنا ليتحكم المستدعي فيما يضيف من نص بعد العرض
-    return header_html
+    # سطر العنوان — بدون الجدارين الجانبيين
+    centered_line = f"{pad_left}<b>{full_title}</b>{pad_right}"
+
+    return f"{top_border}\n{centered_line}\n{bottom_border}"
 
 # ===============================
-# 1. /start → واجهة اختيار اللغة
+# 1. /start → اختيار اللغة
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -179,10 +146,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     labels = ["🇪🇬 العربية", "🇺🇸 English"]
-
-    # طلبك: العنوان يجب أن يكون "◾ 🔰 اللغة | Language ◾"
     header = build_header_html("اللغة | Language", labels)
 
     if update.callback_query:
@@ -197,7 +161,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 # ===============================
-# 2. عرض الأقسام الرئيسية بعد اختيار اللغة
+# 2. الأقسام الرئيسية
 # ===============================
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
@@ -225,9 +189,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         header = build_header_html("Main Sections", labels)
         back_button = ("🔙 Back to language", "back_language")
 
-    keyboard = []
-    for name, callback in sections:
-        keyboard.append([InlineKeyboardButton(name, callback_data=callback)])
+    keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -254,11 +216,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
-    # زر العودة للغة
     if query.data == "back_language":
         await start(update, context)
         return
-
     if query.data == "back_main":
         await show_main_sections(update, context, lang)
         return
