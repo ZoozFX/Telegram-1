@@ -103,20 +103,23 @@ def build_header_html(
     keyboard_labels: List[str],
     side_mark: str = "◾",
     header_emoji: str = "💥💥",
-    underline_mode: int | str = UNDERLINE_MODE,
-    underline_min: int = UNDERLINE_MIN,
+    underline_mode: int | str = 25,
+    underline_min: int = 17,
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
     align: str = "center",
     manual_shift: int = 0,
     underline_char: str = "━",
     underline_enabled: bool = True,
-    underline_length: int = 25
+    underline_length: int = 25,
+    extra_lines: int = 1,           # 👈 عدد الأسطر الفارغة أو المخفية أسفل الخط
+    invisible_space: bool = True    # 👈 إذا True نستخدم NBSP بدل فراغ عادي
 ) -> str:
     """
     نسخة محسّنة:
     - تضيف خطًا سفليًا ثابت الطول وموسّطًا.
     - تعالج مشكلة محاذاة النصوص العربية (RTL misalignment).
+    - تضيف أسطر فارغة أو مخفية أسفل الخط للتحكم في التباعد.
     """
 
     import re
@@ -126,23 +129,23 @@ def build_header_html(
     RLE = "\u202B"   # Right-to-Left Embedding
     PDF = "\u202C"   # Pop Directional Formatting
 
-    # نكشف ما إذا كان العنوان بالعربية
+    # تحديد ما إذا كان العنوان بالعربية
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # نلف النص العربي بعلامات اتجاه صريحة
+    # نلف النص العربي بعلامات اتجاه واضحة
     if is_arabic:
         full_title = f"{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
         full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
-    # حساب العرض التقريبي بدون الإيموجي
+    # حساب العرض التقريبي
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    # تطبيق المحاذاة
+    # محاذاة
     if align.lower() == "left":
         pad_left = 0
         pad_right = max(0, target_width - title_width)
@@ -150,7 +153,7 @@ def build_header_html(
         pad_right = 0
         pad_left = max(0, target_width - title_width)
 
-    # تطبيق الإزاحة اليدوية
+    # الإزاحة اليدوية
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
@@ -167,7 +170,14 @@ def build_header_html(
         pad_right_line = diff - pad_left_line
         underline_line = f"\n{NBSP * pad_left_line}{line}{NBSP * pad_right_line}"
 
-    return centered_line + underline_line
+    # الأسطر الفارغة أو المخفية أسفل الخط
+    extra_section = ""
+    if extra_lines > 0:
+        spacer = NBSP if invisible_space else ""
+        extra_section = ("\n" + spacer) * extra_lines
+
+    # الإخراج النهائي
+    return centered_line + underline_line + extra_section
 
 # ===============================
 # 1. /start → اختيار اللغة
