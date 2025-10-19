@@ -1,7 +1,7 @@
 import os
 import logging
 import unicodedata
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -32,6 +32,42 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # -------------------------------
+# إعدادات قابلة للتعديل
+# -------------------------------
+SIDE_MARK = "◾"                          # الرمز الجانبي
+HEADER_EMOJI = "🔰"                      # الإيموجي الموجود داخل العنوان
+KEEP_EMOJI_IN_MEASUREMENT = False        # إذا False => الإيموجي لا يُحتسب عند حساب التوسيط (يبقى ظاهرًا)
+UNDERLINE_MODE = "auto"                  # "auto" أو عدد صحيح لعرض ثابت
+UNDERLINE_MIN = 20                       # الحد الأدنى لطول السطر في حالة "auto"
+NBSP = "\u00A0"
+
+# -------------------------------
+# مساعدة: إزالة الإيموجي (لمجرد القياس إن لزم)
+# -------------------------------
+def remove_emoji(text: str) -> str:
+    """
+    حذف الأحرف التي على الأرجح إيموجي أو رموز واسعة من النص — لأغراض القياس فقط.
+    هذه دالة تقريبية لكنها فعّالة للتعامل مع تأثير الإيموجي على توسيط النص.
+    """
+    out = []
+    for ch in text:
+        o = ord(ch)
+        # نطاقات شائعة للإيموجي والرموز
+        if (
+            0x1F300 <= o <= 0x1F5FF or
+            0x1F600 <= o <= 0x1F64F or
+            0x1F680 <= o <= 0x1F6FF or
+            0x1F900 <= o <= 0x1F9FF or
+            0x2600 <= o <= 0x26FF or
+            0x2700 <= o <= 0x27BF or
+            0x1FA70 <= o <= 0x1FAFF or
+            o == 0xFE0F
+        ):
+            continue
+        out.append(ch)
+    return "".join(out)
+
+# -------------------------------
 # مساعدة: قياس العرض المرئي للنص (تقريبي)
 # يدعم الإيموجي، الحروف واسعة العرض، وcombining marks
 # -------------------------------
@@ -40,7 +76,6 @@ def display_width(text: str) -> int:
         return 0
     width = 0
     for ch in text:
-        # combining marks لا تضيف عرضًا مستقلاً
         if unicodedata.combining(ch):
             continue
         ea = unicodedata.east_asian_width(ch)
@@ -48,7 +83,6 @@ def display_width(text: str) -> int:
             width += 2
             continue
         o = ord(ch)
-        # نطاقات إيموجي شائعة نعاملها بعرض 2
         if (
             0x1F300 <= o <= 0x1F5FF
             or 0x1F600 <= o <= 0x1F64F
@@ -63,45 +97,52 @@ def display_width(text: str) -> int:
         width += 1
     return width
 
-# -------------------------------
-# بناء رأس HTML متمركز تقريبًا بالنسبة لعرض أزرار الكيبورد
-# سيُنتج HTML مع <b> للعريض، وسطر تحتي من ━ لعمل underline بصري.
-# نحاول توسيط العنوان بواسطة NBSP (\u00A0) من اليسار.
-# -------------------------------
-NBSP = "\u00A0"
-
 def max_button_width(labels: List[str]) -> int:
-    """أرجع أقصى عرض مرئي بين مجموعة تسميات الأزرار (بالأعمدة)."""
     if not labels:
         return 0
     return max(display_width(lbl) for lbl in labels)
 
-def build_header_html(title: str, keyboard_labels: List[str], side_mark: str = "◾") -> str:
+# -------------------------------
+# بناء رأس HTML متمركز تقريبًا بالنسبة لعرض أزرار الكيبورد
+# تقنيات:
+# - نكوّن full_title المرئي (يشمل SIDE_MARK وHEADER_EMOJI)
+# - لكن عند الحساب للتوسيط نستخدم نسخة خالية من الإيموجي إذا KEEP_EMOJI_IN_MEASUREMENT=False
+# - نسمح بوضع UNDERLINE_MODE كرقم ثابت أو "auto"
+# -------------------------------
+def build_header_html(title: str, keyboard_labels: List[str], side_mark: str = SIDE_MARK,
+                      header_emoji: str = HEADER_EMOJI,
+                      keep_emoji_in_measurement: bool = KEEP_EMOJI_IN_MEASUREMENT,
+                      underline_mode = UNDERLINE_MODE,
+                      underline_min: int = UNDERLINE_MIN) -> str:
     """
-    نشكّل عنوانًا HTML بالهيئة: ◾ 🔰 Title ◾
-    ونضيف سطرًا تحتانيًا من ━ بطول مناسب، ونحاول التوسيط بصريًا مقابل أوسع زر.
+    يعيد سلسلة HTML: عنوان (<b>...</b>) ثم سطر تحتي من ━
+    يحاول توسيط العنوان بصريًا مقابل أعرض زر في لوحة الأزرار.
     """
-    # شكل العنوان داخل البلوك (نحسب عرضه المرئي)
-    full_title = f"{side_mark} 🔰 {title} {side_mark}"
-    title_width = display_width(full_title)
+    # العنوان الفعلي الظاهر
+    full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
+    # نسخة للحساب (قد نزيل الإيموجي من القياس لتفادي الإزاحة)
+    if keep_emoji_in_measurement:
+        title_for_measure = full_title
+    else:
+        title_for_measure = remove_emoji(full_title)
 
-    # نحسب أقصى عرض بين أزرار الكيبورد — هذا هدف التوسيط
+    title_width = display_width(title_for_measure)
     target_width = max(10, max_button_width(keyboard_labels))
 
-    # نريد أن يكون السطر السفلي عريضًا بما يكفي: على الأقل عرض العنوان، أو عرض الزر الأوسع
-    underline_width = max(title_width, target_width)
+    # حسم طول underline
+    if isinstance(underline_mode, int):
+        underline_width = max(underline_mode, underline_min)
+    else:
+        # وضع "auto"
+        underline_width = max(title_width, target_width, underline_min)
 
-    # نحسب عدد NBSP المطلوب لإزاحة العنوان لليسار بهدف التوسيط فوق underline_width
-    # NB: NBSP تعتبر عرضًا واحدًا، لذلك نحسب الفرق بالعمدان المرئية ونحوّله لعدد NBSP
+    # حساب حشوة NBSP لليسر عند الحاجة (نستخدم النسخة المحسوبة بدون إيموجي عادة)
     space_needed = max(0, underline_width - title_width)
     pad_left = space_needed // 2
-
     left_padding = NBSP * pad_left
-    # نبني سطر التحتي من ━ (هذا بصريًا مثل underline)
+
     underline = "━" * underline_width
 
-    # عنوان عريض (HTML)
-    # نرجع عنوان مضافًا إليه padding يساري من NBSP حتى يبدو مُوسَطًا
     header_html = f"{left_padding}<b>{full_title}</b>\n{underline}"
     return header_html
 
@@ -117,9 +158,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # نجمع تسميات الأزرار لقياس العرض
     labels = ["🇪🇬 العربية", "🇺🇸 English"]
-    header = build_header_html("الأقسام الرئيسية", labels)
+
+    # طلبك: العنوان يجب أن يكون "◾ 🔰 اللغة | Language ◾"
+    header = build_header_html("اللغة | Language", labels)
 
     if update.callback_query:
         query = update.callback_query
@@ -224,7 +266,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        labels = options + (["🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
+        labels = options + ([ "🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
         box = build_header_html(title, labels)
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
@@ -238,7 +280,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    # رسالة اختيار خدمة عادية
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     try:
