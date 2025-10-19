@@ -109,37 +109,40 @@ def build_header_html(
     width_padding: int = 1,
     align: str = "center",
     manual_shift: int = 0,
-    underline_char: str = "━",     # الحرف المستخدم كخط سفلي
-    underline_enabled: bool = True, # لتفعيل أو تعطيل الخط السفلي
-    underline_length: int = 25      # 👈 طول الخط السفلي الثابت
+    underline_char: str = "━",
+    underline_enabled: bool = True,
+    underline_length: int = 25
 ) -> str:
     """
     نسخة محسّنة:
-    - تضيف خطًا سفليًا ثابت الطول وموسّطًا أسفل العنوان.
-    - تتعامل مع العربية والإنجليزية وتوسيط دقيق بالنسب إلى الأزرار.
+    - تضيف خطًا سفليًا ثابت الطول وموسّطًا.
+    - تعالج مشكلة محاذاة النصوص العربية (RTL misalignment).
     """
 
     import re
     NBSP = "\u00A0"
-    RLM = "\u200F"
-    LRM = "\u200E"
+    RLM = "\u200F"   # Right-to-Left Mark
+    LRM = "\u200E"   # Left-to-Right Mark
+    RLE = "\u202B"   # Right-to-Left Embedding
+    PDF = "\u202C"   # Pop Directional Formatting
 
-    full_title = f"{header_emoji} {title} {header_emoji}"
-
-    # كشف اللغة العربية لتصحيح الاتجاه
+    # نكشف ما إذا كان العنوان بالعربية
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
-    if is_arabic:
-        full_title = f"{RLM}{full_title}{RLM}"
-    else:
-        full_title = f"{LRM}{full_title}{LRM}"
 
-    # حساب العرض النسبي
+    # نلف النص العربي بعلامات اتجاه صريحة
+    if is_arabic:
+        full_title = f"{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+    else:
+        full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
+
+    # حساب العرض التقريبي بدون الإيموجي
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
+    # تطبيق المحاذاة
     if align.lower() == "left":
         pad_left = 0
         pad_right = max(0, target_width - title_width)
@@ -147,7 +150,7 @@ def build_header_html(
         pad_right = 0
         pad_left = max(0, target_width - title_width)
 
-    # تطبيق الإزاحة اليدوية إن وجدت
+    # تطبيق الإزاحة اليدوية
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
@@ -155,11 +158,10 @@ def build_header_html(
     # سطر العنوان
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    # ✅ سطر الخط السفلي الثابت
+    # سطر الخط السفلي الثابت
     underline_line = ""
     if underline_enabled:
         line = underline_char * underline_length
-        # نحسب الفرق بين طول العنوان والخط لتوسيطه
         diff = max(0, target_width - underline_length)
         pad_left_line = diff // 2
         pad_right_line = diff - pad_left_line
