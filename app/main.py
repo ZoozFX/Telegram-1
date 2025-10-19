@@ -8,7 +8,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
-from telegram.constants import ParseMode
 from app.db import Base, engine
 
 # -------------------------------
@@ -32,24 +31,59 @@ app = FastAPI()
 # -------------------------------
 # إعدادات واجهة / صندوق العرض
 # -------------------------------
-# عدّل هذا الرقم لتصغير/تكبير طول الصندوق (العرض)
-BOX_WIDTH = 33  # <-- أصغر طول للصندوق كما طلبت
+# يمكن تغيير الحد الأقصى/الأدنى للصندوق حسب الرغبة
+BOX_MIN_WIDTH = 10
+BOX_MAX_WIDTH = 45
+BOX_PADDING = 2  # مسافة داخلية (مسافات حول النص)
 
-def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
+def contains_arabic(s: str) -> bool:
+    """يرجع True إن وجد حرف عربي في النص."""
+    for ch in s:
+        # نطاقات الحروف العربية الأساسية (يمكن توسيعها إذا أردت)
+        if '\u0600' <= ch <= '\u06FF' or '\u0750' <= ch <= '\u077F' or '\u08A0' <= ch <= '\u08FF':
+            return True
+    return False
+
+def build_dynamic_box(text: str, min_width: int = BOX_MIN_WIDTH, max_width: int = BOX_MAX_WIDTH, padding: int = BOX_PADDING) -> str:
     """
-    ينشئ صندوقًا بسيطًا بعرض ثابت ومحاذاة في المنتصف بدون استخدام <pre>
-    يقص النص الطويل ويضعه في منتصف السطر.
+    يبني صندوقاً يتكيّف طولياً مع النص:
+    - يحسب العرض بناءً على طول النص + padding.
+    - يحد العرض بقيم min/max.
+    - إذا كان النص عربيًا، يصنفه كـ RTL ويقوم بمحاذاة يمين داخل الصندوق.
+    - إرجاع سلسلة نصية تمثل الصندوق مع الحواف.
     """
     line = text.strip()
-    if len(line) > width:
-        line = line[: width - 3] + "..."
+    # حساب العرض المطلوب بناءً على عدد الأحرف + padding مزدوج (يمين + يسار)
+    content_len = len(line)
+    required_width = content_len + (padding * 2)
 
+    # قصر/تقييد العرض ضمن الحدود
+    width = max(min_width, min(required_width, max_width))
+
+    # لو النص أطول من العرض الأقصى نقتطع ونضيف "..."
+    if content_len > (width - (padding * 2)):
+        # نقتطع بما يكفي لإضافة ثلاث نقاط
+        visible_len = width - (padding * 2) - 3
+        if visible_len < 0:
+            visible_len = 0
+        line = line[:visible_len] + "..."
+        content_len = len(line)
+
+    # بناء الحواف
     border = "═" * width
     top = f"╔{border}╗"
     bottom = f"╚{border}╝"
 
-    pad_left = (width - len(line)) // 2
-    pad_right = width - len(line) - pad_left
+    # تحديد المحاذاة: إذا وجدنا حروف عربية - محاذاة يمين، وإلا نحاذي بشكل مركزي
+    if contains_arabic(line) and not any(ch.isascii() for ch in line):
+        # محاذاة يمين بسيطة: نضع مسافة padding على اليسار ومساحة متبقية على اليمين
+        pad_left = padding
+        pad_right = width - content_len - pad_left
+    else:
+        # محاذاة مركزية (افتراضية)
+        pad_left = (width - content_len) // 2
+        pad_right = width - content_len - pad_left
+
     middle = f"{' ' * pad_left}{line}{' ' * pad_right}"
 
     return f"{top}\n{middle}\n{bottom}"
@@ -71,8 +105,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    ar_box = build_centered_box("الأقسام الرئيسية")
-    en_box = build_centered_box("Main Sections")
+    ar_box = build_dynamic_box("الأقسام الرئيسية")
+    en_box = build_dynamic_box("Main Sections")
 
     msg = f"{ar_box}\n\n{en_box}"
 
@@ -94,7 +128,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     """
     يعرض الأقسام الرئيسية بعد اختيار اللغة.
-    الآن يحصل على context لتجنّب الاستثناءات عند المحاولة بإرسال رسالة جديدة.
+    يأخذ update و context و lang
     """
     if not update.callback_query:
         return
@@ -108,7 +142,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        box = build_centered_box("الأقسام الرئيسية")
+        box = build_dynamic_box("الأقسام الرئيسية")
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -116,7 +150,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        box = build_centered_box("Main Sections")
+        box = build_dynamic_box("Main Sections")
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = []
@@ -138,7 +172,6 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = "ar" if query.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
-    # الآن نمرّر context أيضاً
     await show_main_sections(update, context, lang)
 
 # ===============================
@@ -155,7 +188,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "back_main":
-        # نمرّر context أيضاً هنا
         await show_main_sections(update, context, lang)
         return
 
@@ -184,7 +216,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        box = build_centered_box(title)
+        box = build_dynamic_box(title)
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
