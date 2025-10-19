@@ -101,58 +101,50 @@ def build_header_html(
     title: str,
     keyboard_labels: List[str],
     side_mark: str = "◾",
-    header_emoji: str = "🔰",
+    header_emoji: str = "💥💥💥",
     underline_mode: int | str = UNDERLINE_MODE,
     underline_min: int = UNDERLINE_MIN,
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
-    align: str = "center",      # 👈 جعل الوضع الافتراضي توسيط
-    manual_shift: int = 40
+    align: str = "center",  # توسيط افتراضي
+    manual_shift: int = 0
 ) -> str:
+    """
+    نسخة مبسطة: بدون خطوط علوية أو سفلية،
+    فقط الإيموجي والنص بشكل منسق ومحاذى حسب الإعداد.
+    """
+
     NBSP = "\u00A0"
 
-    # النص الكامل داخل الإطار
-    full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
+    # النص الكامل الذي سيُعرض
+    full_title = f"{header_emoji} {title} {header_emoji}"
 
-    # إزالة الإيموجي للقياس
-    title_for_measure = remove_emoji(full_title)
-    title_width = display_width(title_for_measure)
-
-    # حساب عرض الإطار
+    # قياس عرض النص
+    title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
-    if isinstance(underline_mode, int):
-        underline_width = max(underline_mode, underline_min)
-    else:
-        underline_width = max(title_width + width_padding, target_width, underline_min)
-
-    # رسم الإطار العلوي والسفلي
-    top_border = "┏" + "━" * underline_width + "┓"
-    bottom_border = "┗" + "━" * underline_width + "┛"
-
-    # حساب الفراغات حول النص لتوسيطه
-    space_needed = max(0, underline_width - title_width)
+    space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    # لا يوجد تحيّز لأي اتجاه (حتى لو كان النص عربي)
-    # فقط توسيط بصري متوازن في كل الحالات
+    # تطبيق نوع المحاذاة
     if align.lower() == "center":
         pass
     elif align.lower() == "left":
-        pad_left = 1
-        pad_right = max(0, underline_width - title_width - pad_left)
+        pad_left = 0
+        pad_right = max(0, target_width - title_width)
     elif align.lower() == "right":
-        pad_right = 1
-        pad_left = max(0, underline_width - title_width - pad_right)
+        pad_right = 0
+        pad_left = max(0, target_width - title_width)
 
-    # تطبيق أي إزاحة يدوية إذا طلب المستخدم
+    # تطبيق الإزاحة اليدوية إن وجدت
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    return f"{top_border}\n{centered_line}\n{bottom_border}"
+    return centered_line
+
 
 # ===============================
 # 1. /start → اختيار اللغة
