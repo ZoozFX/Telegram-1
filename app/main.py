@@ -101,19 +101,21 @@ def build_header_html(
     keyboard_labels: List[str],
     side_mark: str = SIDE_MARK,
     header_emoji: str = HEADER_EMOJI,
-    underline_mode = "auto",     # 🔸 الوضع الافتراضي الآن "تلقائي"
+    underline_mode="auto",
     underline_min: int = UNDERLINE_MIN,
-    arabic_shift: int = 30,
-    width_padding: int = 0.05       # 🔹 تحكم في طول الخط العرضي (كلما زاد الرقم زاد الطول)
+    arabic_shift: int = 0,      # 🔹 ألغينا الإزاحة لأنها كانت تسبب طول كبير
+    width_padding: int = 1      # 🔹 تقليل الحشو لطول أقصر
 ) -> str:
     """
-    نسخة محسّنة بصريًا لإنشاء عنوان متوازن وقصير.
+    دالة منسقة لإنشاء عنوان بإطار علوي وسفلي متوازن للطول،
+    وتتعامل تلقائيًا مع النصوص العربية والرموز التعبيرية.
     """
     NBSP = "\u00A0"
 
+    # شكل العنوان الكامل
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
 
-    # اكتشاف العربية
+    # 🔸 لا نضيف مسافات عربية إلا إذا كان النص يحتاج تعديل بسيط للتوسيط
     has_arabic = any("\u0600" <= ch <= "\u06FF" for ch in title)
     if has_arabic and arabic_shift > 0:
         full_title = NBSP * arabic_shift + full_title
@@ -122,7 +124,7 @@ def build_header_html(
     title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
-    # 🔸 حساب عرض الإطار بناءً على النص فقط (قصير وأنيق)
+    # 🔹 تحديد عرض الإطار
     if underline_mode == "auto":
         underline_width = max(title_width + width_padding, underline_min)
     elif isinstance(underline_mode, int):
@@ -130,7 +132,7 @@ def build_header_html(
     else:
         underline_width = max(title_width, underline_min)
 
-    # إنشاء الإطار
+    # رسم الإطار
     top_border = "┏" + "━" * underline_width + "┓"
     bottom_border = "┗" + "━" * underline_width + "┛"
 
@@ -141,6 +143,7 @@ def build_header_html(
     centered_line = f"{pad_left}<b>{full_title}</b>{pad_right}"
 
     return f"{top_border}\n{centered_line}\n{bottom_border}"
+
 
 
 
