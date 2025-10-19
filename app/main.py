@@ -1,7 +1,7 @@
 import os
 import logging
 import unicodedata
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -32,62 +32,22 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # -------------------------------
-# إعدادات قابلة للتعديل
+# إعدادات قابلة للتعديل - محسنة
 # -------------------------------
-SIDE_MARK = "◾"                  # الرمز الجانبي الذي يبقى
-NBSP = "\u00A0"                  # مسافة غير قابلة للكسر لاستخدامها كـ padding
-UNDERLINE_CHAR = "━"             # حرف السطر التحتي
-UNDERLINE_MIN = 10               # الحد الأدنى لطول السطر (أيًا كان auto)
-# -------------------------------
-# دوال مساعدة لقياس "عرض" النص تقريبيًا (display width)
-# تدعم: الحروف ذات العرض الواسع (East Asian), الإيموجي، وcombining marks
-# هذا قياس تقريبي بالأعمدة المرئية ويستخدم للوساطة وإنتاج padding مناسب.
-# -------------------------------
-def display_width(text: str) -> int:
-    """
-    تقريب عرض النص بالـ 'عرض أعمدة' (columns).
-    يعامل بعض الإيموجي والرموز كعرض 2، ويتجاهل combining marks.
-    """
-    if not text:
-        return 0
-    width = 0
-    for ch in text:
-        # تجاهل علامات التجميع عند حساب العرض (لا تضيف عرضًا مستقلاً)
-        if unicodedata.combining(ch):
-            continue
-        ea = unicodedata.east_asian_width(ch)
-        if ea in ("F", "W"):  # Fullwidth, Wide => عرض 2
-            width += 2
-            continue
-        o = ord(ch)
-        # نطاقات إيموجي ورموز شائعة — نعاملها كعرض 2
-        if (
-            0x1F300 <= o <= 0x1F5FF or
-            0x1F600 <= o <= 0x1F64F or
-            0x1F680 <= o <= 0x1F6FF or
-            0x1F900 <= o <= 0x1F9FF or
-            0x2600 <= o <= 0x26FF or
-            0x2700 <= o <= 0x27BF or
-            0x1FA70 <= o <= 0x1FAFF or
-            o == 0xFE0F
-        ):
-            width += 2
-            continue
-        # افتراضيًا عرض 1
-        width += 1
-    return width
-
-def max_button_width(labels: List[str]) -> int:
-    """أرجع أقصى عرض (تقريبي) بين تسميات الأزرار."""
-    if not labels:
-        return 0
-    return max(display_width(lbl) for lbl in labels)
+HEADER_EMOJI = "🔰"                      # الإيموجي الموجود داخل العنوان
+KEEP_EMOJI_IN_MEASUREMENT = False        # إذا False => الإيموجي لا يُحتسب عند حساب التوسيط
+HEADER_STYLE = "modern"                  # "modern" أو "classic" أو "minimal"
+HEADER_DECORATION = "✦"                  # رمز الزخرفة
+HEADER_LINE_CHAR = "─"                   # رمز الخط
+HEADER_CORNER = "┌┐"                     # زوايا الإطار
 
 # -------------------------------
-# دالة لإزالة الإيموجي من نص (لتظهر العناوين بدون إيموجي)
-# هذه الدالة تقريبية لكنها تغطي نطاقات الإيموجي/الرموز الشائعة.
+# مساعدة: إزالة الإيموجي (لمجرد القياس إن لزم)
 # -------------------------------
 def remove_emoji(text: str) -> str:
+    """
+    حذف الأحرف التي على الأرجح إيموجي أو رموز واسعة من النص — لأغراض القياس فقط.
+    """
     out = []
     for ch in text:
         o = ord(ch)
@@ -101,52 +61,101 @@ def remove_emoji(text: str) -> str:
             0x1FA70 <= o <= 0x1FAFF or
             o == 0xFE0F
         ):
-            # تجاهل الحرف (يختفي من العنوان)
             continue
         out.append(ch)
     return "".join(out)
 
 # -------------------------------
-# بناء هيدر HTML متمركز تقريبًا بدون إيموجي في العنوان
-# يُرجع نص HTML (باستخدام <b> للعريض) يحتوي سطرًا علويًا واحدًا (العنوان) وسطر تحتي من ━
-# التقنيات:
-# - نزيل الإيموجي من العنوان المعروض
-# - نحسب العرض المرئي للعنوان بعد إزالة الإيموجي
-# - نأخذ بعين الاعتبار عرض أعرض زر في الـ keyboard لضبط طول السطر وتحويل padding
-# - نستخدم NBSP لعمل حشوة يسارية للحسّ بالتوسيط
+# مساعدة: قياس العرض المرئي للنص (تقريبي)
 # -------------------------------
-def build_centered_header(title: str, keyboard_labels: List[str]) -> str:
+def display_width(text: str) -> int:
+    if not text:
+        return 0
+    width = 0
+    for ch in text:
+        if unicodedata.combining(ch):
+            continue
+        ea = unicodedata.east_asian_width(ch)
+        if ea in ("F", "W"):
+            width += 2
+            continue
+        o = ord(ch)
+        if (
+            0x1F300 <= o <= 0x1F5FF
+            or 0x1F600 <= o <= 0x1F64F
+            or 0x1F680 <= o <= 0x1F6FF
+            or 0x1F900 <= o <= 0x1F9FF
+            or 0x2600 <= o <= 0x26FF
+            or 0x2700 <= o <= 0x27BF
+            or o == 0xFE0F
+        ):
+            width += 2
+            continue
+        width += 1
+    return width
+
+def max_button_width(labels: List[str]) -> int:
+    if not labels:
+        return 0
+    return max(display_width(lbl) for lbl in labels)
+
+# -------------------------------
+# بناء رأس HTML محسن ومهني
+# -------------------------------
+def build_header_html(title: str, keyboard_labels: List[str], 
+                      header_emoji: str = HEADER_EMOJI,
+                      keep_emoji_in_measurement: bool = KEEP_EMOJI_IN_MEASUREMENT,
+                      style: str = HEADER_STYLE,
+                      decoration: str = HEADER_DECORATION,
+                      line_char: str = HEADER_LINE_CHAR) -> str:
     """
-    title: نص العنوان (قد يحتوي إيموجي — سيتم إزالته قبل العرض)
-    keyboard_labels: تسميات الأزرار لقياس العرض المستهدف
+    يعيد سلسلة HTML بعنوان محسن ومهني بأنماط مختلفة.
     """
-    # 1) قم بإزالة الإيموجي من العنوان (المطلوب: الإيموجي لا يظهر في العناوين)
-    title_no_emoji = remove_emoji(title).strip()
+    # العنوان الفعلي الظاهر
+    full_title = f"{header_emoji} {title}"
+    
+    # نسخة للحساب (قد نزيل الإيموجي من القياس)
+    if keep_emoji_in_measurement:
+        title_for_measure = full_title
+    else:
+        title_for_measure = remove_emoji(full_title)
 
-    # 2) كون النص النهائي الظاهر داخل الـ <b>
-    visible_title = f"{SIDE_MARK} {title_no_emoji} {SIDE_MARK}"
-
-    # 3) قياس العرض المرئي للعنوان الظاهر (بعد إزالة الإيموجي)
-    title_width = display_width(visible_title)
-
-    # 4) هدف التوسيط: انتقل إلى أقصى عرض بين العنوان وأوسع زر
-    target_width = max(UNDERLINE_MIN, max_button_width(keyboard_labels), title_width)
-
-    # 5) طول السطر التحتي ديناميكي: نستخدم target_width
-    underline_width = target_width
-
-    # 6) حساب padding يساري (NBSP) لإعطاء إحساس بالتوسيط: (underline - title_width) // 2
-    left_pad_cols = max(0, (underline_width - title_width) // 2)
-    left_padding = NBSP * left_pad_cols
-
-    # 7) بناء السلسلة النهائية (HTML bold + underline)
-    underline = UNDERLINE_CHAR * underline_width
-    header_html = f"{left_padding}<b>{visible_title}</b>\n{underline}"
+    title_width = display_width(title_for_measure)
+    target_width = max(15, max_button_width(keyboard_labels))
+    
+    # حساب العرض النهائي مع هامش إضافي
+    final_width = max(title_width + 4, target_width + 2)
+    
+    if style == "modern":
+        # النمط الحديث مع إطار علوي
+        top_line = f"┌{line_char * (final_width - 2)}┐"
+        title_line = f"│ {full_title}{' ' * (final_width - title_width - 3)}│"
+        bottom_line = f"└{line_char * (final_width - 2)}┘"
+        header_html = f"<b>{top_line}\n{title_line}\n{bottom_line}</b>"
+    
+    elif style == "minimal":
+        # النمط البسيط والأنيق
+        padding = (final_width - title_width) // 2
+        left_pad = " " * max(0, padding - 1)
+        right_pad = " " * max(0, final_width - title_width - padding - 1)
+        header_html = f"<b>{decoration * 2}{left_pad}{full_title}{right_pad}{decoration * 2}</b>"
+    
+    else:  # classic (النمط الكلاسيكي المحسن)
+        # نموسقة كلاسيكية مع خطوط وزخارف
+        line_length = max(title_width + 6, final_width)
+        top_decoration = f"{decoration * 3}"
+        bottom_decoration = f"{line_char * line_length}"
+        
+        # توسيط النص
+        space_needed = max(0, line_length - title_width - 6)
+        left_pad = " " * (space_needed // 2)
+        
+        header_html = f"<b>{top_decoration}{left_pad} {full_title} {left_pad}{top_decoration if space_needed % 2 == 0 else top_decoration[:-1]}</b>\n{bottom_decoration}"
 
     return header_html
 
 # ===============================
-# Handlers: start, show_main_sections, set_language, menu_handler
+# 1. /start → واجهة اختيار اللغة
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -157,10 +166,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # مطلوب أن يظهر: "◾ اللغة | Language ◾" (بدون إيموجي)
-    title = "اللغة | Language"
     labels = ["🇪🇬 العربية", "🇺🇸 English"]
-    header = build_centered_header(title, labels)
+
+    header = build_header_html("اللغة | Language", labels)
 
     if update.callback_query:
         query = update.callback_query
@@ -173,6 +181,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message:
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
+# ===============================
+# 2. عرض الأقسام الرئيسية بعد اختيار اللغة
+# ===============================
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
         return
@@ -182,21 +193,21 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     if lang == "ar":
         sections = [
-            ("📊 نسخ الصفقات", "forex_main"),
-            ("💬 قناة التوصيات", "signals_channel"),
-            ("📰 الأخبار الاقتصادية", "economic_news"),
+            ("💹 تداول الفوركس", "forex_main"),
+            ("💻 خدمات البرمجة", "dev_main"),
+            ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
         labels = [name for name, _ in sections]
-        header = build_centered_header("الأقسام الرئيسية", labels)
+        header = build_header_html("الأقسام الرئيسية", labels)
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
-            ("📊 Copy Trading", "forex_main"),
-            ("💬 Signals Channel", "signals_channel"),
-            ("📰 Economic News", "economic_news"),
+            ("💹 Forex Trading", "forex_main"),
+            ("💻 Programming Services", "dev_main"),
+            ("🤝 YesFX Partnership", "agency_main"),
         ]
         labels = [name for name, _ in sections]
-        header = build_centered_header("Main Sections", labels)
+        header = build_header_html("Main Sections", labels)
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = []
@@ -210,6 +221,9 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     except Exception:
         await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
+# ===============================
+# 3. اختيار اللغة
+# =========================------
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -217,6 +231,9 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["lang"] = lang
     await show_main_sections(update, context, lang)
 
+# ===============================
+# 4. الأقسام الفرعية + الرجوع
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -256,9 +273,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        # نحتفظ بالإيموجي في الأزرار ولكن نحذفها من العنوان داخل build_centered_header
-        labels = options + (["🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
-        header = build_centered_header(title, labels)
+        labels = options + ([ "🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
+        box = build_header_html(title, labels)
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
@@ -266,9 +282,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await query.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
