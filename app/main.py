@@ -103,41 +103,58 @@ def build_header_html(
     header_emoji: str = HEADER_EMOJI,
     underline_mode = UNDERLINE_MODE,
     underline_min: int = UNDERLINE_MIN,
+    arabic_shift: int = 30,  # مقدار الإزاحة عند وجود نص عربي
 ) -> str:
     """
-    نسخة محسّنة بصريًا:
-    - إزالة الخطين الجانبيين.
-    - موازنة الاتجاه العربي بتحريك النص يسارًا قليلًا.
+    🔹 نسخة محسّنة بصريًا لإنشاء عنوان متناسق في Telegram.
+    - إزالة الخطين الجانبيين (┃┃)
+    - توسيط فعلي في بيئة الخطوط غير الموحدة
+    - موازنة الاتجاه العربي بإزاحة اختيارية إلى اليسار
+
+    Args:
+        title: نص العنوان (عربي أو إنجليزي)
+        keyboard_labels: قائمة الأزرار أسفل العنوان (لحساب العرض)
+        side_mark: العلامة الجانبية (مثل ◾)
+        header_emoji: الإيموجي الأساسي في العنوان
+        underline_mode: يمكن أن يكون رقمًا ثابتًا أو "auto"
+        underline_min: الحد الأدنى لعرض الخط السفلي
+        arabic_shift: عدد المسافات (NBSP) لإزاحة النص العربي يسارًا بصريًا
     """
+    NBSP = "\u00A0"
+
+    # توليد العنوان الكامل
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
 
-    # تعديل الاتجاه العربي (محاذاة خفيفة)
-    if any("\u0600" <= ch <= "\u06FF" for ch in title):
-        full_title = NBSP * 3 + full_title  # حرك النص يسارًا بصريًا
+    # 🔸 اكتشاف وجود نص عربي
+    has_arabic = any("\u0600" <= ch <= "\u06FF" for ch in title)
+    if has_arabic and arabic_shift > 0:
+        # إزاحة يسار بسيطة لجعل المحاذاة البصرية مثالية
+        full_title = NBSP * arabic_shift + full_title
 
-    # حساب الطول الفعلي مع إزالة الإيموجي
+    # حساب الطول الفعلي بدون الإيموجي لضبط التوسيط بدقة
     title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
-    # تحديد عرض السطر حسب الإعداد
+    # تحديد عرض الإطار
     target_width = max(max_button_width(keyboard_labels), underline_min)
     if isinstance(underline_mode, int):
         underline_width = max(underline_mode, underline_min)
     else:
         underline_width = max(title_width, target_width, underline_min)
 
-    # توليد الإطار العلوي والسفلي
+    # إنشاء الإطار العلوي والسفلي
     top_border = "┏" + "━" * underline_width + "┓"
     bottom_border = "┗" + "━" * underline_width + "┛"
 
-    # توسيط بصري
+    # توسيط النص داخل الإطار
     space_needed = max(0, underline_width - title_width)
     pad_left = NBSP * (space_needed // 2)
     pad_right = NBSP * (space_needed - space_needed // 2)
-
     centered_line = f"{pad_left}<b>{full_title}</b>{pad_right}"
 
+    # دمج النتيجة النهائية
     return f"{top_border}\n{centered_line}\n{bottom_border}"
+
 
 
 # ===============================
