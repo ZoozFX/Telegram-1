@@ -1,5 +1,6 @@
 import os
 import logging
+import html
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -17,8 +18,10 @@ from app.db import Base, engine
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# إنشاء الجداول (إن وُجدت)
 Base.metadata.create_all(bind=engine)
 
+# متغيرات البيئة
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -26,32 +29,64 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
 
+# إنشاء تطبيق Telegram
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
-# دالة تنسيق الصندوق بشكل احترافي بدون زر "copy"
+# دوال بناء صندوق ASCII بالشكل المطلوب:
+#  - سطر حد علوي
+#  - سطر عنوان فقط (بدون أشرطة جانبية)
+#  - سطر حد سفلي
+# يرسل داخل <pre> لضمان monospace في تليجرام.
 # ===============================
 
-def build_centered_box(text: str, width: int = 37) -> str:
+def box_with_title_only(text: str, width: int = 33) -> str:
     """
-    ينشئ صندوقًا بسيطًا بعرض ثابت ومحاذاة في المنتصف بدون <pre>
+    يبني صندوق ASCII حيث:
+    - الحد العلوي: ╔═══...╗
+    - سطر العنوان: (مركز) بدون أشرطة جانبية
+    - الحد السفلي: ╚═══...╝
+    width: عدد أعمدة المحتوى داخل الحدود (طول شريط الحشو).
     """
-    line = text.strip()
-    if len(line) > width:
-        line = line[: width - 3] + "..."
-
+    # تأكد من أن النص لا يحتوي على سطور متعددة — إن وُجدت، اشترك أول سطر
+    line = text.split("\n")[0].strip()
     border = "═" * width
     top = f"╔{border}╗"
     bottom = f"╚{border}╝"
 
-    # محاذاة منتصف النص بالنسبة للعرض
-    pad_left = (width - len(line)) // 2
-    pad_right = width - len(line) - pad_left
-    middle = f"{' ' * pad_left}{line}{' ' * pad_right}"
+    # نبني سطر العنوان بحيث يكون مركزيًا نسبةً إلى width.
+    # لأن داخل <pre> سيكون خط ثابت العرض، len() كافٍ.
+    content_len = len(line)
+    # لو النص أطول من width — اقتطع مع ثلاث نقاط
+    if content_len > width:
+        if width > 3:
+            line = line[: max(0, width - 3)] + "..."
+            content_len = len(line)
+        else:
+            line = line[:width]
+            content_len = len(line)
 
-    # نجمع السطور كلها
-    return f"{top}\n{middle}\n{bottom}"
+    padding_total = max(width - content_len, 0)
+    left = padding_total // 2
+    right = padding_total - left
+
+    title_line = f"{' ' * left}{line}{' ' * right}"
+
+    # نعيد سلسلة متعددة الأسطر لوضعها داخل <pre>
+    return "\n".join([top, title_line, bottom])
+
+def boxed_text_as_html_title_only(text: str, width: int = 33, icon: str = "") -> str:
+    """
+    يضع الإيموجي (icon) فوق الصندوق، ويغلف الصندوق داخل <pre> بعد هروب HTML.
+    """
+    box = box_with_title_only(text, width=width)
+    escaped_box = html.escape(box)
+    escaped_icon = html.escape(icon) if icon else ""
+    if escaped_icon:
+        return f"{escaped_icon}\n<pre>{escaped_box}</pre>"
+    else:
+        return f"<pre>{escaped_box}</pre>"
 
 # ===============================
 # 1. /start → واجهة اختيار اللغة
@@ -65,14 +100,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    ar_box = build_centered_box("الأقسام الرئيسية", 37)
-    en_box = build_centered_box("Main Sections", 37)
+    # نستخدم عرضًا أكبر ليتناسب مع طول النص العربي
+    html_ar = boxed_text_as_html_title_only("الأقسام الرئيسية", width=33, icon="✨🏷️✨")
+    html_en = boxed_text_as_html_title_only("Welcome to YesFX Bot!", width=33, icon="👋")
 
-    msg = f"{ar_box}\n\n{en_box}"
-    await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+    full_html = f"{html_ar}\n{html_en}"
+    await update.message.reply_text(full_html, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 # ===============================
-# 2. عرض الأقسام الرئيسية بعد اختيار اللغة
+# 2. عرض اختيار اللغة عند الرجوع
+# ===============================
+async def show_language_selection_via_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.callback_query:
+        keyboard = [
+            [
+                InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar"),
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        html_ar = boxed_text_as_html_title_only("مرحبًا مجددًا!", width=33, icon="🔁")
+        html_en = boxed_text_as_html_title_only("Welcome again!", width=33, icon="🔁")
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(f"{html_ar}\n{html_en}", reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    else:
+        await start(update, context)
+
+# ===============================
+# 3. عرض الأقسام الرئيسية بعد اختيار اللغة
 # ===============================
 async def show_main_sections(update: Update, lang: str):
     if not update.callback_query:
@@ -86,7 +141,7 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        box = build_centered_box("الأقسام الرئيسية", 45)
+        html_box = boxed_text_as_html_title_only("الأقسام الرئيسية", width=41, icon="✨🏷️✨")
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -94,17 +149,17 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        box = build_centered_box("Main Sections", 45)
+        html_box = boxed_text_as_html_title_only("Main Sections", width=41, icon="✨🏷️✨")
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+    await query.edit_message_text(html_box, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 # ===============================
-# 3. اختيار اللغة
+# 4. عند اختيار اللغة
 # ===============================
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -114,17 +169,19 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_sections(update, lang)
 
 # ===============================
-# 4. الأقسام الفرعية + الرجوع
+# 5. التعامل مع الأقسام الفرعية + زر الرجوع
 # ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
+    # 🔙 الرجوع لاختيار اللغة
     if query.data == "back_language":
-        await start(update, context)
+        await show_language_selection_via_query(update, context)
         return
 
+    # 🔙 الرجوع إلى القائمة الرئيسية
     if query.data == "back_main":
         await show_main_sections(update, lang)
         return
@@ -154,14 +211,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        box = build_centered_box(title, 45)
+        # عرض العنوان في وسط الصندوق بدون أشرطة جانبية
+        html_box = boxed_text_as_html_title_only(title, width=41, icon="💠")
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+        await query.edit_message_text(html_box, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         return
 
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
@@ -169,19 +227,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}")
 
 # ===============================
-# Handlers
+# ربط الـ Handlers
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 
 # ===============================
-# Webhook setup
+# صفحة الفحص
 # ===============================
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
 
+# ===============================
+# Webhook
+# ===============================
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
     try:
@@ -193,6 +254,9 @@ async def webhook(request: Request):
         logger.exception("Webhook error")
         return {"ok": False, "error": str(e)}
 
+# ===============================
+# Startup
+# ===============================
 @app.on_event("startup")
 async def on_startup():
     logger.info("🚀 Starting bot...")
@@ -204,6 +268,9 @@ async def on_startup():
     else:
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set")
 
+# ===============================
+# Shutdown
+# ===============================
 @app.on_event("shutdown")
 async def on_shutdown():
     logger.info("🛑 Bot shutting down...")
