@@ -1,8 +1,5 @@
 import os
 import logging
-import unicodedata
-from typing import List, Optional
-
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,6 +8,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
+from telegram.constants import ParseMode
 from app.db import Base, engine
 
 # -------------------------------
@@ -31,101 +29,29 @@ if not TOKEN:
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
-# -------------------------------
-# إعدادات قابلة للتعديل - محسنة
-# -------------------------------
-HEADER_EMOJI = "🔰"                      # الإيموجي الموجود داخل العنوان
-HEADER_STYLE = "modern"                  # "modern" أو "classic" أو "minimal"
-HEADER_DECORATION = "✦"                  # رمز الزخرفة
-HEADER_LINE_CHAR = "─"                   # رمز الخط
+# ===============================
+# دالة تنسيق الصندوق بشكل احترافي بدون زر "copy"
+# ===============================
 
-# -------------------------------
-# مساعدة: قياس العرض المرئي للنص (محسّن)
-# -------------------------------
-def display_width(text: str) -> int:
+def build_centered_box(text: str, width: int = 37) -> str:
     """
-    قياس العرض المرئي للنص مع دعم أفضل للغة العربية والإيموجي
+    ينشئ صندوقًا بسيطًا بعرض ثابت ومحاذاة في المنتصف بدون <pre>
     """
-    if not text:
-        return 0
-    
-    width = 0
-    for char in text:
-        # تجاهل أحرف التحكم والتجميع
-        if unicodedata.category(char) in ('Mn', 'Me', 'Cf', 'Cc'):
-            continue
-            
-        # تحديد عرض الحرف
-        east_asian_width = unicodedata.east_asian_width(char)
-        
-        if east_asian_width in ('F', 'W'):
-            width += 2
-        else:
-            # معظم الحروف العربية والعادية تأخذ عرض 1
-            width += 1
-            
-    return width
+    line = text.strip()
+    if len(line) > width:
+        line = line[: width - 3] + "..."
 
-def max_button_width(labels: List[str]) -> int:
-    if not labels:
-        return 0
-    return max(display_width(str(lbl)) for lbl in labels)
+    border = "═" * width
+    top = f"╔{border}╗"
+    bottom = f"╚{border}╝"
 
-# -------------------------------
-# بناء رأس HTML محسن ومهني
-# -------------------------------
-def build_header_html(title: str, keyboard_labels: List[str], 
-                      header_emoji: str = HEADER_EMOJI,
-                      style: str = HEADER_STYLE,
-                      decoration: str = HEADER_DECORATION,
-                      line_char: str = HEADER_LINE_CHAR) -> str:
-    """
-    يعيد سلسلة HTML بعنوان محسن ومهني بأنماط مختلفة.
-    """
-    # العنوان الفعلي الظاهر
-    full_title = f"{header_emoji} {title}" if header_emoji else title
-    
-    # حساب عرض العنوان
-    title_width = display_width(full_title)
-    
-    # حساب عرض الأزرار مع هامش إضافي
-    button_width = max_button_width(keyboard_labels) if keyboard_labels else 0
-    target_width = max(title_width + 4, button_width + 4, 20)  # حد أدنى 20
-    
-    if style == "modern":
-        # النمط الحديث مع إطار كامل - محسّن للتوسيط
-        # حساب المسافات المطلوبة للتوسيط
-        total_padding = max(0, target_width - title_width - 2)  # -2 للزوايا
-        left_padding = total_padding // 2
-        right_padding = total_padding - left_padding
-        
-        top_line = f"┌{line_char * (target_width - 2)}┐"
-        title_line = f"│{' ' * left_padding}{full_title}{' ' * right_padding}│"
-        bottom_line = f"└{line_char * (target_width - 2)}┘"
-        
-        header_html = f"<b>{top_line}\n{title_line}\n{bottom_line}</b>"
-    
-    elif style == "minimal":
-        # النمط البسيط والأنيق
-        total_padding = max(0, target_width - title_width - 4)  # -4 للزخارف
-        left_padding = total_padding // 2
-        right_padding = total_padding - left_padding
-        
-        header_html = f"<b>{decoration * 2}{' ' * left_padding}{full_title}{' ' * right_padding}{decoration * 2}</b>"
-    
-    else:  # classic
-        # النمط الكلاسيكي المحسن
-        line_length = max(title_width + 8, target_width)
-        total_padding = max(0, line_length - title_width - 6)  # -6 للزخارف والمسافات
-        left_padding = total_padding // 2
-        right_padding = total_padding - left_padding
-        
-        top_line = f"{decoration * 3}{' ' * left_padding}{full_title}{' ' * right_padding}{decoration * 3}"
-        bottom_line = f"{line_char * line_length}"
-        
-        header_html = f"<b>{top_line}</b>\n{bottom_line}"
+    # محاذاة منتصف النص بالنسبة للعرض
+    pad_left = (width - len(line)) // 2
+    pad_right = width - len(line) - pad_left
+    middle = f"{' ' * pad_left}{line}{' ' * pad_right}"
 
-    return header_html
+    # نجمع السطور كلها
+    return f"{top}\n{middle}\n{bottom}"
 
 # ===============================
 # 1. /start → واجهة اختيار اللغة
@@ -139,29 +65,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    labels = ["🇪🇬 العربية", "🇺🇸 English"]
-    header = build_header_html("اللغة | Language", labels)
+    ar_box = build_centered_box("الأقسام الرئيسية", 37)
+    en_box = build_centered_box("Main Sections", 37)
 
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        try:
-            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-        except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-    else:
-        if update.message:
-            await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+    msg = f"{ar_box}\n\n{en_box}"
+    await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
 
 # ===============================
 # 2. عرض الأقسام الرئيسية بعد اختيار اللغة
 # ===============================
-async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
+async def show_main_sections(update: Update, lang: str):
     if not update.callback_query:
         return
 
     query = update.callback_query
-    await query.answer()
 
     if lang == "ar":
         sections = [
@@ -169,8 +86,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        labels = [name for name, _ in sections]
-        header = build_header_html("الأقسام الرئيسية", labels)
+        box = build_centered_box("الأقسام الرئيسية", 45)
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -178,20 +94,14 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        labels = [name for name, _ in sections]
-        header = build_header_html("Main Sections", labels)
+        box = build_centered_box("Main Sections", 45)
         back_button = ("🔙 Back to language", "back_language")
 
-    keyboard = []
-    for name, callback in sections:
-        keyboard.append([InlineKeyboardButton(name, callback_data=callback)])
+    keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    try:
-        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-    except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+    await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
 
 # ===============================
 # 3. اختيار اللغة
@@ -201,7 +111,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = "ar" if query.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
-    await show_main_sections(update, context, lang)
+    await show_main_sections(update, lang)
 
 # ===============================
 # 4. الأقسام الفرعية + الرجوع
@@ -211,13 +121,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
-    # زر العودة للغة
     if query.data == "back_language":
         await start(update, context)
         return
 
     if query.data == "back_main":
-        await show_main_sections(update, context, lang)
+        await show_main_sections(update, lang)
         return
 
     sections_data = {
@@ -245,28 +154,19 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
+        box = build_centered_box(title, 45)
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
-        labels = options + [back_label]
-        
-        header = build_header_html(title, labels)
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        try:
-            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-        except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
         return
 
-    # معالجة الأزرار الفرعية
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
-    try:
-        await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
-    except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
+    await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}")
 
 # ===============================
 # Handlers
