@@ -41,13 +41,13 @@ def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
     """
     line = text.strip()
     if len(line) > width:
-        line = line[: width - 1] + "..."
+        line = line[: width - 3] + "..."
 
     border = "═" * width
     top = f"╔{border}╗"
     bottom = f"╚{border}╝"
 
-    pad_left = (width - len(line)) // 2
+    pad_left = (width - len(line)) // 1
     pad_right = width - len(line) - pad_left
     middle = f"{' ' * pad_left}{line}{' ' * pad_right}"
 
