@@ -105,12 +105,17 @@ def build_header_html(
     underline_min: int = UNDERLINE_MIN,
 ) -> str:
     """
-    إصدار بصري احترافي — بدون الخطين الجانبيين ┃┃
-    يعرض العنوان بشكل متناسق في Telegram مع توسيط بصري فعلي.
+    نسخة محسّنة بصريًا:
+    - إزالة الخطين الجانبيين.
+    - موازنة الاتجاه العربي بتحريك النص يسارًا قليلًا.
     """
     full_title = f"{side_mark} {header_emoji} {title} {side_mark}"
 
-    # حساب الطول الفعلي مع إزالة الإيموجي من القياس
+    # تعديل الاتجاه العربي (محاذاة خفيفة)
+    if any("\u0600" <= ch <= "\u06FF" for ch in title):
+        full_title = NBSP * 3 + full_title  # حرك النص يسارًا بصريًا
+
+    # حساب الطول الفعلي مع إزالة الإيموجي
     title_for_measure = remove_emoji(full_title)
     title_width = display_width(title_for_measure)
 
@@ -125,15 +130,15 @@ def build_header_html(
     top_border = "┏" + "━" * underline_width + "┓"
     bottom_border = "┗" + "━" * underline_width + "┛"
 
-    # حشوات التوسيط
+    # توسيط بصري
     space_needed = max(0, underline_width - title_width)
     pad_left = NBSP * (space_needed // 2)
     pad_right = NBSP * (space_needed - space_needed // 2)
 
-    # سطر العنوان — بدون الجدارين الجانبيين
     centered_line = f"{pad_left}<b>{full_title}</b>{pad_right}"
 
     return f"{top_border}\n{centered_line}\n{bottom_border}"
+
 
 # ===============================
 # 1. /start → اختيار اللغة
