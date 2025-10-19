@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import unicodedata
 from typing import List
@@ -35,7 +36,7 @@ app = FastAPI()
 # إعدادات قابلة للتعديل
 # -------------------------------
 SIDE_MARK = "◾"
-HEADER_EMOJI = "🔰"
+HEADER_EMOJI = "🔰"          # الإيموجي الافتراضي للغة العربية (قابلة للتعديل)
 UNDERLINE_MODE = 25          # 👈 الطول الافتراضي للخط
 UNDERLINE_MIN = 17           # 👈 الحد الأدنى للطول أيضًا 5
 NBSP = "\u00A0"
@@ -112,14 +113,32 @@ def build_header_html(
     """
     نسخة مبسطة: بدون خطوط علوية أو سفلية،
     فقط الإيموجي والنص بشكل منسق ومحاذى حسب الإعداد.
+
+    تحسينات:
+    - كشف تلقائي للغة (عربي أم لا) لتطبيق علامات اتجاه يونكود عند الحاجة
+      وذلك لإصلاح مشاكل الـ RTL التي تجعل النص يبدو محاذياً لليمين بدلاً من التوسيط.
+    - يدعم align = "left"|"center"|"right"
     """
 
     NBSP = "\u00A0"
 
-    # النص الكامل الذي سيُعرض
+    # النص الكامل الذي سيُعرض (يمكن تخصيص الإيموجي حسب اللغة عند الاستدعاء)
     full_title = f"{header_emoji} {title} {header_emoji}"
 
-    # قياس عرض النص
+    # كشف وجود حروف عربية في العنوان (نطبق تصحيح اتجاه إذا وجدنا عربية)
+    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
+    # علامات اتجاه يونكود: RLM (Right-to-Left Mark) أفضل للعنوان العربي
+    RLM = "\u200F"
+    LRM = "\u200E"
+
+    if is_arabic:
+        # نلف العنوان بعلامة اتجاه يميني لمنع تداخل اتجاهات الإيموجي/المسافات
+        full_title = f"{RLM}{full_title}{RLM}"
+    else:
+        # للعناوين اللاتينية نضيف علامات يسارية صغيرة لضمان اتساق العرض عند الحاجة
+        full_title = f"{LRM}{full_title}{LRM}"
+
+    # قياس عرض النص بدون إيموجي لأننا نستخدم remove_emoji للقياس الواقعي
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
     space_needed = max(0, target_width - title_width)
@@ -141,6 +160,7 @@ def build_header_html(
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
+    # نستخدم NBSP لضمان مساحة متساوية عندما يعرض Telegram الرسائل
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     return centered_line
@@ -158,7 +178,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇪🇬 العربية", "🇺🇸 English"]
-    header = build_header_html("اللغة | Language", labels)
+
+    # ميزة التمييز: استخدم إيموجي مختلف لكل لغة لتمييز العناوين بصريًا
+    header = build_header_html("اللغة | Language", labels, header_emoji=HEADER_EMOJI)
 
     if update.callback_query:
         query = update.callback_query
@@ -181,6 +203,9 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     query = update.callback_query
     await query.answer()
 
+    # استخدم إيموجي مختلف لتمييز اللغة بصريًا
+    header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+
     if lang == "ar":
         sections = [
             ("💹 تداول الفوركس", "forex_main"),
@@ -188,7 +213,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
         labels = [name for name, _ in sections]
-        header = build_header_html("الأقسام الرئيسية", labels)
+        header = build_header_html("الأقسام الرئيسية", labels, header_emoji=header_emoji_for_lang)
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -197,7 +222,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("🤝 YesFX Partnership", "agency_main"),
         ]
         labels = [name for name, _ in sections]
-        header = build_header_html("Main Sections", labels)
+        header = build_header_html("Main Sections", labels, header_emoji=header_emoji_for_lang)
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
@@ -259,10 +284,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        labels = options + ([ "🔙 الرجوع للقائمة الرئيسية"] if lang == "ar" else ["🔙 Back to main menu"])
-        box = build_header_html(title, labels)
-        back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
+        # إضافة زر الرجوع ضمن الملصقات لتأثير العرض/قياس العرض
+        back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
+        labels = options + [back_label]
+
+        # تخصيص إيموجي العنوان بحسب اللغة
+        header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+
+        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
