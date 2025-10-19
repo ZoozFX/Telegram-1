@@ -36,7 +36,7 @@ app = FastAPI()
 # -------------------------------
 SIDE_MARK = "◾"
 HEADER_EMOJI = "🔰"
-UNDERLINE_MODE = 17          # 👈 الطول الافتراضي للخط
+UNDERLINE_MODE = 25          # 👈 الطول الافتراضي للخط
 UNDERLINE_MIN = 17           # 👈 الحد الأدنى للطول أيضًا 5
 NBSP = "\u00A0"
 DEFAULT_HEADER_WIDTH = 17
@@ -107,7 +107,7 @@ def build_header_html(
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
     align: str = "center",      # 👈 جعل الوضع الافتراضي توسيط
-    manual_shift: int = 0
+    manual_shift: int = 40
 ) -> str:
     NBSP = "\u00A0"
 
