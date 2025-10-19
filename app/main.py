@@ -32,7 +32,7 @@ app = FastAPI()
 # -------------------------------
 # إعدادات واجهة / صندوق العرض
 # -------------------------------
-BOX_WIDTH = 45  # توحيد العرض ليكون الشكل متناسقًا في جميع الشاشات
+BOX_WIDTH = 33  # ✅ تم تقليص العرض ليبدو أقصر وأكثر تناسقًا على الشاشات
 
 def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
     """
@@ -47,7 +47,7 @@ def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
     top = f"╔{border}╗"
     bottom = f"╚{border}╝"
 
-    pad_left = (width - len(line)) // 1
+    pad_left = (width - len(line)) // 2
     pad_right = width - len(line) - pad_left
     middle = f"{' ' * pad_left}{line}{' ' * pad_right}"
 
@@ -58,10 +58,7 @@ def build_centered_box(text: str, width: int = BOX_WIDTH) -> str:
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    يدعم هذا الستاارت كلتا الحالتين:
-    - أمر /start (يحتوي update.message)
-    - استدعاء عبر callback (يحتوي update.callback_query)
-    لذلك يمكن استخدامه كزر "الرجوع للغة" أيضاً.
+    يدعم /start من الأمر النصي أو من زر "الرجوع للغة"
     """
     keyboard = [
         [
@@ -76,20 +73,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = f"{ar_box}\n\n{en_box}"
 
-    # إذا الرسالة أتت من callback_query نستخدم edit_message_text (الرجوع يعمل الآن)
     if update.callback_query:
         query = update.callback_query
         await query.answer()
-        # نتحقق إن الرسالة موجودة ثم نعدّلها
         try:
-            await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+            await query.edit_message_text(
+                msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True
+            )
         except Exception:
-            # لو لم نتمكن من التعديل (مثلاً كانت الرسالة قد حذفت)، نرسل رسالة جديدة
-            await context.bot.send_message(chat_id=query.message.chat_id, text=msg, reply_markup=reply_markup, disable_web_page_preview=True)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=msg,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
     else:
-        # حالة /start عبر أمر النصي
         if update.message:
-            await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
+            await update.message.reply_text(
+                msg, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True
+            )
 
 # ===============================
 # 2. عرض الأقسام الرئيسية بعد اختيار اللغة
@@ -118,18 +120,15 @@ async def show_main_sections(update: Update, lang: str):
         box = build_centered_box("Main Sections")
         back_button = ("🔙 Back to language", "back_language")
 
-    # نبني لوحة أزرار مرتبة: كل خيار في صف مستقل (قابلة لتعديل لتصبح صفين إن رغبت)
     keyboard = []
     for name, callback in sections:
         keyboard.append([InlineKeyboardButton(name, callback_data=callback)])
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # نحرص على استخدام edit_message_text لإبقاء الرسالة واحدة وتتغير محتوياتها
     try:
         await query.edit_message_text(box, reply_markup=reply_markup, parse_mode=None, disable_web_page_preview=True)
     except Exception:
-        # في حال فشل التعديل نرسل رسالة جديدة
         await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, disable_web_page_preview=True)
 
 # ===============================
@@ -150,7 +149,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     lang = context.user_data.get("lang", "ar")
 
-    # زر العودة للغة الآن يعمل لأن دالة start تدعم callback
     if query.data == "back_language":
         await start(update, context)
         return
@@ -180,7 +178,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
     }
 
-    # لو تم اختيار أحد الأقسام الرئيسية
     if query.data in sections_data:
         data = sections_data[query.data]
         options = data[lang]
@@ -198,7 +195,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, disable_web_page_preview=True)
         return
 
-    # حالة اختيار خدمة فرعية (أو أي callback غير متوقع)
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     try:
