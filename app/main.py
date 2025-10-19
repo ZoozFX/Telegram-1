@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import html
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -9,6 +10,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
+from telegram.constants import ParseMode
 from app.db import Base, engine
 
 # -------------------------------
@@ -17,7 +19,7 @@ from app.db import Base, engine
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# إنشاء الجداول
+# إنشاء الجداول (إن وجدت)
 Base.metadata.create_all(bind=engine)
 
 # متغيرات البيئة
@@ -33,35 +35,50 @@ application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
 # ===============================
-# 📏 دالة لتنسيق النص داخل صندوق متناسق (تلجرام)
+# دوال تنسيق الصندوق مع دعم إرسالـه كـ HTML <pre>
 # ===============================
-def create_boxed_text(text: str, width: int = 27, icon: str = "") -> str:
+
+def build_ascii_box_lines(text: str, width: int = 27) -> str:
     """
-    إنشاء صندوق ASCII مناسب لعرض Telegram.
-    يحافظ على شكل متناسق حتى مع الإيموجي والنص العربي.
+    يبني صندوق ASCII بمحتوى نصي فقط (بدون إيموجي داخل الصندوق).
+    يعيد سلسلة نصية جاهزة لتوضع داخل <pre>...<pre>.
     """
     lines = text.split("\n")
-    boxed_lines = []
+    # نستخدم width كعدد أعمدة داخل الصندوق
     border = "═" * width
-    boxed_lines.append(f"╔{border}╗")
-
+    boxed = []
+    boxed.append(f"╔{border}╗")
     for line in lines:
-        line_content = f"{icon} {line}" if icon else line
-        # إزالة المسافات الزائدة
-        line_content = line_content.strip()
-        # حساب الطول الفعلي (نسبة تقريبية لحروف مختلفة العرض)
-        visual_length = len(line_content.encode('utf-8')) // 2
-        padding_total = max(width - visual_length, 0)
-        left_padding = padding_total // 2
-        right_padding = padding_total - left_padding
-        padded = f"{' ' * left_padding}{line_content}{' ' * right_padding}"
-        boxed_lines.append(f"║{padded}║")
+        # trim فقط، لا تضيف أي ايقونات هنا
+        content = line.strip()
+        # نحاول توزيع المسافات مركزيًا بحسب عدد الأحرف البسيط
+        # لأن داخل <pre> سيكون خط ثابت العرض، len كافي هنا
+        content_len = len(content)
+        padding_total = max(width - content_len, 0)
+        left = padding_total // 2
+        right = padding_total - left
+        boxed.append(f"║{' ' * left}{content}{' ' * right}║")
+    boxed.append(f"╚{border}╝")
+    return "\n".join(boxed)
 
-    boxed_lines.append(f"╚{border}╝")
-    return "\n".join(boxed_lines)
+def boxed_text_as_html(text: str, width: int = 27, icon: str = "") -> str:
+    """
+    يرجع نص HTML جاهز للإرسال:
+    - يضع الـ icon (إيموجي) خارِج كتلة <pre> (حتى لا يكسر المحاذاة)
+    - ويغلف الصندوق داخل <pre> مع هروب أحرف HTML
+    """
+    box = build_ascii_box_lines(text, width=width)
+    # هروب أحرف HTML داخل الصندوق
+    escaped_box = html.escape(box)
+    escaped_icon = html.escape(icon) if icon else ""
+    if escaped_icon:
+        # نجعل الإيموجي على سطر قبل <pre> لعرض جميل
+        return f"{escaped_icon}\n<pre>{escaped_box}</pre>"
+    else:
+        return f"<pre>{escaped_box}</pre>"
 
 # ===============================
-# 🟢 1. /start → واجهة اختيار اللغة
+# 1. /start → واجهة اختيار اللغة
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -71,12 +88,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text_ar = create_boxed_text("أهلا بك في بوت YesFX!", icon="🌟")
-    text_en = create_boxed_text("Welcome to YesFX Bot!", icon="👋")
-    await update.message.reply_text(f"{text_ar}\n{text_en}", reply_markup=reply_markup)
+
+    # استخدمنا icon خارج الصندوق لضمان تساوي الأعمدة
+    html_ar = boxed_text_as_html("أهلا بك في بوت YesFX!", width=33, icon="🌟")
+    html_en = boxed_text_as_html("Welcome to YesFX Bot!", width=33, icon="👋")
+
+    # اجمع الرسالتين — نرسل مع parse_mode=HTML ليظهر <pre> ثابت العرض
+    full_html = f"{html_ar}\n{html_en}"
+    # استخدام reply_text مع parse_mode و reply_markup
+    await update.message.reply_text(full_html, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 # ===============================
-# 🆕 2. عرض اختيار اللغة عند الرجوع
+# 2. عرض اختيار اللغة عند الرجوع
 # ===============================
 async def show_language_selection_via_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
@@ -87,24 +110,30 @@ async def show_language_selection_via_query(update: Update, context: ContextType
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text_ar = create_boxed_text("مرحبًا مجددًا!", icon="🔁")
-        text_en = create_boxed_text("Welcome again!", icon="🔁")
+        html_ar = boxed_text_as_html("مرحبًا مجددًا!", width=33, icon="🔁")
+        html_en = boxed_text_as_html("Welcome again!", width=33, icon="🔁")
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(f"{text_ar}\n{text_en}", reply_markup=reply_markup)
+        await update.callback_query.edit_message_text(f"{html_ar}\n{html_en}", reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     else:
         await start(update, context)
 
 # ===============================
-# 🟣 3. عرض الأقسام الرئيسية بعد اختيار اللغة
+# 3. عرض الأقسام الرئيسية بعد اختيار اللغة
 # ===============================
 async def show_main_sections(update: Update, lang: str):
+    if not update.callback_query:
+        return
+
+    callback_query = update.callback_query
+
     if lang == "ar":
         sections = [
             ("💹 تداول الفوركس", "forex_main"),
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        text = create_boxed_text("الأقسام الرئيسية", icon="🏷️")
+        # عنوان داخل الصندوق بدون إيموجي داخلي — الإيموجي فوق الصندوق
+        html_box = boxed_text_as_html("الأقسام الرئيسية", width=33, icon="✨🏷️✨")
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -112,18 +141,17 @@ async def show_main_sections(update: Update, lang: str):
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        text = create_boxed_text("Main Sections", icon="🏷️")
+        html_box = boxed_text_as_html("Main Sections", width=33, icon="✨🏷️✨")
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    animated_text = text.replace("🏷️", "✨🏷️✨")
-    await update.callback_query.edit_message_text(animated_text, reply_markup=reply_markup)
+    await callback_query.edit_message_text(html_box, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 # ===============================
-# 🟢 4. عند اختيار اللغة
+# 4. عند اختيار اللغة
 # ===============================
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -133,7 +161,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_sections(update, lang)
 
 # ===============================
-# 🟡 5. التعامل مع الأقسام الفرعية + زر الرجوع
+# 5. التعامل مع الأقسام الفرعية + زر الرجوع
 # ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -175,15 +203,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = sections_data[query.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-        text = create_boxed_text(title, icon="💠")
+        html_box = boxed_text_as_html(title, width=33, icon="💠")
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
 
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        animated_text = text.replace("💠", "✨💠✨")
-        await query.edit_message_text(animated_text, reply_markup=reply_markup)
+        await query.edit_message_text(html_box, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         return
 
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
@@ -191,21 +218,21 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}")
 
 # ===============================
-# 🔗 Handlers
+# ربط الـ Handlers
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 
 # ===============================
-# 🟣 صفحة الفحص
+# صفحة الفحص
 # ===============================
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
 
 # ===============================
-# 🟢 Webhook
+# Webhook
 # ===============================
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
@@ -219,7 +246,7 @@ async def webhook(request: Request):
         return {"ok": False, "error": str(e)}
 
 # ===============================
-# 🚀 Startup
+# Startup
 # ===============================
 @app.on_event("startup")
 async def on_startup():
@@ -233,7 +260,7 @@ async def on_startup():
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set")
 
 # ===============================
-# 🛑 Shutdown
+# Shutdown
 # ===============================
 @app.on_event("shutdown")
 async def on_shutdown():
