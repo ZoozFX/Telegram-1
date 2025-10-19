@@ -107,7 +107,7 @@ def build_header_html(
     arabic_rtl_bias: float | None = None,
     width_padding: int = 1,
     align: str = "right",          # 🆕 "left", "right", "center"
-    manual_shift: int = 0           # 🆕 إزاحة يدوية موجبة/سالبة
+    manual_shift: int = 55           # 🆕 إزاحة يدوية موجبة/سالبة
 ) -> str:
     """
     🔹 دالة لإنشاء ترويسة منسقة بإطار زخرفي، مع تحكم كامل بالمحاذاة والإزاحة.
