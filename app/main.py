@@ -36,7 +36,7 @@ app = FastAPI()
 # -------------------------------
 HEADER_EMOJI = "🔰"                      # الإيموجي الموجود داخل العنوان
 KEEP_EMOJI_IN_MEASUREMENT = False        # إذا False => الإيموجي لا يُحتسب عند حساب التوسيط
-HEADER_STYLE = "classic"                  # "modern" أو "classic" أو "minimal"
+HEADER_STYLE = "minimal"                  # "modern" أو "classic" أو "minimal"
 HEADER_DECORATION = "✦"                  # رمز الزخرفة
 HEADER_LINE_CHAR = "─"                   # رمز الخط
 HEADER_CORNER = "┌┐"                     # زوايا الإطار
