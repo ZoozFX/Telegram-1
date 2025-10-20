@@ -59,6 +59,19 @@ class Registration(_Base):
 
 # تأكد من إنشاء الجدول
 _Base.metadata.create_all(bind=engine)
+# ✅ تعريف دالة start أولًا
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
+            InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("👋 Welcome! Please select language:", reply_markup=reply_markup)
+
+# ✅ ثم بعد ذلك تسجيل الـ Handler
+application.add_handler(CommandHandler("start", start))
 
 # -------------------------------
 # مساعدة: قياس عرض النص وإزالة الإيموجي
