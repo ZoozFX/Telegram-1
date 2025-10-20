@@ -2,10 +2,8 @@ import os
 import re
 import logging
 import unicodedata
-from typing import List, Optional
+from typing import List
 import math
-from datetime import datetime
-
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -13,42 +11,43 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
+    ConversationHandler,
     MessageHandler,
     filters,
 )
-
-# -------------------------------
-# قاعدة البيانات (SQLAlchemy)
-# -------------------------------
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from sqlalchemy.orm import sessionmaker
 from app.db import Base, engine
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import sessionmaker
 
+# -------------------------------
 # إعداد السجلات
+# -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# نموذج المستخدم للاشتراك في "نسخ الصفقات"
-class CopyTradingUser(Base):
-    __tablename__ = "copy_trading_users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, index=True, nullable=False)
-    name = Column(String(200), nullable=True)
-    email = Column(String(200), nullable=True)
-    phone = Column(String(50), nullable=True)
-    lang = Column(String(5), default="ar")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
-# إعداد البوت و FastAPI
+# نموذج جديد لحفظ بيانات المستخدمين
 # -------------------------------
+SessionLocal = sessionmaker(bind=engine)
+
+class Subscriber(Base):
+    __tablename__ = "subscribers"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    email = Column(String(200), nullable=False)
+    phone = Column(String(50), nullable=False)
+    lang = Column(String(8), default="ar")
+
+# إذا لم يكن الجدول موجودًا يتم إنشاؤه
+Base.metadata.create_all(bind=engine)
+
+# -------------------------------
+# ثوابت التسجيل (Conversation states)
+# -------------------------------
+NAME, EMAIL, PHONE = range(3)
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -63,9 +62,9 @@ app = FastAPI()
 # إعدادات قابلة للتعديل
 # -------------------------------
 SIDE_MARK = "◾"
-HEADER_EMOJI = "✨"
-UNDERLINE_MODE = 30
-UNDERLINE_MIN = 17
+HEADER_EMOJI = "✨"          # الإيموجي الافتراضي للغة العربية (قابلة للتعديل)
+UNDERLINE_MODE = 30          # 👈 الطول الافتراضي للخط
+UNDERLINE_MIN = 17           # 👈 الحد الأدنى للطول أيضًا 5
 NBSP = "\u00A0"
 DEFAULT_HEADER_WIDTH = 17
 
@@ -123,7 +122,7 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# build_header_html (محسّن)
+# ✅ النسخة المحسّنة من build_header_html
 # -------------------------------
 def build_header_html(
     title: str,
@@ -208,6 +207,7 @@ def build_header_html(
         extra_section = ("\n" + spacer) * extra_lines
 
     return centered_line + underline_line + extra_section
+
 # ===============================
 # 1. /start → اختيار اللغة
 # ===============================
@@ -215,13 +215,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
-            InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar"),
+            InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
 
-    header = "<b>Language | اللغة</b>"
+    # ميزة التمييز: استخدم إيموجي مختلف لكل لغة لتمييز العناوين بصريًا
+    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
 
     if update.callback_query:
         query = update.callback_query
@@ -235,7 +236,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 # ===============================
-# 2. الأقسام الرئيسية (معدلة لتستخدم callback_data ثابتة)
+# 2. الأقسام الرئيسية
 # ===============================
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
@@ -244,27 +245,27 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     query = update.callback_query
     await query.answer()
 
+    # استخدم إيموجي مختلف لتمييز اللغة بصريًا
     header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
 
     if lang == "ar":
         sections = [
-            ("💹 تداول الفوركس", "copy_trading"),
+            ("💹 تداول الفوركس", "forex_main"),
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
+        labels = [name for name, _ in sections]
+        header = build_header_html("الأقسام الرئيسية", labels, header_emoji=header_emoji_for_lang)
         back_button = ("🔙 الرجوع للغة", "back_language")
-        title = "الأقسام الرئيسية"
     else:
         sections = [
-            ("💹 Forex Trading", "copy_trading"),
+            ("💹 Forex Trading", "forex_main"),
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
+        labels = [name for name, _ in sections]
+        header = build_header_html("Main Sections", labels, header_emoji=header_emoji_for_lang)
         back_button = ("🔙 Back to language", "back_language")
-        title = "Main Sections"
-
-    labels = [name for name, _ in sections]
-    header = f"<b>{title}</b>"
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
@@ -285,43 +286,29 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["lang"] = lang
     await show_main_sections(update, context, lang)
 
-# ===============================
-# 4. منطق قائمة الأقسام وبدء تسجيل "نسخ الصفقات"
-# ===============================
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-PHONE_RE = re.compile(r"[0-9+()\-\s]{6,25}$")
-
-async def start_copy_trading_flow(query, context: ContextTypes.DEFAULT_TYPE):
-    """ابدأ جمع بيانات المستخدم: name -> email -> phone"""
-    user = query.from_user
-    lang = context.user_data.get("lang", "ar")
-
-    # تأكد أن لدينا سجل مستخدم (أو أنشئ واحدًا)
-    db = SessionLocal()
+# -------------------------------
+# حفظ المشترك في قاعدة البيانات
+# -------------------------------
+def save_subscriber(name: str, email: str, phone: str, lang: str = "ar") -> None:
     try:
-        db_user = db.query(CopyTradingUser).filter(CopyTradingUser.telegram_id == user.id).first()
-        if not db_user:
-            db_user = CopyTradingUser(telegram_id=user.id, lang=lang)
-            db.add(db_user)
-            db.commit()
-            db.refresh(db_user)
-    finally:
+        db = SessionLocal()
+        sub = Subscriber(name=name, email=email, phone=phone, lang=lang)
+        db.add(sub)
+        db.commit()
         db.close()
+    except Exception as e:
+        logger.exception("Failed to save subscriber: %s", e)
 
-    # نحفظ حالة الجمع في سياق المستخدم
-    context.user_data["copy_trading_flow"] = {
-        "step": "name",
-        "editing": False,
-    }
+# -------------------------------
+# التحقق من صحة الإيميل والهاتف
+# -------------------------------
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 
-    prompt = "الرجاء إدخال اسمك الكامل:" if lang == "ar" else "Please enter your full name:"
-    try:
-        await query.edit_message_text(prompt, parse_mode="HTML")
-    except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=prompt)
-
+# ===============================
+# 4. الأقسام الفرعية + البدء في التسجيل عند اختيار نسخ الصفقات
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # هذا المعالج يتعامل مع جميع أزرار الـ callback_data
     query = update.callback_query
     await query.answer()
     lang = context.user_data.get("lang", "ar")
@@ -333,75 +320,47 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, context, lang)
         return
 
-    if query.data == "copy_trading":
-        await start_copy_trading_flow(query, context)
-        return
+    # إذا نقر المستخدم على زر "نسخ الصفقات" (بالعربية أو الإنجليزية) نبدأ عملية التسجيل
+    if query.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
+        # نحفظ حالة التسجيل
+        context.user_data["registration"] = {"lang": lang}
+        context.user_data["reg_state"] = "awaiting_name"
 
-    # التحرير: عرض خيارات التعديل بعد التسجيل
-    if query.data.startswith("edit_"):
-        field = query.data.split("edit_")[-1]
-        context.user_data["copy_trading_flow"] = {"step": field, "editing": True}
-        prompt_map = {
-            "name": ("الرجاء إرسال الاسم الجديد:", "Send new name:"),
-            "email": ("الرجاء إرسال البريد الإلكتروني الجديد:", "Send new email:"),
-            "phone": ("الرجاء إرسال رقم الهاتف الجديد:", "Send new phone:"),
-        }
-        prompt = prompt_map[field][0] if lang == "ar" else prompt_map[field][1]
+        if lang == "ar":
+            text = "فضلاً أدخل اسمك الكامل:" 
+            back_label = "🔙 إلغاء"
+        else:
+            text = "Please enter your full name:"
+            back_label = "🔙 Cancel"
+
+        keyboard = [[InlineKeyboardButton(back_label, callback_data="cancel_reg")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         try:
-            await query.edit_message_text(prompt)
+            await query.edit_message_text(text, reply_markup=reply_markup)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=prompt)
+            await context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=reply_markup)
         return
 
-    # زر "عرض/تعديل بياناتي"
-    if query.data == "view_my_data":
-        db = SessionLocal()
-        try:
-            db_user = db.query(CopyTradingUser).filter(CopyTradingUser.telegram_id == query.from_user.id).first()
-            if not db_user:
-                text = "لا توجد بيانات مسجلة. اضغط على \"نسخ الصفقات\" للانضمام." if lang == "ar" else "No data found. Press 'Copy Trading' to join."
-                await query.edit_message_text(text)
-                return
-
-            lines = []
-            if lang == "ar":
-                lines = [f"<b>الاسم:</b> {db_user.name or '—'}", f"<b>البريد:</b> {db_user.email or '—'}", f"<b>الهاتف:</b> {db_user.phone or '—'}"]
-                txt = "\n".join(lines)
-                kb = [
-                    [InlineKeyboardButton("✏️ تعديل الاسم", callback_data="edit_name")],
-                    [InlineKeyboardButton("✏️ تعديل البريد", callback_data="edit_email")],
-                    [InlineKeyboardButton("✏️ تعديل الهاتف", callback_data="edit_phone")],
-                    [InlineKeyboardButton("🔙 الرجوع", callback_data="back_main")],
-                ]
-            else:
-                lines = [f"<b>Name:</b> {db_user.name or '—'}", f"<b>Email:</b> {db_user.email or '—'}", f"<b>Phone:</b> {db_user.phone or '—'}"]
-                txt = "\n".join(lines)
-                kb = [
-                    [InlineKeyboardButton("✏️ Edit name", callback_data="edit_name")],
-                    [InlineKeyboardButton("✏️ Edit email", callback_data="edit_email")],
-                    [InlineKeyboardButton("✏️ Edit phone", callback_data="edit_phone")],
-                    [InlineKeyboardButton("🔙 Back", callback_data="back_main")],
-                ]
-
-            await query.edit_message_text(txt, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML", disable_web_page_preview=True)
-        finally:
-            db.close()
-        return
-
-    # بقية الأزرار المعروفة (أقسام فرعية)
     sections_data = {
+        "forex_main": {
+            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
+            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
+            "title_ar": "تداول الفوركس",
+            "title_en": "Forex Trading"
+        },
         "dev_main": {
             "ar": ["📈 برمجة المؤشرات", "🤖 برمجة الاكسبيرتات", "💬 بوتات التليجرام", "🌐 مواقع الويب"],
             "en": ["📈 Indicators", "🤖 Expert Advisors", "💬 Telegram Bots", "🌐 Web Development"],
             "title_ar": "خدمات البرمجة",
-            "title_en": "Programming Services",
+            "title_en": "Programming Services"
         },
         "agency_main": {
             "ar": ["📄 طلب وكالة YesFX"],
             "en": ["📄 Request YesFX Partnership"],
             "title_ar": "طلب وكالة",
-            "title_en": "Partnership",
-        },
+            "title_en": "Partnership"
+        }
     }
 
     if query.data in sections_data:
@@ -409,21 +368,24 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options = data[lang]
         title = data[f"title_{lang}"]
 
+        # إضافة زر الرجوع ضمن الملصقات لتأثير العرض/قياس العرض
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
 
+        # تخصيص إيموجي العنوان بحسب اللغة
+        header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+
+        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        box = f"<b>{title}</b>"
         try:
             await query.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
             await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    # افتراضي: عرض رسالة اختيار الخدمة
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     try:
@@ -432,145 +394,103 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
 
 # ===============================
-# معالج الرسائل النصية: استقبال اسم/بريد/هاتف
+# 5. معالجة الرسائل أثناء التسجيل (اسم - ايميل - هاتف)
 # ===============================
-async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
+async def registration_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg or not msg.text:
         return
-    user = update.message.from_user
-    data = context.user_data.get("copy_trading_flow")
-    if not data:
-        return  # لا يوجد جمع بيانات جارٍ
 
-    step = data.get("step")
-    editing = data.get("editing", False)
-    text = update.message.text.strip()
-    lang = context.user_data.get("lang", "ar")
+    reg = context.user_data.get("registration")
+    if not reg:
+        return  # ليست حالة تسجيل
 
-    db = SessionLocal()
-    try:
-        db_user = db.query(CopyTradingUser).filter(CopyTradingUser.telegram_id == user.id).first()
-        if not db_user:
-            db_user = CopyTradingUser(telegram_id=user.id, lang=lang)
-            db.add(db_user)
-            db.commit()
-            db.refresh(db_user)
+    state = context.user_data.get("reg_state")
+    text = msg.text.strip()
 
-        # خطوة الاسم
-        if step == "name":
-            if len(text) < 2:
-                await update.message.reply_text("الاسم قصير جدًا. حاول مرة أخرى." if lang == "ar" else "Name too short. Try again.")
-                return
-            db_user.name = text
-            db.commit()
-            context.user_data["copy_trading_flow"]["step"] = "email"
-            prompt = "الآن أدخل بريدك الإلكتروني:" if lang == "ar" else "Now enter your email:"
-            await update.message.reply_text(prompt)
+    # إلغاء بسيط: المستخدم أرسل كلمة إلغاء
+    if text.lower() in ("cancel", "إلغاء", "الغاء"):
+        context.user_data.pop("registration", None)
+        context.user_data.pop("reg_state", None)
+        lang = context.user_data.get("lang", "ar")
+        await msg.reply_text("تم إلغاء التسجيل." if lang == "ar" else "Registration cancelled.")
+        await show_main_sections(update, context, lang)
+        return
+
+    if state == "awaiting_name":
+        context.user_data["registration"]["name"] = text
+        context.user_data["reg_state"] = "awaiting_email"
+        prompt = "الآن أدخل بريدك الإلكتروني:" if reg.get("lang") == "ar" else "Now enter your email:"
+        await msg.reply_text(prompt)
+        return
+
+    if state == "awaiting_email":
+        if not EMAIL_RE.match(text):
+            await msg.reply_text("بريد إلكتروني غير صالح. حاول مرة أخرى:" if reg.get("lang") == "ar" else "Invalid email. Try again:")
             return
+        context.user_data["registration"]["email"] = text
+        context.user_data["reg_state"] = "awaiting_phone"
+        prompt = "أخيرًا: أدخل رقم الهاتف (مع رمز الدولة):" if reg.get("lang") == "ar" else "Finally: enter your phone number (with country code):"
+        await msg.reply_text(prompt)
+        return
 
-        if step == "email":
-            if not EMAIL_RE.match(text):
-                await update.message.reply_text("البريد غير صالح. حاول مرة أخرى." if lang == "ar" else "Invalid email. Try again.")
-                return
-            db_user.email = text
-            db.commit()
-            context.user_data["copy_trading_flow"]["step"] = "phone"
-            prompt = "الآن أدخل رقم هاتفك (يمكنك إضافة رمز الدولة):" if lang == "ar" else "Now enter your phone number (include country code):"
-            await update.message.reply_text(prompt)
+    if state == "awaiting_phone":
+        if not PHONE_RE.match(text):
+            await msg.reply_text("رقم هاتف غير صالح. حاول مرة أخرى:" if reg.get("lang") == "ar" else "Invalid phone number. Try again:")
             return
+        context.user_data["registration"]["phone"] = text
 
-        if step == "phone":
-            if not PHONE_RE.search(text):
-                await update.message.reply_text("رقم الهاتف غير صالح. حاول مرة أخرى." if lang == "ar" else "Invalid phone. Try again.")
-                return
-            db_user.phone = text
-            db.commit()
+        # حفظ في قاعدة البيانات
+        try:
+            save_subscriber(
+                name=context.user_data["registration"]["name"],
+                email=context.user_data["registration"]["email"],
+                phone=context.user_data["registration"]["phone"],
+                lang=reg.get("lang", "ar")
+            )
+        except Exception:
+            logger.exception("Error saving subscriber")
 
-            # انتهى الجمع — أظهر ملخصًا مع أزرار للتعديل
-            if lang == "ar":
-                txt = f"✅ تم تسجيلك للنسخ:\n\n<b>الاسم:</b> {db_user.name}\n<b>البريد:</b> {db_user.email}\n<b>الهاتف:</b> {db_user.phone}"
-                kb = [
-                    [InlineKeyboardButton("✏️ تعديل الاسم", callback_data="edit_name")],
-                    [InlineKeyboardButton("✏️ تعديل البريد", callback_data="edit_email")],
-                    [InlineKeyboardButton("✏️ تعديل الهاتف", callback_data="edit_phone")],
-                    [InlineKeyboardButton("🔙 الرجوع", callback_data="back_main")],
-                ]
-            else:
-                txt = f"✅ You are registered for copy trading:\n\n<b>Name:</b> {db_user.name}\n<b>Email:</b> {db_user.email}\n<b>Phone:</b> {db_user.phone}"
-                kb = [
-                    [InlineKeyboardButton("✏️ Edit name", callback_data="edit_name")],
-                    [InlineKeyboardButton("✏️ Edit email", callback_data="edit_email")],
-                    [InlineKeyboardButton("✏️ Edit phone", callback_data="edit_phone")],
-                    [InlineKeyboardButton("🔙 Back", callback_data="back_main")],
-                ]
-
-            # مسح حالة الجمع
-            context.user_data.pop("copy_trading_flow", None)
-            await update.message.reply_text(txt, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML", disable_web_page_preview=True)
-            return
-
-        # إذا كان المستخدم في وضع التحرير editing
-        if editing and step in ("name", "email", "phone"):
-            field = step
-            if field == "email" and not EMAIL_RE.match(text):
-                await update.message.reply_text("البريد غير صالح. حاول مرة أخرى." if lang == "ar" else "Invalid email. Try again.")
-                return
-            if field == "phone" and not PHONE_RE.search(text):
-                await update.message.reply_text("رقم الهاتف غير صالح. حاول مرة أخرى." if lang == "ar" else "Invalid phone. Try again.")
-                return
-
-            setattr(db_user, field, text)
-            db.commit()
-            context.user_data.pop("copy_trading_flow", None)
-
-            done_msg = "تم تحديث بياناتك." if lang == "ar" else "Your data has been updated."
-            await update.message.reply_text(done_msg)
-            # عرض البيانات المحدثة
-            await show_user_data_quick(update.message.chat_id, user.id, context, lang)
-            return
-
-    finally:
-        db.close()
-
-async def show_user_data_quick(chat_id: int, telegram_id: int, context: ContextTypes.DEFAULT_TYPE, lang: str):
-    db = SessionLocal()
-    try:
-        db_user = db.query(CopyTradingUser).filter(CopyTradingUser.telegram_id == telegram_id).first()
-        if not db_user:
-            return
+        lang = reg.get("lang", "ar")
         if lang == "ar":
-            lines = [f"<b>الاسم:</b> {db_user.name or '—'}", f"<b>البريد:</b> {db_user.email or '—'}", f"<b>الهاتف:</b> {db_user.phone or '—'}"]
-            txt = "\n".join(lines)
-            kb = [
-                [InlineKeyboardButton("✏️ تعديل الاسم", callback_data="edit_name")],
-                [InlineKeyboardButton("✏️ تعديل البريد", callback_data="edit_email")],
-                [InlineKeyboardButton("✏️ تعديل الهاتف", callback_data="edit_phone")],
-                [InlineKeyboardButton("🔙 الرجوع", callback_data="back_main")],
-            ]
+            await msg.reply_text("✅ تم التسجيل بنجاح! شكرًا لك. سنتواصل معك عبر البريد أو الهاتف.")
         else:
-            lines = [f"<b>Name:</b> {db_user.name or '—'}", f"<b>Email:</b> {db_user.email or '—'}", f"<b>Phone:</b> {db_user.phone or '—'}"]
-            txt = "\n".join(lines)
-            kb = [
-                [InlineKeyboardButton("✏️ Edit name", callback_data="edit_name")],
-                [InlineKeyboardButton("✏️ Edit email", callback_data="edit_email")],
-                [InlineKeyboardButton("✏️ Edit phone", callback_data="edit_phone")],
-                [InlineKeyboardButton("🔙 Back", callback_data="back_main")],
-            ]
+            await msg.reply_text("✅ Registration successful! Thank you. We will contact you via email or phone.")
 
-        await context.bot.send_message(chat_id=chat_id, text=txt, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML", disable_web_page_preview=True)
-    finally:
-        db.close()
+        # نظف حالة التسجيل وارجع للقائمة الرئيسية
+        context.user_data.pop("registration", None)
+        context.user_data.pop("reg_state", None)
+        await show_main_sections(update, context, lang)
+        return
+
+# -------------------------------
+# معالجة إلغاء التسجيل بالزر
+# -------------------------------
+async def cancel_registration_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("registration", None)
+    context.user_data.pop("reg_state", None)
+    lang = context.user_data.get("lang", "ar")
+    if lang == "ar":
+        await query.edit_message_text("تم إلغاء التسجيل.")
+    else:
+        await query.edit_message_text("Registration cancelled.")
+    await show_main_sections(update, context, lang)
 
 # ===============================
-# Handlers registration
+# Handlers
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
+application.add_handler(CallbackQueryHandler(cancel_registration_callback, pattern="^cancel_reg$"))
+
+# استقبال رسائل المستخدم خلال عملية التسجيل
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, registration_message_handler))
 
 # ===============================
-# Webhook setup (مثل السابق)
+# Webhook setup
 # ===============================
 @app.get("/")
 def root():
