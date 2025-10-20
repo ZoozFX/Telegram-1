@@ -138,77 +138,76 @@ def build_header_html(
     manual_shift: int = 0,
     underline_char: str = "━",
     underline_enabled: bool = True,
-    underline_length: int = 25,
-    extra_lines: int = 0,           # عدد الأسطر الفارغة أو المخفية أسفل الخط
-    invisible_space: bool = False,  # إذا True نستخدم NBSP بدل فراغ عادي
-    arabic_indent: int = 0,         # عدد الفراغات قبل النص العربي
-    english_indent: int = 0         # عدد الفراغات قبل النص الإنجليزي
+    underline_length: int | None = None,
+    extra_lines: int = 0,
+    invisible_space: bool = False,
+    arabic_indent: int = 0,
+    english_indent: int = 0
 ) -> str:
     """
-    نسخة محسّنة:
-    - تضيف خطًا سفليًا ثابت الطول وموسّطًا.
-    - تعالج مشكلة محاذاة النصوص العربية (RTL misalignment).
-    - تضيف أسطر فارغة أو مخفية أسفل الخط للتحكم في التباعد.
-    - تضيف إمكانية تحديد عدد المسافات قبل النص العربي والإنجليزي.
+    ✅ النسخة الأصلية المحسّنة:
+    - تعرض العنوان داخل سطر مركزي أنيق بإيموجي.
+    - تضيف خطًا سفليًا بنفس عرض أكبر زر في الكيبورد.
+    - تتعامل مع النصوص العربية والإنجليزية بانسيابية.
     """
 
     NBSP = "\u00A0"
-    RLM = "\u200F"   # Right-to-Left Mark
-    LRM = "\u200E"   # Left-to-Right Mark
-    RLE = "\u202B"   # Right-to-Left Embedding
-    PDF = "\u202C"   # Pop Directional Formatting
+    RLM = "\u200F"
+    LRM = "\u200E"
+    RLE = "\u202B"
+    PDF = "\u202C"
 
     import re
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # 👇 هنا نضيف المسافات (قبل الإيموجي)
+    # تحديد نوع الفراغات
+    indent_spaces = NBSP * (arabic_indent if is_arabic else english_indent)
+
+    # بناء العنوان الكامل مع الإيموجي والمحاذاة اللغوية
     if is_arabic:
-        indent_spaces = NBSP * arabic_indent
         full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        indent_spaces = NBSP * english_indent
         full_title = f"{indent_spaces}{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
-    # حساب العرض
+    # حساب العرض المستهدف بناءً على أكبر زر
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
+
+    # إضافة padding حول العنوان ليظهر مركزيًا
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    # محاذاة
     if align.lower() == "left":
         pad_left = 0
-        pad_right = max(0, target_width - title_width)
     elif align.lower() == "right":
         pad_right = 0
-        pad_left = max(0, target_width - title_width)
 
-    # إزاحة يدوية
     if manual_shift != 0:
         pad_left = max(0, pad_left + manual_shift)
         pad_right = max(0, pad_right - manual_shift) if manual_shift > 0 else max(0, pad_right + abs(manual_shift))
 
-    # سطر العنوان
+    # ⚡️ سطر العنوان
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    # الخط السفلي
+    # ⚡️ سطر الخط السفلي بنفس الطول المتناسب مع الأزرار
     underline_line = ""
     if underline_enabled:
+        if underline_length is None:
+            underline_length = max(target_width, title_width)
         line = underline_char * underline_length
         diff = max(0, target_width - underline_length)
         pad_left_line = diff // 2
         pad_right_line = diff - pad_left_line
         underline_line = f"\n{NBSP * pad_left_line}{line}{NBSP * pad_right_line}"
 
-    # الأسطر الإضافية تحت الخط
+    # الأسطر الإضافية أسفل الخط
     extra_section = ""
     if extra_lines > 0:
         spacer = NBSP if invisible_space else ""
         extra_section = ("\n" + spacer) * extra_lines
 
     return centered_line + underline_line + extra_section
-
 
 # ===============================
 # 1. /start → اختيار اللغة
