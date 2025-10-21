@@ -487,7 +487,7 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
                 email=context.user_data["registration"]["email"],
                 phone=context.user_data["registration"]["phone"],
                 telegram_id=user.id,
-                telegram_username=user.username
+                telegram_username=user.username,
                 lang=reg.get("lang", "ar")
             )
         except Exception:
