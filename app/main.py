@@ -383,28 +383,49 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, context, lang)
         return
 
-    # إذا نقر المستخدم على زر "نسخ الصفقات" (بالعربية أو الإنجليزية) نبدأ عملية التسجيل
+    # ✅ عند الضغط على زر "نسخ الصفقات"
     if query.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
-        # نحفظ حالة التسجيل
         context.user_data["registration"] = {"lang": lang}
         context.user_data["reg_state"] = "awaiting_name"
 
         if lang == "ar":
-            text = "فضلاً أدخل اسمك الكامل:" 
-            back_label = "🔙 إلغاء"
+            title = "من فضلك أدخل البيانات"
+            prompt = "فضلاً أدخل اسمك الكامل:"
+            back_label = "🔙 الرجوع للقائمة السابقة"
+            header_emoji_for_lang = HEADER_EMOJI
         else:
-            text = "Please enter your full name:"
-            back_label = "🔙 Cancel"
+            title = "Please enter your data"
+            prompt = "Please enter your full name:"
+            back_label = "🔙 Back to previous menu"
+            header_emoji_for_lang = "✨"
 
-        keyboard = [[InlineKeyboardButton(back_label, callback_data="cancel_reg")]]
+        # 👇 إنشاء عنوان منسق باستخدام build_header_html
+        labels = [back_label]
+        header = build_header_html(
+            title,
+            labels,
+            header_emoji=header_emoji_for_lang,
+            underline_enabled=True,
+            underline_length=25,
+            underline_min=20,
+            underline_char="━",
+            arabic_indent=1 if lang == "ar" else 0,
+        )
+
+        keyboard = [[InlineKeyboardButton(back_label, callback_data="back_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        # 👇 عرض العنوان الجديد مع زر الرجوع
         try:
-            await query.edit_message_text(text, reply_markup=reply_markup)
+            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=reply_markup)
+            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+
+        # 👇 ثم بعد العنوان اطلب من المستخدم إدخال الاسم
+        await context.bot.send_message(chat_id=query.message.chat_id, text=prompt)
         return
 
+    # باقي الكود كما هو 👇
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -431,13 +452,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options = data[lang]
         title = data[f"title_{lang}"]
 
-        # إضافة زر الرجوع ضمن الملصقات لتأثير العرض/قياس العرض
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
 
-        # تخصيص إيموجي العنوان بحسب اللغة
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
-
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
@@ -456,9 +474,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
 
-# ===============================
-# 5. معالجة الرسائل أثناء التسجيل (اسم - ايميل - هاتف)
-# ===============================
 # ===============================
 # 5. معالجة الرسائل أثناء التسجيل (اسم - ايميل - هاتف)
 # ===============================
