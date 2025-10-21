@@ -435,6 +435,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ===============================
 # 5. معالجة الرسائل أثناء التسجيل (اسم - ايميل - هاتف)
 # ===============================
+# ===============================
+# 5. معالجة الرسائل أثناء التسجيل (اسم - ايميل - هاتف)
+# ===============================
 async def registration_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if not msg or not msg.text:
@@ -447,7 +450,7 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
     state = context.user_data.get("reg_state")
     text = msg.text.strip()
 
-    # إلغاء بسيط: المستخدم أرسل كلمة إلغاء
+    # إلغاء بسيط
     if text.lower() in ("cancel", "إلغاء", "الغاء"):
         context.user_data.pop("registration", None)
         context.user_data.pop("reg_state", None)
@@ -456,6 +459,7 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
         await show_main_sections(update, context, lang)
         return
 
+    # 👇 المرحلة الأولى: الاسم
     if state == "awaiting_name":
         context.user_data["registration"]["name"] = text
         context.user_data["reg_state"] = "awaiting_email"
@@ -463,6 +467,7 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
         await msg.reply_text(prompt)
         return
 
+    # 👇 المرحلة الثانية: البريد الإلكتروني
     if state == "awaiting_email":
         if not EMAIL_RE.match(text):
             await msg.reply_text("بريد إلكتروني غير صالح. حاول مرة أخرى:" if reg.get("lang") == "ar" else "Invalid email. Try again:")
@@ -473,7 +478,8 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
         await msg.reply_text(prompt)
         return
 
-        if state == "awaiting_phone":
+    # 👇 المرحلة الثالثة: رقم الهاتف
+    if state == "awaiting_phone":
         if not PHONE_RE.match(text):
             await msg.reply_text("رقم هاتف غير صالح. حاول مرة أخرى:" if reg.get("lang") == "ar" else "Invalid phone number. Try again:")
             return
@@ -495,15 +501,9 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
 
         lang = reg.get("lang", "ar")
 
-        # بعد التسجيل بنجاح، عرض زر واحد فقط
-        if lang == "ar":
-            button_label = "✅ تم التسجيل بنجاح! اضغط للاستمرار"
-            callback_data = "after_registration_continue"
-        else:
-            button_label = "✅ Registration successful! Tap to continue"
-            callback_data = "after_registration_continue"
-
-        keyboard = [[InlineKeyboardButton(button_label, callback_data=callback_data)]]
+        # بعد التسجيل بنجاح
+        button_label = "✅ تم التسجيل بنجاح! اضغط للاستمرار" if lang == "ar" else "✅ Registration successful! Tap to continue"
+        keyboard = [[InlineKeyboardButton(button_label, callback_data="after_registration_continue")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await msg.reply_text(button_label, reply_markup=reply_markup)
@@ -512,7 +512,6 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
         context.user_data.pop("registration", None)
         context.user_data.pop("reg_state", None)
         return
-
 
 # -------------------------------
 # معالجة إلغاء التسجيل بالزر
