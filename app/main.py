@@ -264,10 +264,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         if update.message:
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-
-# ===============================
-# 2. الأقسام الرئيسية
-# ===============================
+# -------------------------------
+# عرض الأقسام الرئيسية (Main Sections)
+# -------------------------------
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
         return
@@ -275,17 +274,17 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     query = update.callback_query
     await query.answer()
 
-    # استخدم إيموجي مختلف لتمييز اللغة بصريًا
+    # 👇 استخدم إيموجي مختلف حسب اللغة
     header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
 
+    # 👇 إعداد الأقسام
     if lang == "ar":
         sections = [
             ("💹 تداول الفوركس", "forex_main"),
             ("💻 خدمات البرمجة", "dev_main"),
             ("🤝 طلب وكالة YesFX", "agency_main"),
         ]
-        labels = [name for name, _ in sections]
-        header = build_header_html("الأقسام الرئيسية", labels, header_emoji=header_emoji_for_lang)
+        title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
         sections = [
@@ -293,18 +292,43 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
             ("💻 Programming Services", "dev_main"),
             ("🤝 YesFX Partnership", "agency_main"),
         ]
-        labels = [name for name, _ in sections]
-        header = build_header_html("Main Sections", labels, header_emoji=header_emoji_for_lang)
+        title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
 
+    # 👇 بناء قائمة الأزرار
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # 👇 بناء العنوان بنفس تنسيق "خدمات البرمجة"
+    labels = [name for name, _ in sections] + [back_button[0]]
+    header = build_header_html(
+        title,
+        labels,
+        header_emoji=header_emoji_for_lang,
+        underline_enabled=True,
+        underline_char="━",
+        underline_length=25,
+        underline_min=17,
+        arabic_indent=1 if lang == "ar" else 0,
+    )
+
+    # 👇 إرسال الرسالة
     try:
-        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await query.edit_message_text(
+            header,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
     except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=header,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
 
 # ===============================
 # 3. اختيار اللغة
@@ -533,8 +557,11 @@ async def cancel_registration_callback(update: Update, context: ContextTypes.DEF
 async def after_registration_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # نحاول معرفة اللغة — أولاً من بيانات المستخدم ثم من اللغة الافتراضية
     lang = context.user_data.get("lang", "ar")
 
+    # تخصيص الوسائط حسب اللغة
     if lang == "ar":
         title = "اختر الوسيط"
         brokers = [
@@ -542,6 +569,7 @@ async def after_registration_continue(update: Update, context: ContextTypes.DEFA
             ("🏦 Tickmill", "https://t.me/ZoozFX")
         ]
         back_label = "🔙 الرجوع للقائمة الرئيسية"
+        header_emoji_for_lang = "✨"
     else:
         title = "Choose your broker"
         brokers = [
@@ -549,18 +577,30 @@ async def after_registration_continue(update: Update, context: ContextTypes.DEFA
             ("🏦 Tickmill", "https://t.me/ZoozFX")
         ]
         back_label = "🔙 Back to main menu"
+        header_emoji_for_lang = "✨"
 
-    keyboard = [
-        [InlineKeyboardButton(name, url=url)] for name, url in brokers
-    ]
+    # بناء الأزرار
+    keyboard = [[InlineKeyboardButton(name, url=url)] for name, url in brokers]
     keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+    # تحسين مظهر العنوان عبر build_header_html
     labels = [b[0] for b in brokers] + [back_label]
-    header = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
+    header = build_header_html(
+        title,
+        labels,
+        header_emoji=header_emoji_for_lang,
+        underline_enabled=True,
+        underline_length=25,
+        underline_min=20,
+        underline_char="━",
+        arabic_indent=1 if lang == "ar" else 0,
+    )
 
-    await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+    try:
+        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+    except Exception:
+        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 # ===============================
 # Handlers
