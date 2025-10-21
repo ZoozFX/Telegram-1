@@ -20,13 +20,13 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import sessionmaker
 
 # -------------------------------
-# إعداد السجلات
+# Logging
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -------------------------------
-# قاعدة البيانات - نموذج المشتركين
+# DB model
 # -------------------------------
 SessionLocal = sessionmaker(bind=engine)
 
@@ -43,18 +43,18 @@ class Subscriber(Base):
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
-# إعدادات عامة
+# Settings / env
 # -------------------------------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # eg https://your-app.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-app.onrender.com
+# WEBAPP_URL can be set directly, otherwise it will be derived from WEBHOOK_URL + /webapp
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
-
 if not WEBAPP_URL:
-    logger.warning("⚠️ WEBAPP_URL not set — set WEBAPP_URL env var to your public webapp URL (e.g. https://your-app.onrender.com/webapp).")
+    logger.warning("⚠️ WEBAPP_URL not set — WebApp button may not work without a public URL.")
 
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
@@ -64,7 +64,7 @@ HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
 
 # -------------------------------
-# Utilities: إزالة الإيموجي وقياس العرض
+# Helpers: emoji removal / display width
 # -------------------------------
 def remove_emoji(text: str) -> str:
     out = []
@@ -114,7 +114,7 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# build_header_html (محسّن)
+# build_header_html
 # -------------------------------
 def build_header_html(
     title: str,
@@ -137,7 +137,6 @@ def build_header_html(
         indent_spaces = NBSP * arabic_indent
         full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        indent_spaces = ""
         full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
     title_width = display_width(remove_emoji(full_title))
@@ -159,7 +158,7 @@ def build_header_html(
     return centered_line + underline_line
 
 # -------------------------------
-# REST: قائمة المشتركين
+# REST: list subscribers
 # -------------------------------
 @app.get("/subscribers")
 def get_subscribers():
@@ -184,7 +183,7 @@ def get_subscribers():
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # -------------------------------
-# حفظ مشترك
+# Save subscriber helper
 # -------------------------------
 def save_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegram_id: int = None, telegram_username: str = None) -> None:
     try:
@@ -204,13 +203,13 @@ def save_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegra
         logger.exception("Failed to save subscriber: %s", e)
 
 # -------------------------------
-# Regex للتحقق
+# Validation regex (server-side)
 # -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 
 # ===============================
-# /start + الأقسام (كما في كودك الأصلي)
+# Start & main sections
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -286,53 +285,68 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_sections(update, context, lang)
 
 # ===============================
-# صفحة WebApp (HTML) — يتم فتحها داخل Telegram
+# WebApp page (renders Arabic or English based on query param ?lang=ar|en)
 # ===============================
 @app.get("/webapp")
-def webapp_form():
-    """
-    صفحة الـ WebApp: ترسل POST إلى /webapp/submit مباشرة لضمان الحفظ في DB.
-    تستخدم Telegram.WebApp.initDataUnsafe.user للحصول على telegram user info عند توفرها.
-    """
+def webapp_form(request: Request):
+    # determine page language from query param (fallback to 'ar')
+    lang = (request.query_params.get("lang") or "ar").lower()
+    is_ar = lang == "ar"
+
+    # Texts depending on language
+    page_title = "🧾 من فضلك أكمل بياناتك" if is_ar else "🧾 Please complete your data"
+    name_label = "الاسم" if is_ar else "Full name"
+    email_label = "البريد الإلكتروني" if is_ar else "Email"
+    phone_label = "رقم الهاتف (مع رمز الدولة)" if is_ar else "Phone (with country code)"
+    submit_label = "إرسال" if is_ar else "Submit"
+    close_label = "إغلاق" if is_ar else "Close"
+    sending_msg = "تم الإرسال. سيتم إغلاق النافذة..." if is_ar else "Sent — window will close..."
+    invalid_conn = "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
+
+    # direction and rtl style for Arabic
+    dir_attr = "rtl" if is_ar else "ltr"
+    text_align = "right" if is_ar else "left"
+    input_dir = "rtl" if is_ar else "ltr"
+
     html = f"""
     <!doctype html>
-    <html lang="en">
+    <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
     <head>
       <meta charset="utf-8"/>
       <meta name="viewport" content="width=device-width,initial-scale=1"/>
       <title>Registration Form</title>
       <style>
-        body{{font-family: Arial, Helvetica, sans-serif; padding:16px; background:#f7f7f7;}}
+        body{{font-family: Arial, Helvetica, sans-serif; padding:16px; background:#f7f7f7; direction:{dir_attr};}}
         .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white; box-shadow:0 4px 12px rgba(0,0,0,0.08)}}
-        label{{display:block;margin-top:12px;font-weight:600}}
-        input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:6px;font-size:16px}}
+        label{{display:block;margin-top:12px;font-weight:600;text-align:{text_align}}}
+        input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:6px;font-size:16px;direction:{input_dir}}}
         .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
         .btn-primary{{background:#1E90FF;color:white}}
-        .btn-ghost{{background:transparent;border:1px solid #ccc'}}
-        .small{{font-size:13px;color:#666;margin-top:6px}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .small{{font-size:13px;color:#666;margin-top:6px;text-align:{text_align}}}
       </style>
     </head>
     <body>
       <div class="card">
-        <h2>🧾 من فضلك أكمل بياناتك</h2>
-        <label>الاسم / Full name</label>
-        <input id="name" placeholder="e.g. Ahmed Ali / أحمد علي" />
-        <label>البريد الإلكتروني / Email</label>
+        <h2 style="text-align:{text_align}">{page_title}</h2>
+        <label style="text-align:{text_align}">{name_label} / { 'Name' if is_ar else '' }</label>
+        <input id="name" placeholder="{ 'مثال: أحمد علي' if is_ar else 'e.g. Ahmed Ali' }" />
+        <label style="text-align:{text_align}">{email_label}</label>
         <input id="email" type="email" placeholder="you@example.com" />
-        <label>رقم الهاتف / Phone (with country code)</label>
+        <label style="text-align:{text_align}">{phone_label}</label>
         <input id="phone" placeholder="+20123 456 7890" />
-        <div class="small">البيانات تُرسل مباشرة للبوت بعد الضغط على إرسال. / Data will be sent to the bot.</div>
-        <div style="margin-top:12px;">
-          <button class="btn btn-primary" id="submit">إرسال / Submit</button>
-          <button class="btn btn-ghost" id="close">إغلاق</button>
+        <div class="small">{ 'البيانات تُرسل مباشرة للبوت بعد الضغط على إرسال.' if is_ar else 'Data will be sent to the bot.' }</div>
+        <div style="margin-top:12px;text-align:{text_align};">
+          <button class="btn btn-primary" id="submit">{submit_label}</button>
+          <button class="btn btn-ghost" id="close">{close_label}</button>
         </div>
-        <div id="status" class="small" style="margin-top:10px;color:#b00"></div>
+        <div id="status" class="small" style="margin-top:10px;color:#b00;text-align:{text_align}"></div>
       </div>
 
       <script src="https://telegram.org/js/telegram-web-app.js"></script>
       <script>
-        const tg = window.Telegram.WebApp;
-        try {{ tg.expand(); }} catch(e){{/* ignore if not available */}}
+        const tg = window.Telegram.WebApp || {{}};
+        try {{ tg.expand(); }} catch(e){{ /* ignore */ }}
         const statusEl = document.getElementById('status');
 
         function validateEmail(email) {{
@@ -344,21 +358,25 @@ def webapp_form():
           return re.test(String(phone));
         }}
 
+        // determine lang from query param if present
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageLang = (urlParams.get('lang') || '{ "ar" if is_ar else "en" }').toLowerCase();
+
         async function submitForm() {{
           const name = document.getElementById('name').value.trim();
           const email = document.getElementById('email').value.trim();
           const phone = document.getElementById('phone').value.trim();
 
           if (!name || name.length < 2) {{
-            statusEl.textContent = 'الاسم قصير جدًا / Name is too short';
+            statusEl.textContent = '{ "الاسم قصير جدًا / Name is too short" if is_ar else "Name is too short" }';
             return;
           }}
           if (!validateEmail(email)) {{
-            statusEl.textContent = 'بريد إلكتروني غير صالح / Invalid email';
+            statusEl.textContent = '{ "بريد إلكتروني غير صالح / Invalid email" if is_ar else "Invalid email" }';
             return;
           }}
           if (!validatePhone(phone)) {{
-            statusEl.textContent = 'رقم هاتف غير صالح / Invalid phone';
+            statusEl.textContent = '{ "رقم هاتف غير صالح / Invalid phone" if is_ar else "Invalid phone" }';
             return;
           }}
 
@@ -368,7 +386,8 @@ def webapp_form():
             name,
             email,
             phone,
-            tg_user: initUser
+            tg_user: initUser,
+            lang: pageLang
           }};
 
           try {{
@@ -380,14 +399,16 @@ def webapp_form():
             const data = await resp.json();
             if (resp.ok) {{
               statusEl.style.color = 'green';
-              statusEl.textContent = data.message || 'تم الإرسال. سيتم إغلاق النافذة قريبًا / Sent';
-              // إغلاق النافذة بعد ثواني قليلة
-              try {{ setTimeout(()=>tg.close(), 800); }} catch(e){{ /* ignore */ }}
+              statusEl.textContent = data.message || '{sending_msg}';
+              // close the webapp after short delay
+              try {{ setTimeout(()=>tg.close(), 700); }} catch(e){{ /* ignore */ }}
+              // also send small notification via sendData (optional)
+              try {{ tg.sendData(JSON.stringify({{ status: 'sent', lang: pageLang }})); }} catch(e){{}}
             }} else {{
-              statusEl.textContent = data.error || 'فشل الإرسال';
+              statusEl.textContent = data.error || '{invalid_conn}';
             }}
           }} catch (e) {{
-            statusEl.textContent = 'فشل في الاتصال بالخادم: ' + e.message;
+            statusEl.textContent = '{invalid_conn}: ' + e.message;
           }}
         }}
 
@@ -400,19 +421,16 @@ def webapp_form():
     return HTMLResponse(content=html, status_code=200)
 
 # ===============================
-# نقطة نهاية لاستقبال البيانات مباشرة من WebApp (POST)
+# POST endpoint: receive form submission from WebApp
 # ===============================
 @app.post("/webapp/submit")
 async def webapp_submit(payload: dict = Body(...)):
-    """
-    يستقبل JSON من صفحة webapp ويقوم بالتحقق وحفظ السجل في DB.
-    المتوقَّع: { name, email, phone, tg_user? }
-    """
     try:
         name = (payload.get("name") or "").strip()
         email = (payload.get("email") or "").strip()
         phone = (payload.get("phone") or "").strip()
         tg_user = payload.get("tg_user") or {}
+        page_lang = (payload.get("lang") or "").lower() or None
 
         # server-side validation
         if not name or len(name) < 2:
@@ -422,11 +440,14 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # determine language
+        # determine language: prefer page_lang, else infer from tg_user, else default 'ar'
         lang = "ar"
-        lang_code = tg_user.get("language_code") if isinstance(tg_user, dict) else None
-        if lang_code and str(lang_code).startswith("en"):
-            lang = "en"
+        if page_lang in ("ar", "en"):
+            lang = page_lang
+        else:
+            lang_code = tg_user.get("language_code") if isinstance(tg_user, dict) else None
+            if lang_code and str(lang_code).startswith("en"):
+                lang = "en"
 
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
@@ -434,35 +455,30 @@ async def webapp_submit(payload: dict = Body(...)):
         # Save to DB
         save_subscriber(name=name, email=email, phone=phone, lang=lang, telegram_id=telegram_id, telegram_username=telegram_username)
 
-        # If we have telegram_id, send a message to the user with updated buttons
+        # Send message to user (if we have telegram_id)
         if telegram_id:
             try:
-                # prepare header + keyboard:
                 if lang == "ar":
-                    header_title = "✅ لقد أكملت التسجيل"
-                    brokers_title = "اختر الوسيط"
+                    header_title = "✅ تم حفظ بياناتك"
+                    brokers_title = "اختر وسيطك الآن"
                     back_label = "🔙 الرجوع للقائمة الرئيسية"
                 else:
-                    header_title = "✅ Registration completed"
-                    brokers_title = "Choose your broker"
+                    header_title = "✅ Your data has been saved"
+                    brokers_title = "Choose your broker now"
                     back_label = "🔙 Back to main menu"
 
-                # message 1: replace the previous button idea by informing user
                 header = build_header_html(header_title, [back_label], header_emoji=HEADER_EMOJI, underline_length=20, underline_min=12, arabic_indent=1 if lang=="ar" else 0)
 
-                # keyboard: الصف الأول زر "لقد أكملت التسجيل" (callback) — للتحقق عند الضغط (خيارياً)
-                # الصف الثاني: أزرار الوسطاء كروابط
                 keyboard = [
-                    [InlineKeyboardButton("✅ " + ("لقد أكملت التسجيل" if lang=="ar" else "I've completed registration"), callback_data="registration_confirmed")],
                     [
                         InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-                        InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX"),
+                        InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")
                     ],
                     [InlineKeyboardButton(back_label, callback_data="back_main")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                # send the message to the user (this will appear in chat, replacing original is not always possible)
+                # send message to user
                 await application.bot.send_message(chat_id=telegram_id, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             except Exception:
                 logger.exception("Failed to send post-registration message to user")
@@ -473,7 +489,7 @@ async def webapp_submit(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 # ===============================
-# تعديل menu_handler: زر يفتح WebApp
+# menu_handler: build WebApp URL with lang param
 # ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -514,7 +530,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = []
         if WEBAPP_URL:
-            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=WEBAPP_URL))])
+            # attach lang param so webapp renders in correct language
+            url_with_lang = f"{WEBAPP_URL}?lang={lang}"
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
         else:
             fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
             keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
@@ -528,7 +546,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    # باقي المنطق كما كان
+    # fallback for other sections
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -578,7 +596,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
 
 # ===============================
-# Handler احتياطي: استقبال web_app data (fallback) إن وصل عبر message.web_app_data
+# Fallback: handle message.web_app_data if Telegram provides it
 # ===============================
 async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -596,7 +614,9 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     name = payload.get("name", "").strip()
     email = payload.get("email", "").strip()
     phone = payload.get("phone", "").strip()
-    lang = context.user_data.get("lang", "ar")
+    # prefer payload lang if present
+    page_lang = (payload.get("lang") or "").lower()
+    lang = "ar" if page_lang not in ("en",) else "en"
 
     if not name or len(name) < 2:
         await msg.reply_text("⚠️ الاسم قصير جدًا." if lang == "ar" else "⚠️ Name is too short.")
@@ -626,7 +646,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     except Exception:
         pass
 
-    # عرض الوسطاء بعد الحفظ (fallback)
+    # show brokers
     try:
         if lang == "ar":
             title = "اختر الوسيط"
@@ -635,56 +655,29 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
             title = "Choose your broker"
             back_label = "🔙 Back to main menu"
 
-        keyboard = [[InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-                     InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")],
-                    [InlineKeyboardButton(back_label, callback_data="back_main")]]
-
+        keyboard = [
+            [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
+             InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")],
+            [InlineKeyboardButton(back_label, callback_data="back_main")]
+        ]
         header = build_header_html(title, ["Oneroyall", "Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_length=25, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
         await msg.reply_text(header, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
         pass
 
 # ===============================
-# Handler للزر "لقد اكملت التسجيل"
-# ===============================
-async def registration_confirmed_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    lang = context.user_data.get("lang", "ar")
-    # نتحقق سريعًا إن كان المستخدم موجودًا في DB
-    try:
-        db = SessionLocal()
-        user_row = db.query(Subscriber).filter(Subscriber.telegram_id == query.from_user.id).first()
-        db.close()
-        if user_row:
-            msg = "✅ تم التحقق — أنت مسجل بالفعل. اختر وسيطك أدناه." if lang == "ar" else "✅ Verified — you're already registered. Choose your broker below."
-        else:
-            msg = "⚠️ لم نجد تسجيلًا مرتبطًا بحسابك. إذا أرسلت النموذج من قبل فربما فشل الحفظ. حاول مرة أخرى." if lang == "ar" else "⚠️ No registration found for your account. If you submitted the form earlier it might have failed. Try again."
-    except Exception:
-        logger.exception("Error verifying registration")
-        msg = "✅ تم (عملية تحقق فشل داخليًا لكن البيانات قد تكون محفوظة)." if lang == "ar" else "✅ Checked (internal verification failed but data may be saved)."
-
-    # نرسل رسالة تأكيد (أو نحدث الرسالة الحالية)
-    try:
-        await query.edit_message_text(msg)
-    except Exception:
-        await query.message.reply_text(msg)
-
-# ===============================
-# تسجيل المعالجات (handlers)
+# Handlers registration
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-# handler لزر التحقق "لقد اكملت التسجيل"
-application.add_handler(CallbackQueryHandler(registration_confirmed_handler, pattern="^registration_confirmed$"))
-# web_app fallback handler (قبل handlers النصية العامة)
+# web_app fallback handler (should be before the general text handlers)
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-# handler للنصوص العامة (احتياطي)
+# keep a placeholder for general text handlers if you need them
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 
 # ===============================
-# Webhook setup
+# Webhook
 # ===============================
 @app.get("/")
 def root():
