@@ -47,7 +47,7 @@ Base.metadata.create_all(bind=engine)
 # -------------------------------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-app.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # eg https://your-app.onrender.com
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
 if not TOKEN:
@@ -64,7 +64,7 @@ HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
 
 # -------------------------------
-# مساعدة: إزلة الايموجي وقياس العرض
+# Utilities: إزالة الإيموجي وقياس العرض
 # -------------------------------
 def remove_emoji(text: str) -> str:
     out = []
@@ -114,7 +114,7 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# build_header_html
+# build_header_html (محسّن)
 # -------------------------------
 def build_header_html(
     title: str,
@@ -308,7 +308,7 @@ def webapp_form():
         input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:6px;font-size:16px}}
         .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
         .btn-primary{{background:#1E90FF;color:white}}
-        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc'}}
         .small{{font-size:13px;color:#666;margin-top:6px}}
       </style>
     </head>
@@ -332,7 +332,7 @@ def webapp_form():
       <script src="https://telegram.org/js/telegram-web-app.js"></script>
       <script>
         const tg = window.Telegram.WebApp;
-        tg.expand();
+        try {{ tg.expand(); }} catch(e){{/* ignore if not available */}}
         const statusEl = document.getElementById('status');
 
         function validateEmail(email) {{
@@ -362,7 +362,6 @@ def webapp_form():
             return;
           }}
 
-          // احصل على بيانات المستخدم من initDataUnsafe (إن وجدت)
           const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
 
           const payload = {{
@@ -373,7 +372,6 @@ def webapp_form():
           }};
 
           try {{
-            // إرسال مباشر إلى الخادم (أضمن وأكثر موثوقية من الاعتماد على message.web_app_data فقط)
             const resp = await fetch(window.location.origin + '/webapp/submit', {{
               method: 'POST',
               headers: {{ 'Content-Type': 'application/json' }},
@@ -382,9 +380,9 @@ def webapp_form():
             const data = await resp.json();
             if (resp.ok) {{
               statusEl.style.color = 'green';
-              statusEl.textContent = data.message || 'تم الإرسال. يمكنك إغلاق النافذة / Sent';
-              // إبلاغ Telegram client (اختياري)
-              try {{ tg.sendData(JSON.stringify({{status: 'sent'}})); }} catch(e){{ /* ignore */ }}
+              statusEl.textContent = data.message || 'تم الإرسال. سيتم إغلاق النافذة قريبًا / Sent';
+              // إغلاق النافذة بعد ثواني قليلة
+              try {{ setTimeout(()=>tg.close(), 800); }} catch(e){{ /* ignore */ }}
             }} else {{
               statusEl.textContent = data.error || 'فشل الإرسال';
             }}
@@ -424,19 +422,51 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # لغة المستخدم (محاولة استنتاج من tg_user.language_code)
+        # determine language
         lang = "ar"
         lang_code = tg_user.get("language_code") if isinstance(tg_user, dict) else None
-        if lang_code and lang_code.startswith("en"):
+        if lang_code and str(lang_code).startswith("en"):
             lang = "en"
 
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
 
-        # حفظ في DB
+        # Save to DB
         save_subscriber(name=name, email=email, phone=phone, lang=lang, telegram_id=telegram_id, telegram_username=telegram_username)
 
-        # رجع رسالة نجاح
+        # If we have telegram_id, send a message to the user with updated buttons
+        if telegram_id:
+            try:
+                # prepare header + keyboard:
+                if lang == "ar":
+                    header_title = "✅ لقد أكملت التسجيل"
+                    brokers_title = "اختر الوسيط"
+                    back_label = "🔙 الرجوع للقائمة الرئيسية"
+                else:
+                    header_title = "✅ Registration completed"
+                    brokers_title = "Choose your broker"
+                    back_label = "🔙 Back to main menu"
+
+                # message 1: replace the previous button idea by informing user
+                header = build_header_html(header_title, [back_label], header_emoji=HEADER_EMOJI, underline_length=20, underline_min=12, arabic_indent=1 if lang=="ar" else 0)
+
+                # keyboard: الصف الأول زر "لقد أكملت التسجيل" (callback) — للتحقق عند الضغط (خيارياً)
+                # الصف الثاني: أزرار الوسطاء كروابط
+                keyboard = [
+                    [InlineKeyboardButton("✅ " + ("لقد أكملت التسجيل" if lang=="ar" else "I've completed registration"), callback_data="registration_confirmed")],
+                    [
+                        InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
+                        InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX"),
+                    ],
+                    [InlineKeyboardButton(back_label, callback_data="back_main")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                # send the message to the user (this will appear in chat, replacing original is not always possible)
+                await application.bot.send_message(chat_id=telegram_id, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            except Exception:
+                logger.exception("Failed to send post-registration message to user")
+
         return JSONResponse(content={"message": "Saved successfully."})
     except Exception as e:
         logger.exception("Error in webapp_submit: %s", e)
@@ -460,7 +490,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
         context.user_data["registration"] = {"lang": lang}
         if lang == "ar":
-            title = "من فضلك أدخل البيانات"
+            title = "من فضلك ادخل البيانات"
             back_label = "🔙 الرجوع للقائمة السابقة"
             open_label = "📝 افتح نموذج التسجيل"
             header_emoji_for_lang = HEADER_EMOJI
@@ -596,15 +626,61 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     except Exception:
         pass
 
+    # عرض الوسطاء بعد الحفظ (fallback)
+    try:
+        if lang == "ar":
+            title = "اختر الوسيط"
+            back_label = "🔙 الرجوع للقائمة الرئيسية"
+        else:
+            title = "Choose your broker"
+            back_label = "🔙 Back to main menu"
+
+        keyboard = [[InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
+                     InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")],
+                    [InlineKeyboardButton(back_label, callback_data="back_main")]]
+
+        header = build_header_html(title, ["Oneroyall", "Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_length=25, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
+        await msg.reply_text(header, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+    except Exception:
+        pass
+
+# ===============================
+# Handler للزر "لقد اكملت التسجيل"
+# ===============================
+async def registration_confirmed_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    lang = context.user_data.get("lang", "ar")
+    # نتحقق سريعًا إن كان المستخدم موجودًا في DB
+    try:
+        db = SessionLocal()
+        user_row = db.query(Subscriber).filter(Subscriber.telegram_id == query.from_user.id).first()
+        db.close()
+        if user_row:
+            msg = "✅ تم التحقق — أنت مسجل بالفعل. اختر وسيطك أدناه." if lang == "ar" else "✅ Verified — you're already registered. Choose your broker below."
+        else:
+            msg = "⚠️ لم نجد تسجيلًا مرتبطًا بحسابك. إذا أرسلت النموذج من قبل فربما فشل الحفظ. حاول مرة أخرى." if lang == "ar" else "⚠️ No registration found for your account. If you submitted the form earlier it might have failed. Try again."
+    except Exception:
+        logger.exception("Error verifying registration")
+        msg = "✅ تم (عملية تحقق فشل داخليًا لكن البيانات قد تكون محفوظة)." if lang == "ar" else "✅ Checked (internal verification failed but data may be saved)."
+
+    # نرسل رسالة تأكيد (أو نحدث الرسالة الحالية)
+    try:
+        await query.edit_message_text(msg)
+    except Exception:
+        await query.message.reply_text(msg)
+
 # ===============================
 # تسجيل المعالجات (handlers)
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
+# handler لزر التحقق "لقد اكملت التسجيل"
+application.add_handler(CallbackQueryHandler(registration_confirmed_handler, pattern="^registration_confirmed$"))
 # web_app fallback handler (قبل handlers النصية العامة)
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-# handler للنصوص العامة إن رغبت (أبقيته placeholder هنا)
+# handler للنصوص العامة (احتياطي)
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 
 # ===============================
@@ -618,7 +694,6 @@ def root():
 async def webhook(request: Request):
     try:
         data = await request.json()
-        # سجّل التحديث الوارد (للتشخيص إن احتجت)
         logger.debug("Incoming update: %s", data)
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
