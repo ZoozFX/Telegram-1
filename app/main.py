@@ -553,7 +553,7 @@ async def webapp_submit(payload: dict = Body(...)):
             back_label = "🔙 الرجوع لتداول الفوركس"
             edit_label = "✏️ تعديل بياناتي"
         else:
-            header_title = "🎉 Congrats — your data was saved"
+            header_title = "🎉 Congrats"
             brokers_title = "Choose your broker now"
             back_label = "🔙 Back to Forex"
             edit_label = "✏️ Edit my data"
@@ -708,7 +708,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 back_label = "🔙 الرجوع لتداول الفوركس"
                 edit_label = "✏️ تعديل بياناتي"
             else:
-                header_title = "🎉 Congrats — your data was saved"
+                header_title = "🎉 Congrats"
                 brokers_title = "Choose your broker now"
                 back_label = "🔙 Back to Forex"
                 edit_label = "✏️ Edit my data"
@@ -859,7 +859,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         back_label = "🔙 الرجوع لتداول الفوركس"
         edit_label = "✏️ تعديل بياناتي"
     else:
-        header_title = "🎉 Congrats — your data was saved"
+        header_title = "🎉 Congrats"
         brokers_title = "Choose your broker now"
         back_label = "🔙 Back to Forex"
         edit_label = "✏️ Edit my data"
