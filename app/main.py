@@ -1,4 +1,3 @@
-# (ملف البوت الكامل — ضع هذا مكان ملفك الحالي)
 import os
 import re
 import json
@@ -22,13 +21,13 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import sessionmaker
 
 # -------------------------------
-# Logging
+# إعداد السجلات
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -------------------------------
-# DB model
+# نموذج المشتركين و DB
 # -------------------------------
 SessionLocal = sessionmaker(bind=engine)
 
@@ -45,7 +44,7 @@ class Subscriber(Base):
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
-# Settings / env
+# إعدادات عامة
 # -------------------------------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
@@ -63,6 +62,9 @@ app = FastAPI()
 SIDE_MARK = "◾"
 HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
+
+# طول الخط الثابت الذي طلبته — نستخدمه في جميع العناوين
+FIXED_UNDERLINE_LENGTH = 25
 
 # -------------------------------
 # In-memory mapping: telegram_id -> (chat_id, message_id)
@@ -120,8 +122,7 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# build_header_html (محسّن)
-# إذا underline_length=None => يتكيف تلقائياً مع عرض الأزرار (target_width)
+# build_header_html (مُحدَّث) — يلتزم بطول خط ثابت FIXED_UNDERLINE_LENGTH
 # -------------------------------
 def build_header_html(
     title: str,
@@ -130,7 +131,6 @@ def build_header_html(
     header_emoji: str = "💥💥",
     underline_min: int = 25,
     underline_enabled: bool = True,
-    underline_length: Optional[int] = None,
     underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
@@ -150,12 +150,10 @@ def build_header_html(
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
 
-    # auto underline length if not provided
-    if underline_length is None:
-        actual_underline_length = target_width
-    else:
-        actual_underline_length = max(underline_length, target_width)
+    # التزام بطول خط ثابت كما طلبت
+    actual_underline_length = FIXED_UNDERLINE_LENGTH
 
+    # نحسب الحشوة بحيث يبقى السطر في المنتصف بالنسبة إلى target_width
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
@@ -165,7 +163,7 @@ def build_header_html(
     underline_line = ""
     if underline_enabled:
         line = underline_char * actual_underline_length
-        # center line under target_width
+        # لو كان target_width أكبر من طول الخط الثابت، نضيف حشوة لتوسيطه
         diff = max(0, target_width - actual_underline_length)
         pad_left_line = diff // 2
         pad_right_line = diff - pad_left_line
@@ -250,7 +248,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 
 # ===============================
-# start & main sections
+# /start + main sections
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -261,7 +259,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
-    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI, underline_length=None)
+    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
 
     if update.callback_query:
         query = update.callback_query
@@ -308,7 +306,6 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         header_emoji=header_emoji_for_lang,
         underline_enabled=True,
         underline_char="━",
-        underline_length=None,
         underline_min=17,
         arabic_indent=1 if lang == "ar" else 0,
     )
@@ -447,7 +444,7 @@ def webapp_form(request: Request):
             const data = await resp.json();
             if (resp.ok) {{
               statusEl.style.color = 'green';
-              statusEl.textContent = data.message || '{sending_msg}';
+              statusEl.textContent = data.message || '{ "تم الإرسال. سيتم إغلاق النافذة..." if is_ar else "Sent — window will close..." }';
               try {{ setTimeout(()=>tg.close(), 700); }} catch(e){{ /* ignore */ }}
               try {{ tg.sendData(JSON.stringify({{ status: 'sent', lang: pageLang }})); }} catch(e){{}}
             }} else {{
@@ -501,7 +498,7 @@ async def webapp_submit(payload: dict = Body(...)):
         # Save or update
         result = save_or_update_subscriber(name=name, email=email, phone=phone, lang=lang, telegram_id=telegram_id, telegram_username=telegram_username)
 
-        # Prepare congrats screen (consistent formatting)
+        # Prepare congrats screen (consistent formatting & FIXED_UNDERLINE_LENGTH used)
         if lang == "ar":
             header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
             brokers_title = "اختر وسيطك الآن"
@@ -514,7 +511,7 @@ async def webapp_submit(payload: dict = Body(...)):
             edit_label = "✏️ Edit my data"
 
         labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_length=None, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
+        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
 
         # Build keyboard:
         keyboard = [
@@ -551,7 +548,7 @@ async def webapp_submit(payload: dict = Body(...)):
                         edited = True
                         FORM_MESSAGES.pop(int(telegram_id), None)
                     except Exception:
-                        logger.exception("Failed to edit original form message; will send fallback message.")
+                        logger.exception("Failed to edit original form message; will send a fallback message.")
                 if not edited:
                     await application.bot.send_message(chat_id=telegram_id, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             except Exception:
@@ -572,7 +569,8 @@ async def webapp_submit(payload: dict = Body(...)):
 
 # ===============================
 # menu_handler: عند الضغط على "نسخ الصفقات" نتحقق من حالة التسجيل أولاً
-# ================================
+# وإذا كان المستخدم مسجلاً نعرض شاشة "مبروك" مباشرة
+# -------------------------------
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -604,7 +602,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 edit_label = "✏️ Edit my data"
 
             labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
-            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_length=None, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
+            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
 
             keyboard = [
                 [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
@@ -663,9 +661,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             labels,
             header_emoji=header_emoji_for_lang,
             underline_enabled=True,
-            underline_length=None,  # auto
             underline_min=20,
-            underline_char="━",
             arabic_indent=1 if lang == "ar" else 0,
         )
 
@@ -698,7 +694,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.exception("Failed to show webapp button to user.")
         return
 
-    # fallback for other sections
+    # باقي المنطق كما كان
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -729,7 +725,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         labels = options + [back_label]
 
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
-        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_length=None)
+        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -811,7 +807,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         edit_label = "✏️ Edit my data"
 
     labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
-    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_length=None, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
+    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
          InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
@@ -858,7 +854,7 @@ application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Rege
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 
 # ===============================
-# Webhook & startup/shutdown
+# Webhook setup
 # ===============================
 @app.get("/")
 def root():
