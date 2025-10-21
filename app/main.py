@@ -61,6 +61,7 @@ app = FastAPI()
 
 HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
+# FIXED underline length used across all headers (enforced)
 FIXED_UNDERLINE_LENGTH = 25
 
 # -------------------------------
@@ -131,6 +132,11 @@ def build_header_html(
     underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
+    """Builds a unified HTML header for both Arabic and English sections.
+
+    Important: the underline length is fixed using FIXED_UNDERLINE_LENGTH to ensure
+    a consistent visual across all section headers.
+    """
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
@@ -146,6 +152,7 @@ def build_header_html(
 
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
+    # enforce fixed underline length from module-level constant
     actual_underline_length = FIXED_UNDERLINE_LENGTH
 
     space_needed = max(0, target_width - title_width)
@@ -786,10 +793,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # fallback: generic selected service
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
+    # Use build_header_html to ensure unified header formatting (fixed underline length enforced)
+    labels_for_header = [q.data]
+    header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", underline_min=20, arabic_indent=1 if lang=="ar" else 0)
     try:
-        await q.edit_message_text(f"🔹 {placeholder}: {q.data}\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
+        await q.edit_message_text(header_box + f"\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(chat_id=q.message.chat_id, text=f"🔹 {placeholder}: {q.data}\n\n{details}", disable_web_page_preview=True)
+        await context.bot.send_message(chat_id=q.message.chat_id, text=header_box + f"\n\n{details}", disable_web_page_preview=True)
 
 # ===============================
 # web_app_message_handler fallback
