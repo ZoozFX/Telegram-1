@@ -89,9 +89,9 @@ def get_subscribers():
                 "name": s.name,
                 "email": s.email,
                 "phone": s.phone,
-                "lang": s.lang,
+                "telegram_username": s.telegram_username,
                 "telegram_id": s.telegram_id,
-                "telegram_username": s.telegram_username
+                "lang": s.lang
             }
             for s in subs
         ])
@@ -326,9 +326,10 @@ def save_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegra
             name=name,
             email=email,
             phone=phone,
-            lang=lang,
+            telegram_username=telegram_username,
             telegram_id=telegram_id,
-            telegram_username=telegram_username
+            lang=lang
+            
         )
         db.add(sub)
         db.commit()
