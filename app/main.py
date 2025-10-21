@@ -3,7 +3,7 @@ import re
 import json
 import logging
 import unicodedata
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from urllib.parse import urlencode, quote_plus
 from fastapi import FastAPI, Request, Body
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -21,13 +21,13 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import sessionmaker
 
 # -------------------------------
-# إعداد السجلات
+# logging
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -------------------------------
-# نموذج المشتركين و DB
+# DB model
 # -------------------------------
 SessionLocal = sessionmaker(bind=engine)
 
@@ -44,11 +44,11 @@ class Subscriber(Base):
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
-# إعدادات عامة
+# settings & app
 # -------------------------------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-app.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
 if not TOKEN:
@@ -59,20 +59,18 @@ if not WEBAPP_URL:
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
-SIDE_MARK = "◾"
 HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
-
-# طول الخط الثابت الذي طلبته — نستخدمه في جميع العناوين
 FIXED_UNDERLINE_LENGTH = 25
 
 # -------------------------------
-# In-memory mapping: telegram_id -> (chat_id, message_id)
+# FORM_MESSAGES mapping:
+# telegram_id -> dict with chat_id, message_id, origin (callback_data or label), lang (language of that message)
 # -------------------------------
-FORM_MESSAGES: dict[int, Tuple[int, int]] = {}
+FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
 
 # -------------------------------
-# Helpers: emoji removal / display width
+# helpers: emoji removal / display width
 # -------------------------------
 def remove_emoji(text: str) -> str:
     out = []
@@ -122,14 +120,13 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# build_header_html (مُحدَّث) — يلتزم بطول خط ثابت FIXED_UNDERLINE_LENGTH
+# consistent header builder (all titles use the same system)
 # -------------------------------
 def build_header_html(
     title: str,
     keyboard_labels: List[str],
-    side_mark: str = "◾",
-    header_emoji: str = "💥💥",
-    underline_min: int = 25,
+    header_emoji: str = HEADER_EMOJI,
+    underline_min: int = 20,
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
@@ -149,21 +146,16 @@ def build_header_html(
 
     title_width = display_width(remove_emoji(full_title))
     target_width = max(max_button_width(keyboard_labels), underline_min)
-
-    # التزام بطول خط ثابت كما طلبت
     actual_underline_length = FIXED_UNDERLINE_LENGTH
 
-    # نحسب الحشوة بحيث يبقى السطر في المنتصف بالنسبة إلى target_width
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
-
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     underline_line = ""
     if underline_enabled:
         line = underline_char * actual_underline_length
-        # لو كان target_width أكبر من طول الخط الثابت، نضيف حشوة لتوسيطه
         diff = max(0, target_width - actual_underline_length)
         pad_left_line = diff // 2
         pad_right_line = diff - pad_left_line
@@ -172,33 +164,7 @@ def build_header_html(
     return centered_line + underline_line
 
 # -------------------------------
-# REST: list subscribers
-# -------------------------------
-@app.get("/subscribers")
-def get_subscribers():
-    try:
-        db = SessionLocal()
-        subs = db.query(Subscriber).all()
-        db.close()
-        return JSONResponse(content=[
-            {
-                "id": s.id,
-                "name": s.name,
-                "email": s.email,
-                "phone": s.phone,
-                "telegram_username": s.telegram_username,
-                "telegram_id": s.telegram_id,
-                "lang": s.lang
-            }
-            for s in subs
-        ])
-    except Exception as e:
-        logger.exception("Failed to fetch subscribers")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-# -------------------------------
-# Save or update subscriber (upsert by telegram_id if present)
-# returns "created" or "updated"
+# DB helpers
 # -------------------------------
 def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegram_id: int = None, telegram_username: str = None) -> str:
     try:
@@ -210,13 +176,13 @@ def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar
                 existing.email = email
                 existing.phone = phone
                 existing.telegram_username = telegram_username
-                # ✅ تأكد دائمًا من تحديث اللغة عند التعديل
+                # always update language if provided
                 if lang:
                     existing.lang = lang
                 db.commit()
                 db.close()
                 return "updated"
-        # إذا لم يكن موجود، أنشئ مشترك جديد
+        # insert new
         sub = Subscriber(
             name=name,
             email=email,
@@ -244,13 +210,77 @@ def get_subscriber_by_telegram_id(tg_id: int) -> Optional[Subscriber]:
         return None
 
 # -------------------------------
-# Validation regex
+# helpers for form-message references
+# -------------------------------
+def save_form_ref(tg_id: int, chat_id: int, message_id: int, origin: str = "", lang: str = "ar"):
+    try:
+        FORM_MESSAGES[int(tg_id)] = {"chat_id": int(chat_id), "message_id": int(message_id), "origin": origin, "lang": lang}
+    except Exception:
+        logger.exception("Failed to save form ref")
+
+def get_form_ref(tg_id: int) -> Optional[Dict[str, Any]]:
+    return FORM_MESSAGES.get(int(tg_id))
+
+def clear_form_ref(tg_id: int):
+    try:
+        FORM_MESSAGES.pop(int(tg_id), None)
+    except Exception:
+        logger.exception("Failed to clear form ref")
+
+# -------------------------------
+# validation regex
 # -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 
+# -------------------------------
+# small helper to send or edit a "congrats / brokers" message and save ref
+# -------------------------------
+async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_title: str, back_label: str, edit_label: str, lang: str, reply_to_chat_id: Optional[int]=None, reply_to_message_id: Optional[int]=None):
+    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
+    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
+
+    keyboard = [
+        [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
+         InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
+    ]
+
+    # add edit button if possible (prefill params)
+    if telegram_id and WEBAPP_URL:
+        params = {"lang": lang, "edit": "1"}
+        # prefill values are filled by the caller when needed (they may pass name/email/phone via URL if desired)
+        url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+        keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # try edit existing message if reference exists
+    edited = False
+    ref = get_form_ref(telegram_id)
+    if ref:
+        try:
+            await application.bot.edit_message_text(text=header + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            edited = True
+            clear_form_ref(telegram_id)
+        except Exception:
+            logger.exception("Failed to edit referenced message in present_brokers_for_user")
+
+    # if not edited, send new message and save its ref
+    if not edited:
+        try:
+            target_chat = telegram_id if telegram_id else reply_to_chat_id
+            if target_chat:
+                sent = await application.bot.send_message(chat_id=target_chat, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                try:
+                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
+                except Exception:
+                    logger.exception("Could not save form message reference after sending congrats.")
+        except Exception:
+            logger.exception("Failed to send brokers message to user (present_brokers_for_user).")
+
 # ===============================
-# /start + main sections
+# /start + menu / language flows
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -262,14 +292,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
-
     if update.callback_query:
-        query = update.callback_query
-        await query.answer()
+        q = update.callback_query
+        await q.answer()
         try:
-            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
         if update.message:
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
@@ -277,63 +306,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
         return
-    query = update.callback_query
-    await query.answer()
-    header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+    q = update.callback_query
+    await q.answer()
     if lang == "ar":
-        sections = [
-            ("💹 تداول الفوركس", "forex_main"),
-            ("💻 خدمات البرمجة", "dev_main"),
-            ("🤝 طلب وكالة YesFX", "agency_main"),
-        ]
+        sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
-        sections = [
-            ("💹 Forex Trading", "forex_main"),
-            ("💻 Programming Services", "dev_main"),
-            ("🤝 YesFX Partnership", "agency_main"),
-        ]
+        sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main"), ("🤝 YesFX Partnership", "agency_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     labels = [name for name, _ in sections] + [back_button[0]]
-    header = build_header_html(
-        title,
-        labels,
-        header_emoji=header_emoji_for_lang,
-        underline_enabled=True,
-        underline_char="━",
-        underline_min=17,
-        arabic_indent=1 if lang == "ar" else 0,
-    )
-
+    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=17, arabic_indent=1 if lang == "ar" else 0)
     try:
-        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    lang = "ar" if query.data == "lang_ar" else "en"
+    q = update.callback_query
+    await q.answer()
+    lang = "ar" if q.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
     await show_main_sections(update, context, lang)
 
 # ===============================
-# WebApp page — supports edit prefill via query params
+# WebApp page (unchanged behavior except small cleanup)
 # ===============================
 @app.get("/webapp")
 def webapp_form(request: Request):
     lang = (request.query_params.get("lang") or "ar").lower()
     is_ar = lang == "ar"
     edit_mode = request.query_params.get("edit") == "1"
-
-    # prefill values from query string (url-decoded automatically)
     pre_name = request.query_params.get("name") or ""
     pre_email = request.query_params.get("email") or ""
     pre_phone = request.query_params.get("phone") or ""
@@ -344,14 +352,12 @@ def webapp_form(request: Request):
     phone_label = "رقم الهاتف (مع رمز الدولة)" if is_ar else "Phone (with country code)"
     submit_label = "إرسال" if is_ar else "Submit"
     close_label = "إغلاق" if is_ar else "Close"
-    sending_msg = "تم الإرسال. سيتم إغلاق النافذة..." if is_ar else "Sent — window will close..."
     invalid_conn = "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
 
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
     input_dir = "rtl" if is_ar else "ltr"
 
-    # If edit_mode and prevalues exist, fill them into 'value' attributes
     name_value = f'value="{pre_name}"' if pre_name else ""
     email_value = f'value="{pre_email}"' if pre_email else ""
     phone_value = f'value="{pre_phone}"' if pre_phone else ""
@@ -369,7 +375,7 @@ def webapp_form(request: Request):
         label{{display:block;margin-top:12px;font-weight:600;text-align:{text_align}}}
         input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:6px;font-size:16px;direction:{input_dir}}}
         .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
-        .btn-primary{{Background:#1E90FF;color:white}}
+        .btn-primary{{background:#1E90FF;color:white}}
         .btn-ghost{{background:transparent;border:1px solid #ccc}}
         .small{{font-size:13px;color:#666;margin-top:6px;text-align:{text_align}}}
       </style>
@@ -485,23 +491,33 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # determine language
-        lang = "ar"
+        # determine language from payload if explicitly provided, else fallback to tg_user language
+        lang = None
         if page_lang in ("ar", "en"):
             lang = page_lang
         else:
             lang_code = tg_user.get("language_code") if isinstance(tg_user, dict) else None
-            if lang_code and str(lang_code).startswith("en"):
-                lang = "en"
+            lang = "en" if (lang_code and str(lang_code).startswith("en")) else "ar"
 
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
 
-        # Save or update
+        # Save or update subscriber (this will update stored lang too)
         result = save_or_update_subscriber(name=name, email=email, phone=phone, lang=lang, telegram_id=telegram_id, telegram_username=telegram_username)
 
-        # Prepare congrats screen (consistent formatting & FIXED_UNDERLINE_LENGTH used)
-        if lang == "ar":
+        # Determine the display language for the congrats screen:
+        # 1) Prefer explicit page_lang if provided,
+        # 2) Else if we have a saved form reference, prefer its lang (so we return to same-language menu),
+        # 3) Else use lang detected above.
+        display_lang = lang
+        ref = get_form_ref(telegram_id) if telegram_id else None
+        if page_lang in ("ar", "en"):
+            display_lang = page_lang
+        elif ref and ref.get("lang"):
+            display_lang = ref.get("lang")
+
+        # Prepare congrats strings based on display_lang
+        if display_lang == "ar":
             header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
             brokers_title = "اختر وسيطك الآن"
             back_label = "🔙 الرجوع لتداول الفوركس"
@@ -512,59 +528,44 @@ async def webapp_submit(payload: dict = Body(...)):
             back_label = "🔙 Back to Forex"
             edit_label = "✏️ Edit my data"
 
-        labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
-
-        # Build keyboard:
+        # Build keyboard for the message (include edit button with prefill if possible)
         keyboard = [
             [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
              InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
         ]
 
-        # If we have telegram_id we can include an edit button which opens WebApp with pre-filled data
         if telegram_id and WEBAPP_URL:
-            # prefill params (url-encode)
-            params = {
-                "lang": lang,
-                "edit": "1",
-                "name": name,
-                "email": email,
-                "phone": phone
-            }
+            params = {"lang": display_lang, "edit": "1", "name": name, "email": email, "phone": phone}
             url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
             keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
-        # back to forex button
         keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # Try to edit original form message if we have reference
+        # Try to edit original form message if we have reference (and prefer to edit)
         edited = False
-        if telegram_id and int(telegram_id) in FORM_MESSAGES:
-            chat_id, message_id = FORM_MESSAGES[int(telegram_id)]
+        if telegram_id and ref:
             try:
-                await application.bot.edit_message_text(text=header + f"\n\n{brokers_title}", chat_id=chat_id, message_id=message_id, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                await application.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
+                                                       chat_id=ref["chat_id"], message_id=ref["message_id"],
+                                                       reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
-                # cleanup saved reference after successful edit
-                FORM_MESSAGES.pop(int(telegram_id), None)
+                clear_form_ref(telegram_id)
             except Exception:
                 logger.exception("Failed to edit original form message; will send a fallback message.")
 
         if not edited:
-            # send new message to the user (and save its reference so future edits return to same message)
             if telegram_id:
                 try:
-                    sent = await application.bot.send_message(chat_id=telegram_id, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                    try:
-                        FORM_MESSAGES[int(telegram_id)] = (sent.chat_id, sent.message_id)
-                    except Exception:
-                        logger.exception("Could not save form message reference after sending congrats.")
+                    sent = await application.bot.send_message(chat_id=telegram_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                    # save reference for future edits (so subsequent edits return to same message)
+                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
                 except Exception:
                     logger.exception("Failed to send congrats message to user.")
             else:
                 logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
 
-        # return created/updated message
+        # return appropriate response to WebApp
         if result == "created":
             return JSONResponse(content={"message": "Saved successfully."})
         elif result == "updated":
@@ -576,133 +577,22 @@ async def webapp_submit(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 # ===============================
-# menu_handler: عند الضغط على "نسخ الصفقات" نتحقق من حالة التسجيل أولاً
-# وإذا كان المستخدم مسجلاً نعرض شاشة "مبروك" مباشرة
-# -------------------------------
+# menu_handler
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
     lang = context.user_data.get("lang", "ar")
 
-    if query.data == "back_language":
+    if q.data == "back_language":
         await start(update, context)
         return
-    if query.data == "back_main":
+    if q.data == "back_main":
         await show_main_sections(update, context, lang)
         return
 
-    if query.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
-        # check persistent registration
-        existing = get_subscriber_by_telegram_id(user_id)
-        if existing:
-            # show congrats screen directly (consistent formatting)
-            lang = existing.lang or context.user_data.get("lang", "ar")
-            if lang == "ar":
-                header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
-                brokers_title = "اختر وسيطك الآن"
-                back_label = "🔙 الرجوع لتداول الفوركس"
-                edit_label = "✏️ تعديل بياناتي"
-            else:
-                header_title = "🎉 Congrats — your data was saved"
-                brokers_title = "Choose your broker now"
-                back_label = "🔙 Back to Forex"
-                edit_label = "✏️ Edit my data"
-
-            labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
-            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
-
-            keyboard = [
-                [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-                 InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
-            ]
-            # add edit button with prefill
-            if WEBAPP_URL:
-                params = {
-                    "lang": lang,
-                    "edit": "1",
-                    "name": existing.name,
-                    "email": existing.email,
-                    "phone": existing.phone
-                }
-                url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-                keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
-
-            keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            try:
-                await query.edit_message_text(header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                # Save reference for future edits
-                try:
-                    FORM_MESSAGES[int(user_id)] = (query.message.chat_id, query.message.message_id)
-                except Exception:
-                    logger.exception("Could not save form message reference after showing congrats.")
-            except Exception:
-                # fallback send
-                try:
-                    sent = await context.bot.send_message(chat_id=query.message.chat_id, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                    try:
-                        FORM_MESSAGES[int(user_id)] = (sent.chat_id, sent.message_id)
-                    except Exception:
-                        logger.exception("Could not save form message reference (fallback).")
-                except Exception:
-                    logger.exception("Failed to show congrats screen for already-registered user.")
-            return
-
-        # else: not registered -> show WebApp button with back -> forex_main
-        context.user_data["registration"] = {"lang": lang}
-        if lang == "ar":
-            title = "من فضلك ادخل البيانات"
-            back_label_text = "🔙 الرجوع لتداول الفوركس"
-            open_label = "📝 افتح نموذج التسجيل"
-            header_emoji_for_lang = HEADER_EMOJI
-        else:
-            title = "Please enter your data"
-            back_label_text = "🔙 Back to Forex"
-            open_label = "📝 Open registration form"
-            header_emoji_for_lang = "✨"
-
-        labels = [open_label, back_label_text]
-        header = build_header_html(
-            title,
-            labels,
-            header_emoji=header_emoji_for_lang,
-            underline_enabled=True,
-            underline_min=20,
-            arabic_indent=1 if lang == "ar" else 0,
-        )
-
-        keyboard = []
-        if WEBAPP_URL:
-            url_with_lang = f"{WEBAPP_URL}?lang={lang}"
-            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
-        else:
-            fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
-            keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
-
-        # back goes to forex_main
-        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="forex_main")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        try:
-            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            try:
-                FORM_MESSAGES[int(user_id)] = (query.message.chat_id, query.message.message_id)
-            except Exception:
-                logger.exception("Could not save form message reference.")
-        except Exception:
-            try:
-                sent = await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                try:
-                    FORM_MESSAGES[int(user_id)] = (sent.chat_id, sent.message_id)
-                except Exception:
-                    logger.exception("Could not save form message reference (fallback).")
-            except Exception:
-                logger.exception("Failed to show webapp button to user.")
-        return
-
-    # باقي المنطق كما كان
+    # mapping for sections
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -724,35 +614,125 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
     }
 
-    if query.data in sections_data:
-        data = sections_data[query.data]
+    # If user clicked section entry (forex_main, dev_main, agency_main)
+    if q.data in sections_data:
+        data = sections_data[q.data]
         options = data[lang]
         title = data[f"title_{lang}"]
-
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
-
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
-        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
+        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-
         try:
-            await query.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            # save ref so that forms opened from here can edit this same message later
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin=q.data, lang=lang)
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=q.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
+    # If user clicked "Copy Trading" (or its Arabic label), handle registration flow
+    if q.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
+        # check persistent registration
+        existing = get_subscriber_by_telegram_id(user_id)
+        if existing:
+            # use existing.lang to display congrats screen, but prefer context.user_data if available
+            display_lang = existing.lang or context.user_data.get("lang", "ar")
+            if display_lang == "ar":
+                header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
+                brokers_title = "اختر وسيطك الآن"
+                back_label = "🔙 الرجوع لتداول الفوركس"
+                edit_label = "✏️ تعديل بياناتي"
+            else:
+                header_title = "🎉 Congrats — your data was saved"
+                brokers_title = "Choose your broker now"
+                back_label = "🔙 Back to Forex"
+                edit_label = "✏️ Edit my data"
+
+            # create keyboard and include edit button with prefill
+            keyboard = [
+                [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
+                 InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
+            ]
+
+            if WEBAPP_URL:
+                params = {
+                    "lang": display_lang,
+                    "edit": "1",
+                    "name": existing.name,
+                    "email": existing.email,
+                    "phone": existing.phone
+                }
+                url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+                keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+
+            keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            try:
+                await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                # Save reference for future edits (so edit button can return to this message)
+                save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
+            except Exception:
+                # fallback: send new message and save its reference
+                try:
+                    sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                    save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
+                except Exception:
+                    logger.exception("Failed to show congrats screen for already-registered user.")
+            return
+
+        # not registered -> show WebApp button (open form)
+        context.user_data["registration"] = {"lang": lang}
+        if lang == "ar":
+            title = "من فضلك ادخل البيانات"
+            back_label_text = "🔙 الرجوع لتداول الفوركس"
+            open_label = "📝 افتح نموذج التسجيل"
+            header_emoji_for_lang = HEADER_EMOJI
+        else:
+            title = "Please enter your data"
+            back_label_text = "🔙 Back to Forex"
+            open_label = "📝 Open registration form"
+            header_emoji_for_lang = "✨"
+
+        labels = [open_label, back_label_text]
+        header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_enabled=True, underline_min=20, arabic_indent=1 if lang == "ar" else 0)
+
+        keyboard = []
+        if WEBAPP_URL:
+            url_with_lang = f"{WEBAPP_URL}?lang={lang}"
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
+        else:
+            fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
+            keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
+
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="forex_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="open_form", lang=lang)
+        except Exception:
+            try:
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="open_form", lang=lang)
+            except Exception:
+                logger.exception("Failed to show webapp button to user.")
+        return
+
+    # fallback: generic selected service
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
     try:
-        await query.edit_message_text(f"🔹 {placeholder}: {query.data}\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
+        await q.edit_message_text(f"🔹 {placeholder}: {q.data}\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
+        await context.bot.send_message(chat_id=q.message.chat_id, text=f"🔹 {placeholder}: {q.data}\n\n{details}", disable_web_page_preview=True)
 
 # ===============================
-# Fallback: handle message.web_app_data if Telegram provides it
+# web_app_message_handler fallback
 # ===============================
 async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -802,7 +782,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     except Exception:
         pass
 
-    # build brokers screen (and allow editing)
+    # prepare brokers screen (allow editing)
     if lang == "ar":
         header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
         brokers_title = "اختر وسيطك الآن"
@@ -814,43 +794,33 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         back_label = "🔙 Back to Forex"
         edit_label = "✏️ Edit my data"
 
-    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label]
-    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
          InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
     ]
+
     user_id = getattr(msg.from_user, "id", None)
     if WEBAPP_URL and user_id:
-        # prefill with received payload
-        params = {
-            "lang": lang,
-            "edit": "1",
-            "name": name,
-            "email": email,
-            "phone": phone
-        }
+        params = {"lang": lang, "edit": "1", "name": name, "email": email, "phone": phone}
         url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
         keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     try:
-        # try to edit original form message if we have its reference
         edited = False
-        if user_id and int(user_id) in FORM_MESSAGES:
-            chat_id, message_id = FORM_MESSAGES.get(int(user_id))
+        ref = get_form_ref(user_id) if user_id else None
+        if ref:
             try:
-                await msg.bot.edit_message_text(text=header + f"\n\n{brokers_title}", chat_id=chat_id, message_id=message_id, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
-                FORM_MESSAGES.pop(int(user_id), None)
+                clear_form_ref(user_id)
             except Exception:
                 logger.exception("Failed to edit form message in fallback path")
         if not edited:
-            sent = await msg.reply_text(header + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
             try:
-                # save reference so future edits return to same message
                 if user_id:
-                    FORM_MESSAGES[int(user_id)] = (sent.chat_id, sent.message_id)
+                    save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
             except Exception:
                 logger.exception("Could not save form message reference (fallback response).")
     except Exception:
@@ -862,9 +832,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-# web_app fallback handler (قبل handlers النصية العامة)
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-# placeholder for general text handlers
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 
 # ===============================
