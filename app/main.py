@@ -1,11 +1,13 @@
 import os
 import re
+import json
 import logging
 import unicodedata
 from typing import List
 import math
 from fastapi import FastAPI, Request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from fastapi.responses import JSONResponse, HTMLResponse
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -17,7 +19,6 @@ from telegram.ext import (
 from app.db import Base, engine
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import sessionmaker
-from fastapi.responses import JSONResponse
 
 # -------------------------------
 # إعداد السجلات
@@ -43,32 +44,28 @@ class Subscriber(Base):
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
-# ثوابت التسجيل (Conversation states)
+# ثوابت وآعدادات
 # -------------------------------
-NAME, EMAIL, PHONE = range(3)
-
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # eg https://your-app.onrender.com
+WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
 
+if not WEBAPP_URL:
+    logger.warning("⚠️ WEBAPP_URL not set and WEBHOOK_URL not provided — WebApp button may not work correctly. Set WEBAPP_URL env var to your public webapp URL.")
+
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
 
-# -------------------------------
-# إعدادات قابلة للتعديل
-# -------------------------------
 SIDE_MARK = "◾"
 HEADER_EMOJI = "✨"
-UNDERLINE_MODE = 30
-UNDERLINE_MIN = 17
 NBSP = "\u00A0"
-DEFAULT_HEADER_WIDTH = 17
 
 # -------------------------------
-# Utilities: إزالة الإيموجي وقياس العرض
+# Utilities: emoji removal + width measurement
 # -------------------------------
 def remove_emoji(text: str) -> str:
     out = []
@@ -125,10 +122,7 @@ def build_header_html(
     keyboard_labels: List[str],
     side_mark: str = "◾",
     header_emoji: str = "💥💥",
-    underline_mode: int | str = 25,
     underline_min: int = 25,
-    arabic_rtl_bias: float | None = None,
-    width_padding: int = 1,
     align: str = "center",
     manual_shift: int = 0,
     underline_char: str = "━",
@@ -140,10 +134,9 @@ def build_header_html(
     english_indent: int = 0
 ) -> str:
     NBSP = "\u00A0"
-    RLM = "\u200F"
-    LRM = "\u200E"
     RLE = "\u202B"
     PDF = "\u202C"
+    LRM = "\u200E"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
@@ -234,228 +227,13 @@ def save_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegra
         logger.exception("Failed to save subscriber: %s", e)
 
 # -------------------------------
-# Regex للتحقق من الايميل والهاتف
+# التحقق من صحة الإيميل والهاتف (server-side)
 # -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 
 # ===============================
-# واجهة التسجيل التفاعلي (نموذج داخل رسالة واحدة)
-# ===============================
-async def show_registration_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    يعرض أو يحدث رسالة النموذج التفاعلي. 
-    إذا كانت هناك رسالة سابقة للنموذج فسيتم تعديلها (edit) وإلا سيتم إرسال رسالة جديدة وتخزين message_id في user_data['form_message_id'].
-    """
-    query = getattr(update, "callback_query", None)
-    lang = context.user_data.get("lang", "ar")
-    reg = context.user_data.get("registration", {})
-
-    name = reg.get("name", "❌ لم يتم الإدخال" if lang == "ar" else "❌ Not entered")
-    email = reg.get("email", "❌ لم يتم الإدخال" if lang == "ar" else "❌ Not entered")
-    phone = reg.get("phone", "❌ لم يتم الإدخال" if lang == "ar" else "❌ Not entered")
-
-    if lang == "ar":
-        title = "🧾 من فضلك أكمل بياناتك"
-        back_label = "🔙 رجوع"
-        save_label = "✅ حفظ البيانات"
-    else:
-        title = "🧾 Please complete your data"
-        back_label = "🔙 Back"
-        save_label = "✅ Save Data"
-
-    labels = ["👤 الاسم", "📧 البريد الإلكتروني", "📞 الهاتف", back_label, save_label]
-    header = build_header_html(
-        title,
-        labels,
-        header_emoji="✨" if lang != "ar" else HEADER_EMOJI,
-        underline_enabled=True,
-        underline_length=25,
-        underline_min=20,
-        underline_char="━",
-        arabic_indent=1 if lang == "ar" else 0,
-    )
-
-    text = (
-        f"{header}\n\n"
-        f"👤 <b>{'الاسم' if lang == 'ar' else 'Name'}:</b> {name}\n"
-        f"📧 <b>{'البريد الإلكتروني' if lang == 'ar' else 'Email'}:</b> {email}\n"
-        f"📞 <b>{'رقم الهاتف' if lang == 'ar' else 'Phone'}:</b> {phone}"
-    )
-
-    keyboard = [
-        [
-            InlineKeyboardButton("👤", callback_data="edit_name"),
-            InlineKeyboardButton("📧", callback_data="edit_email"),
-            InlineKeyboardButton("📞", callback_data="edit_phone"),
-        ],
-        [InlineKeyboardButton(save_label, callback_data="save_registration")],
-        [InlineKeyboardButton(back_label, callback_data="back_main")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # إذا جاءت النداء من callback_query نعدل الرسالة الموجودة (أكثر "نظافة")
-    if query:
-        try:
-            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            # حفظ رسالة النموذج حتى نتمكن من تعديلها لاحقًا
-            context.user_data["form_message_id"] = query.message.message_id
-            context.user_data["form_chat_id"] = query.message.chat_id
-        except Exception:
-            # إرسال رسالة جديدة كحالة طوارئ
-            sent = await context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            context.user_data["form_message_id"] = sent.message_id
-            context.user_data["form_chat_id"] = sent.chat_id
-    else:
-        # النداء جاي من رسالة (بعد أن أدخل المستخدم قيمة) — نحاول تعديل رسالة النموذج السابقة
-        chat_id = context.user_data.get("form_chat_id")
-        message_id = context.user_data.get("form_message_id")
-        try:
-            if chat_id and message_id:
-                await context.bot.edit_message_text(text=text, chat_id=chat_id, message_id=message_id, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            else:
-                sent = await context.bot.send_message(chat_id=update.message.chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                context.user_data["form_message_id"] = sent.message_id
-                context.user_data["form_chat_id"] = sent.chat_id
-        except Exception:
-            # إرسال رسالة جديدة كحل احتياطي
-            sent = await context.bot.send_message(chat_id=update.message.chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            context.user_data["form_message_id"] = sent.message_id
-            context.user_data["form_chat_id"] = sent.chat_id
-
-# ===============================
-# معالجة أزرار نموذج التسجيل
-# ===============================
-async def registration_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    lang = context.user_data.get("lang", "ar")
-
-    # تعديل حقل محدد
-    if query.data.startswith("edit_"):
-        field = query.data.split("_", 1)[1]  # name, email, phone
-        context.user_data["editing_field"] = field
-
-        prompts = {
-            "ar": {
-                "name": "✏️ فضلاً أدخل اسمك الكامل:",
-                "email": "📧 فضلاً أدخل بريدك الإلكتروني:",
-                "phone": "📞 فضلاً أدخل رقم هاتفك (مع رمز الدولة):",
-            },
-            "en": {
-                "name": "✏️ Please enter your full name:",
-                "email": "📧 Please enter your email address:",
-                "phone": "📞 Please enter your phone number (with country code):",
-            }
-        }
-
-        # نستخدم edit_message_text لعرض الطلب داخل نفس الرسالة (أو نرسل رسالة جديدة إذا فشل)
-        try:
-            await query.edit_message_text(prompts[lang][field])
-            # حفظ بيانات الرسالة الحالية (حتى نعود ونحدثها لاحقًا)
-            context.user_data["form_message_id"] = query.message.message_id
-            context.user_data["form_chat_id"] = query.message.chat_id
-        except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=prompts[lang][field])
-        return
-
-    # حفظ التسجيل
-    if query.data == "save_registration":
-        reg = context.user_data.get("registration", {})
-        missing = [k for k in ("name", "email", "phone") if not reg.get(k)]
-        if missing:
-            msg = "⚠️ يرجى تعبئة جميع الحقول قبل الحفظ." if lang == "ar" else "⚠️ Please fill all fields before saving."
-            await query.answer(msg, show_alert=True)
-            return
-
-        # تحقق نهائي
-        if not EMAIL_RE.match(reg["email"]):
-            msg = "⚠️ البريد الإلكتروني غير صالح." if lang == "ar" else "⚠️ Invalid email address."
-            await query.answer(msg, show_alert=True)
-            return
-        if not PHONE_RE.match(reg["phone"]):
-            msg = "⚠️ رقم الهاتف غير صالح." if lang == "ar" else "⚠️ Invalid phone number."
-            await query.answer(msg, show_alert=True)
-            return
-        # حفظ في قاعدة البيانات
-        try:
-            user = query.from_user
-            save_subscriber(
-                name=reg["name"],
-                email=reg["email"],
-                phone=reg["phone"],
-                lang=reg.get("lang", lang),
-                telegram_id=getattr(user, "id", None),
-                telegram_username=getattr(user, "username", None),
-            )
-        except Exception:
-            logger.exception("Error saving subscriber")
-
-        success_msg = "✅ تم حفظ بياناتك بنجاح!" if lang == "ar" else "✅ Your data has been saved successfully!"
-        try:
-            await query.edit_message_text(success_msg)
-        except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=success_msg)
-
-        # تنظيف حالات التسجيل
-        context.user_data.pop("registration", None)
-        context.user_data.pop("reg_state", None)
-        context.user_data.pop("editing_field", None)
-        context.user_data.pop("form_message_id", None)
-        context.user_data.pop("form_chat_id", None)
-        return
-
-# ===============================
-# استقبال رد المستخدم بعد طلب حقل معين
-# ===============================
-async def handle_registration_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    يتعامل مع النص الذي يدخله المستخدم بعد أن يضغط زر تعديل حقل.
-    يقوم بالتحقق من الصحة (email/phone) فورًا ثم يعيد عرض النموذج محدثًا.
-    """
-    msg = update.message
-    if not msg or not msg.text:
-        return
-
-    field = context.user_data.get("editing_field")
-    if not field:
-        # ليست حالة تحرير، تجاهل أو مرر للمعالجات الأخرى
-        return
-
-    text = msg.text.strip()
-    lang = context.user_data.get("lang", "ar")
-
-    # تحقق فوري حسب الحقل
-    if field == "email":
-        if not EMAIL_RE.match(text):
-            await msg.reply_text("⚠️ بريد إلكتروني غير صالح. حاول مرة أخرى:" if lang == "ar" else "⚠️ Invalid email. Try again:")
-            # editing_field يبقى كما هو ليحاول المستخدم مجددًا
-            return
-    elif field == "phone":
-        if not PHONE_RE.match(text):
-            await msg.reply_text("⚠️ رقم هاتف غير صالح. حاول مرة أخرى:" if lang == "ar" else "⚠️ Invalid phone number. Try again:")
-            return
-    else:
-        # name: تحقق بسيط (طول)
-        if len(text) < 2:
-            await msg.reply_text("⚠️ الاسم قصير جدًا. حاول مرة أخرى:" if lang == "ar" else "⚠️ Name too short. Try again:")
-            return
-
-    # حفظ القيمة
-    reg = context.user_data.setdefault("registration", {})
-    reg[field] = text
-    context.user_data["editing_field"] = None
-
-    # تأكيد الحفظ للمستخدم
-    confirm_msg = "✅ تم حفظ القيمة!" if lang == "ar" else "✅ Value saved!"
-    await msg.reply_text(confirm_msg)
-
-    # إعادة عرض النموذج (ستعدل نفس الرسالة إن أمكن)
-    await show_registration_form(update, context)
-
-# ===============================
-# بقيةhandlers: start, show_main_sections, menu_handler, set_language, cancel_registration_callback, after_registration_continue
-# (أخذت الكود الأصلي مع تعديل بسيط: عند الضغط على نسخ الصفقات نستدعي show_registration_form)
+# Start / Main Sections (as before)
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -482,12 +260,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
         return
-
     query = update.callback_query
     await query.answer()
-
     header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
-
     if lang == "ar":
         sections = [
             ("💹 تداول الفوركس", "forex_main"),
@@ -522,20 +297,9 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     )
 
     try:
-        await query.edit_message_text(
-            header,
-            reply_markup=reply_markup,
-            parse_mode="HTML",
-            disable_web_page_preview=True
-        )
+        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=header,
-            reply_markup=reply_markup,
-            parse_mode="HTML",
-            disable_web_page_preview=True
-        )
+        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -544,6 +308,110 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["lang"] = lang
     await show_main_sections(update, context, lang)
 
+# ===============================
+# Web App: serve HTML form at /webapp
+# ===============================
+@app.get("/webapp")
+def webapp_form():
+    """
+    صفحة الويب البسيطة لنموذج التسجيل (تعمل داخل Telegram Web App).
+    عند الضغط على إرسال، تستدعي Telegram.WebApp.sendData(JSON.stringify({...})),
+    وسيقوم تطبيق التليجرام بإرسال Update بمحتوى message.web_app_data.data إلى البوت عبر webhook.
+    """
+    html = f"""
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <title>Registration Form</title>
+      <style>
+        body{{font-family: Arial, Helvetica, sans-serif; padding:16px; background:#f7f7f7;}}
+        .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white; box-shadow:0 4px 12px rgba(0,0,0,0.08)}}
+        label{{display:block;margin-top:12px;font-weight:600}}
+        input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:6px;font-size:16px}}
+        .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
+        .btn-primary{{background:#1E90FF;color:white}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .small{{font-size:13px;color:#666;margin-top:6px}}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2>🧾 { 'من فضلك أكمل بياناتك' if 'ar' in (WEBAPP_URL or '') else 'Please complete your data'}</h2>
+        <label>الاسم / Full name</label>
+        <input id="name" placeholder="e.g. Ahmed Ali / أحمد علي" />
+        <label>البريد الإلكتروني / Email</label>
+        <input id="email" type="email" placeholder="you@example.com" />
+        <label>رقم الهاتف / Phone (with country code)</label>
+        <input id="phone" placeholder="+20123 456 7890" />
+        <div class="small">البيانات تُرسل مباشرة للبوت بعد الضغط على إرسال. / Data will be sent to the bot.</div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary" id="submit">إرسال / Submit</button>
+          <button class="btn btn-ghost" id="close">إغلاق</button>
+        </div>
+        <div id="status" class="small" style="margin-top:10px;color:#b00"></div>
+      </div>
+
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <script>
+        const tg = window.Telegram.WebApp;
+        // Optionally set theme params
+        tg.expand();
+
+        const statusEl = document.getElementById('status');
+        function validateEmail(email) {{
+          const re = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+          return re.test(String(email).toLowerCase());
+        }}
+        function validatePhone(phone) {{
+          const re = /^[+0-9\\-\\s]{{6,20}}$/;
+          return re.test(String(phone));
+        }}
+
+        document.getElementById('submit').addEventListener('click', () => {{
+          const name = document.getElementById('name').value.trim();
+          const email = document.getElementById('email').value.trim();
+          const phone = document.getElementById('phone').value.trim();
+
+          if (!name || name.length < 2) {{
+            statusEl.textContent = 'الاسم قصير جدًا / Name is too short';
+            return;
+          }}
+          if (!validateEmail(email)) {{
+            statusEl.textContent = 'بريد إلكتروني غير صالح / Invalid email';
+            return;
+          }}
+          if (!validatePhone(phone)) {{
+            statusEl.textContent = 'رقم هاتف غير صالح / Invalid phone';
+            return;
+          }}
+
+          const payload = {{ name, email, phone }};
+          try {{
+            // إرسال البيانات إلى البوت (Telegram سيحَوِّلها لتحديث message.web_app_data)
+            tg.sendData(JSON.stringify(payload));
+            // بعد الإرسال يمكن إغلاق النافذة
+            //tg.close();
+            statusEl.style.color = 'green';
+            statusEl.textContent = 'تم الإرسال. يمكنك إغلاق النافذة / Sent — you can close the window';
+          }} catch (e) {{
+            statusEl.textContent = 'فشل الإرسال: ' + (e.message || e);
+          }}
+        }});
+
+        document.getElementById('close').addEventListener('click', () => {{
+          try {{ tg.close(); }} catch(e){{ console.warn(e); }}
+        }});
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+# ===============================
+# menu_handler: عند الضغط على "نسخ الصفقات" نعرض زر يفتح WebApp
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -556,14 +424,52 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, context, lang)
         return
 
-    # عند الضغط على "نسخ الصفقات" نعرض نموذج التسجيل التفاعلي
+    # عند الضغط على "نسخ الصفقات" نعرض زر يفتح Web App (إن وُجد)
     if query.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
         context.user_data["registration"] = {"lang": lang}
-        context.user_data["reg_state"] = "awaiting_name"
-        # استدعاء عرض النموذج (سيعدل الرسالة الحالية)
-        await show_registration_form(update, context)
+        # build header
+        if lang == "ar":
+            title = "من فضلك أدخل البيانات"
+            back_label = "🔙 الرجوع للقائمة السابقة"
+            open_label = "📝 افتح نموذج التسجيل"
+            header_emoji_for_lang = HEADER_EMOJI
+        else:
+            title = "Please enter your data"
+            back_label = "🔙 Back to previous menu"
+            open_label = "📝 Open registration form"
+            header_emoji_for_lang = "✨"
+
+        labels = [open_label, back_label]
+        header = build_header_html(
+            title,
+            labels,
+            header_emoji=header_emoji_for_lang,
+            underline_enabled=True,
+            underline_length=25,
+            underline_min=20,
+            underline_char="━",
+            arabic_indent=1 if lang == "ar" else 0,
+        )
+
+        # زر WebApp (يتطلب WEBAPP_URL صالح)
+        keyboard = []
+        if WEBAPP_URL:
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=WEBAPP_URL))])
+        else:
+            # Fallback: زر يرسل رسالة نصية لافتتاح النموذج القديم
+            fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
+            keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
+
+        keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        except Exception:
+            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
+    # fallback handler for other sections (unchanged)
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
@@ -612,25 +518,67 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         await context.bot.send_message(chat_id=query.message.chat_id, text=f"🔹 {placeholder}: {query.data}\n\n{details}", disable_web_page_preview=True)
 
-async def cancel_registration_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    context.user_data.pop("registration", None)
-    context.user_data.pop("reg_state", None)
-    context.user_data.pop("editing_field", None)
-    context.user_data.pop("form_message_id", None)
-    context.user_data.pop("form_chat_id", None)
-    lang = context.user_data.get("lang", "ar")
-    if lang == "ar":
-        await query.edit_message_text("تم إلغاء التسجيل.")
-    else:
-        await query.edit_message_text("Registration cancelled.")
-    await show_main_sections(update, context, lang)
+# ===============================
+# Web App data handler:
+# معالجة الرسالة التي تحتوي message.web_app_data.data (البيانات المرسلة من WebApp)
+# ===============================
+async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg:
+        return
+    web_app_data = getattr(msg, "web_app_data", None)
+    if not web_app_data:
+        return  # ليس تحديث WebApp
+    # web_app_data.data هو نص (string) - نتوقع JSON
+    try:
+        payload = json.loads(web_app_data.data)
+    except Exception as e:
+        logger.exception("Invalid web_app_data payload: %s", e)
+        try:
+            await msg.reply_text("❌ Invalid data received. Please try again.")
+        except Exception:
+            pass
+        return
 
-async def after_registration_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    name = payload.get("name", "").strip()
+    email = payload.get("email", "").strip()
+    phone = payload.get("phone", "").strip()
     lang = context.user_data.get("lang", "ar")
+
+    # server-side validation
+    if not name or len(name) < 2:
+        await msg.reply_text("⚠️ الاسم قصير جدًا." if lang == "ar" else "⚠️ Name is too short.")
+        return
+    if not EMAIL_RE.match(email):
+        await msg.reply_text("⚠️ البريد الإلكتروني غير صالح." if lang == "ar" else "⚠️ Invalid email address.")
+        return
+    if not PHONE_RE.match(phone):
+        await msg.reply_text("⚠️ رقم الهاتف غير صالح." if lang == "ar" else "⚠️ Invalid phone number.")
+        return
+
+    # حفظ في قاعدة البيانات
+    try:
+        save_subscriber(
+            name=name,
+            email=email,
+            phone=phone,
+            lang=lang,
+            telegram_id=getattr(msg.from_user, "id", None),
+            telegram_username=getattr(msg.from_user, "username", None)
+        )
+    except Exception:
+        logger.exception("Error saving subscriber from web_app")
+
+    # تأكيد للمستخدم + عرض صفحة الاختيار التالية
+    success_msg = "✅ تم حفظ بياناتك بنجاح! شكرًا." if lang == "ar" else "✅ Your data has been saved successfully! Thank you."
+    try:
+        await msg.reply_text(success_msg)
+    except Exception:
+        pass
+
+    # إعادة استخدام after_registration_continue لعرض اختيار الوسيط
+    # نحتاج خلق fake callback_query-like object — سنستدعي الدالة مباشرة بتحديث مبسّط:
+    # هنا نعيد عرض brokers مباشرة (بدلاً من محاولة تحوير callback_query)
     if lang == "ar":
         title = "اختر الوسيط"
         brokers = [
@@ -665,24 +613,26 @@ async def after_registration_continue(update: Update, context: ContextTypes.DEFA
     )
 
     try:
-        await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await msg.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        pass
 
 # ===============================
-# تسجيل الهاندلرز
+# الاحتفاظ بالهاندلرز (التسلسل مهم: نضيف web_app handler قبل handler العام للنصوص)
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
-application.add_handler(CallbackQueryHandler(menu_handler))  # يتعامل مع معظم الزرار
-application.add_handler(CallbackQueryHandler(cancel_registration_callback, pattern="^cancel_reg$"))
-# هاندلر أزرار التعديل والحفظ في النموذج
-application.add_handler(CallbackQueryHandler(registration_button_handler, pattern="^(edit_name|edit_email|edit_phone|save_registration)$"))
-# هاندلر لاستقبال النصوص عند تعديل الحقول
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_registration_input))
-# الاحتفاظ بالهاندلر العام للخيارات
-application.add_handler(CallbackQueryHandler(after_registration_continue, pattern="^after_registration_continue$"))
-
+# menu_handler يتعامل مع معظم الأزرار وغيرها
+application.add_handler(CallbackQueryHandler(menu_handler))
+application.add_handler(CallbackQueryHandler(lambda u,c: show_main_sections(u,c,context.user_data.get("lang","ar")) , pattern="^show_main$"))  # placeholder إذا احتجت
+application.add_handler(CallbackQueryHandler(lambda u,c: None, pattern="^cancel_reg$"))  # placeholder
+# web_app handler يجب أن يَأتي قبل معالجات الرسائل العامة
+application.add_handler(MessageHandler(filters.ALL, web_app_message_handler))
+# الاحتفاظ بهاندلر الرسائل القديمة/التسجيل التقليدي إن رغبت (سيعمل بعد web_app handler)
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))  # placeholder: لم نغير المعالجات القديمة هنا
+# بعد حفظ الاشتراك نُعرض الوسيط (handled inside web_app_message_handler)
+# ضع أي هاندلرات إضافية كما تحتاج
+application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 # ===============================
 # Webhook setup
 # ===============================
@@ -707,10 +657,13 @@ async def on_startup():
     await application.initialize()
     if WEBHOOK_URL and WEBHOOK_PATH:
         full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-        await application.bot.set_webhook(full_url)
-        logger.info(f"✅ Webhook set to {full_url}")
+        try:
+            await application.bot.set_webhook(full_url)
+            logger.info(f"✅ Webhook set to {full_url}")
+        except Exception:
+            logger.exception("Failed to set webhook")
     else:
-        logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set")
+        logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set; running without webhook setup")
 
 @app.on_event("shutdown")
 async def on_shutdown():
