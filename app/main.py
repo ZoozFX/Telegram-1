@@ -371,6 +371,9 @@ PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 # ===============================
 # 4. الأقسام الفرعية + البدء في التسجيل عند اختيار نسخ الصفقات
 # ===============================
+# ===============================
+# 4. الأقسام الفرعية + البدء في التسجيل عند اختيار نسخ الصفقات
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -390,17 +393,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if lang == "ar":
             title = "من فضلك أدخل البيانات"
-            prompt = "فضلاً أدخل اسمك الكامل:"
+            prompt_text = "فضلاً أدخل اسمك الكامل:"
             back_label = "🔙 الرجوع للقائمة السابقة"
             header_emoji_for_lang = HEADER_EMOJI
         else:
             title = "Please enter your data"
-            prompt = "Please enter your full name:"
+            prompt_text = "Please enter your full name:"
             back_label = "🔙 Back to previous menu"
             header_emoji_for_lang = "✨"
 
-        # 👇 إنشاء عنوان منسق باستخدام build_header_html
-        labels = [back_label]
+        # 👇 إنشاء العنوان عبر build_header_html
+        labels = [prompt_text, back_label]
         header = build_header_html(
             title,
             labels,
@@ -412,20 +415,33 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             arabic_indent=1 if lang == "ar" else 0,
         )
 
+        # 👇 نضيف نص "فضلاً أدخل اسمك الكامل" أسفل العنوان مباشرة
+        final_message = f"{header}\n\n{prompt_text}"
+
         keyboard = [[InlineKeyboardButton(back_label, callback_data="back_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # 👇 عرض العنوان الجديد مع زر الرجوع
+        # 👇 عرض الرسالة المنسقة كلها في رسالة واحدة فقط
         try:
-            await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await query.edit_message_text(
+                final_message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
         except Exception:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=final_message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
 
-        # 👇 ثم بعد العنوان اطلب من المستخدم إدخال الاسم
-        await context.bot.send_message(chat_id=query.message.chat_id, text=prompt)
+        # 👇 لا نرسل رسالة جديدة منفصلة لطلب الاسم
         return
 
-    # باقي الكود كما هو 👇
+    # باقي الأقسام كما هي 👇
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
