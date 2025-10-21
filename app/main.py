@@ -18,7 +18,7 @@ from telegram.ext import (
 from app.db import Base, engine
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import sessionmaker
-
+from fastapi.responses import JSONResponse
 # -------------------------------
 # إعداد السجلات
 # -------------------------------
@@ -38,7 +38,10 @@ class Subscriber(Base):
     name = Column(String(200), nullable=False)
     email = Column(String(200), nullable=False)
     phone = Column(String(50), nullable=False)
+    telegram_username = Column(String(200), nullable=True)
+    telegram_id = Column(Integer, nullable=True)
     lang = Column(String(8), default="ar")
+
 
 # إذا لم يكن الجدول موجودًا يتم إنشاؤه
 Base.metadata.create_all(bind=engine)
@@ -68,6 +71,33 @@ UNDERLINE_MIN = 17           # 👈 الحد الأدنى للطول أيضًا 
 NBSP = "\u00A0"
 DEFAULT_HEADER_WIDTH = 17
 
+
+
+# -------------------------------
+# رابط قاعدة البيانات
+# -------------------------------
+@app.get("/subscribers")
+def get_subscribers():
+    try:
+        db = SessionLocal()
+        subs = db.query(Subscriber).all()
+        db.close()
+        # نحول النتيجة إلى JSON قابل للإرسال
+        return JSONResponse(content=[
+            {
+                "id": s.id,
+                "name": s.name,
+                "email": s.email,
+                "phone": s.phone,
+                "lang": s.lang,
+                "telegram_id": s.telegram_id,
+                "telegram_username": s.telegram_username
+            }
+            for s in subs
+        ])
+    except Exception as e:
+        logger.exception("Failed to fetch subscribers")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 # -------------------------------
 # مساعدة: إزالة الإيموجي لأغراض القياس
 # -------------------------------
@@ -289,15 +319,23 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------------------------
 # حفظ المشترك في قاعدة البيانات
 # -------------------------------
-def save_subscriber(name: str, email: str, phone: str, lang: str = "ar") -> None:
+def save_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegram_id: int = None, telegram_username: str = None) -> None:
     try:
         db = SessionLocal()
-        sub = Subscriber(name=name, email=email, phone=phone, lang=lang)
+        sub = Subscriber(
+            name=name,
+            email=email,
+            phone=phone,
+            lang=lang,
+            telegram_id=telegram_id,
+            telegram_username=telegram_username
+        )
         db.add(sub)
         db.commit()
         db.close()
     except Exception as e:
         logger.exception("Failed to save subscriber: %s", e)
+
 
 # -------------------------------
 # التحقق من صحة الإيميل والهاتف
@@ -442,10 +480,13 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
 
         # حفظ في قاعدة البيانات
         try:
+            user = update.message.from_user
             save_subscriber(
                 name=context.user_data["registration"]["name"],
                 email=context.user_data["registration"]["email"],
                 phone=context.user_data["registration"]["phone"],
+                telegram_id=user.id,
+                telegram_username=user.username
                 lang=reg.get("lang", "ar")
             )
         except Exception:
