@@ -473,13 +473,13 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
         await msg.reply_text(prompt)
         return
 
-    if state == "awaiting_phone":
+        if state == "awaiting_phone":
         if not PHONE_RE.match(text):
             await msg.reply_text("رقم هاتف غير صالح. حاول مرة أخرى:" if reg.get("lang") == "ar" else "Invalid phone number. Try again:")
             return
         context.user_data["registration"]["phone"] = text
 
-        # حفظ في قاعدة البيانات
+        # حفظ البيانات في قاعدة البيانات
         try:
             user = update.message.from_user
             save_subscriber(
@@ -494,16 +494,25 @@ async def registration_message_handler(update: Update, context: ContextTypes.DEF
             logger.exception("Error saving subscriber")
 
         lang = reg.get("lang", "ar")
-        if lang == "ar":
-            await msg.reply_text("✅ تم التسجيل بنجاح! شكرًا لك. سنتواصل معك عبر البريد أو الهاتف.")
-        else:
-            await msg.reply_text("✅ Registration successful! Thank you. We will contact you via email or phone.")
 
-        # نظف حالة التسجيل وارجع للقائمة الرئيسية
+        # بعد التسجيل بنجاح، عرض زر واحد فقط
+        if lang == "ar":
+            button_label = "✅ تم التسجيل بنجاح! اضغط للاستمرار"
+            callback_data = "after_registration_continue"
+        else:
+            button_label = "✅ Registration successful! Tap to continue"
+            callback_data = "after_registration_continue"
+
+        keyboard = [[InlineKeyboardButton(button_label, callback_data=callback_data)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await msg.reply_text(button_label, reply_markup=reply_markup)
+
+        # تنظيف الحالة
         context.user_data.pop("registration", None)
         context.user_data.pop("reg_state", None)
-        await show_main_sections(update, context, lang)
         return
+
 
 # -------------------------------
 # معالجة إلغاء التسجيل بالزر
@@ -519,6 +528,40 @@ async def cancel_registration_callback(update: Update, context: ContextTypes.DEF
     else:
         await query.edit_message_text("Registration cancelled.")
     await show_main_sections(update, context, lang)
+# -------------------------------
+# شاشة اختيار الوسيط بعد التسجيل
+# -------------------------------
+async def after_registration_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    lang = context.user_data.get("lang", "ar")
+
+    if lang == "ar":
+        title = "اختر الوسيط"
+        brokers = [
+            ("🏦 Oneroyall", "https://t.me/ZoozFX"),
+            ("🏦 Tickmill", "https://t.me/ZoozFX")
+        ]
+        back_label = "🔙 الرجوع للقائمة الرئيسية"
+    else:
+        title = "Choose your broker"
+        brokers = [
+            ("🏦 Oneroyall", "https://t.me/ZoozFX"),
+            ("🏦 Tickmill", "https://t.me/ZoozFX")
+        ]
+        back_label = "🔙 Back to main menu"
+
+    keyboard = [
+        [InlineKeyboardButton(name, url=url)] for name, url in brokers
+    ]
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+    labels = [b[0] for b in brokers] + [back_label]
+    header = build_header_html(title, labels, header_emoji=header_emoji_for_lang)
+
+    await query.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 # ===============================
 # Handlers
@@ -527,9 +570,8 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(CallbackQueryHandler(cancel_registration_callback, pattern="^cancel_reg$"))
-
-# استقبال رسائل المستخدم خلال عملية التسجيل
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, registration_message_handler))
+application.add_handler(CallbackQueryHandler(after_registration_continue, pattern="^after_registration_continue$"))
 
 # ===============================
 # Webhook setup
