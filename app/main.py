@@ -269,7 +269,7 @@ PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_title: str, back_label: str, edit_label: str, lang: str, reply_to_chat_id: Optional[int]=None, reply_to_message_id: Optional[int]=None):
     # labels for width calculation
     ar_already = "بالفعل لدي حساب بالشركة"
-    en_already = "I already have an account with the broker"
+    en_already = "I already have an account"
     already_label = ar_already if lang == "ar" else en_already
 
     labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, already_label]
@@ -671,7 +671,7 @@ async def webapp_submit(payload: dict = Body(...)):
 
         # Build keyboard for the message (include edit button with prefill if possible)
         ar_already = "بالفعل لدي حساب بالشركة"
-        en_already = "I already have an account with the broker"
+        en_already = "I already have an account"
         already_label = ar_already if display_lang == "ar" else en_already
 
         keyboard = [
@@ -843,7 +843,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 edit_label = "✏️ Edit my data"
 
             ar_already = "بالفعل لدي حساب بالشركة"
-            en_already = "I already have an account with the broker"
+            en_already = "I already have an account"
             already_label = ar_already if display_lang == "ar" else en_already
 
             # create keyboard and include edit button with prefill
@@ -994,7 +994,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         edit_label = "✏️ Edit my data"
 
     ar_already = "بالفعل لدي حساب بالشركة"
-    en_already = "I already have an account with the broker"
+    en_already = "I already have an account"
     already_label = ar_already if lang == "ar" else en_already
 
     keyboard = [
