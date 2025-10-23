@@ -659,13 +659,13 @@ async def webapp_submit(payload: dict = Body(...)):
 
         # Prepare congrats strings based on display_lang
         if display_lang == "ar":
-            header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
-            brokers_title = "اختر وسيطك الآن"
+            header_title = "🎉 مبروك — اختر وسيطك الآن"
+            brokers_title = ""
             back_label = "🔙 الرجوع لتداول الفوركس"
             edit_label = "✏️ تعديل بياناتي"
         else:
-            header_title = "🎉 Congrats"
-            brokers_title = "Choose your broker now"
+            header_title = "🎉 Congrats — Choose your broker now"
+            brokers_title = ""
             back_label = "🔙 Back to Forex"
             edit_label = "✏️ Edit my data"
 
@@ -832,13 +832,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # prefer current interface language (context.user_data) over DB stored lang
             display_lang = context.user_data.get("lang") or existing.lang or "ar"
             if display_lang == "ar":
-                header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
-                brokers_title = "اختر وسيطك الآن"
+                header_title = "🎉 مبروك — اختر وسيطك الآن"
+                brokers_title = ""
                 back_label = "🔙 الرجوع لتداول الفوركس"
                 edit_label = "✏️ تعديل بياناتي"
             else:
-                header_title = "🎉 Congrats"
-                brokers_title = "Choose your broker now"
+                header_title = "🎉 Congrats — Choose your broker now"
+                brokers_title = ""
                 back_label = "🔙 Back to Forex"
                 edit_label = "✏️ Edit my data"
 
@@ -983,13 +983,13 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
 
     # prepare brokers screen (allow editing)
     if lang == "ar":
-        header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
-        brokers_title = "اختر وسيطك الآن"
+        header_title = "🎉 مبروك — اختر وسيطك الآن"
+        brokers_title = ""
         back_label = "🔙 الرجوع لتداول الفوركس"
         edit_label = "✏️ تعديل بياناتي"
     else:
-        header_title = "🎉 Congrats"
-        brokers_title = "Choose your broker now"
+        header_title = "🎉 Congrats — Choose your broker now"
+        brokers_title = ""
         back_label = "🔙 Back to Forex"
         edit_label = "✏️ Edit my data"
 
