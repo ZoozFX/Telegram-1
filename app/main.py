@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 from app.db import Base, engine
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.orm import sessionmaker
 
 # -------------------------------
@@ -41,6 +41,16 @@ class Subscriber(Base):
     telegram_id = Column(Integer, nullable=True)
     lang = Column(String(8), default="ar")
 
+class TradingAccount(Base):
+    __tablename__ = "trading_accounts"
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, nullable=False)
+    account_number = Column(String(100), nullable=False)
+    password = Column(String(200), nullable=False)
+    server = Column(String(100), nullable=False)
+    broker = Column(String(100), nullable=True)
+    created_at = Column(String(50), nullable=True)
+
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
@@ -50,6 +60,7 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
+TRADING_ACCOUNT_WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/trading_account" if WEBHOOK_URL else None)
 
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
@@ -216,6 +227,38 @@ def get_subscriber_by_telegram_id(tg_id: int) -> Optional[Subscriber]:
         logger.exception("DB lookup failed")
         return None
 
+def save_trading_account(telegram_id: int, account_number: str, password: str, server: str, broker: str = None) -> str:
+    try:
+        db = SessionLocal()
+        # Check if account already exists for this user
+        existing = db.query(TradingAccount).filter(TradingAccount.telegram_id == telegram_id).first()
+        if existing:
+            existing.account_number = account_number
+            existing.password = password
+            existing.server = server
+            if broker:
+                existing.broker = broker
+            db.commit()
+            db.close()
+            return "updated"
+        else:
+            # Insert new
+            account = TradingAccount(
+                telegram_id=telegram_id,
+                account_number=account_number,
+                password=password,
+                server=server,
+                broker=broker,
+                created_at=str(os.times().elapsed)  # Simple timestamp alternative
+            )
+            db.add(account)
+            db.commit()
+            db.close()
+            return "created"
+    except Exception as e:
+        logger.exception("Failed to save trading account: %s", e)
+        return "error"
+
 def list_subscribers(limit: int = 100) -> List[Dict[str, Any]]:
     try:
         db = SessionLocal()
@@ -252,6 +295,8 @@ def clear_form_ref(tg_id: int):
 # -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
+ACCOUNT_NUMBER_RE = re.compile(r"^[0-9]{3,20}$")
+SERVER_RE = re.compile(r"^[a-zA-Z0-9\.\-_]{2,50}$")
 
 # -------------------------------
 # small helper to send or edit a "congrats / brokers" message and save ref
@@ -266,8 +311,8 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
     header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0)
 
     keyboard = [
-        [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-         InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
+        [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+         InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
     ]
 
     # add edit button if possible (prefill params)
@@ -277,8 +322,8 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
         url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
         keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
-    # add "already have account" as callback
-    keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+    # add "already have account" as callback - UPDATED to open trading account form
+    keyboard.append([InlineKeyboardButton(already_label, callback_data="open_trading_account_form")])
 
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -306,6 +351,238 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
                     logger.exception("Could not save form message reference after sending congrats.")
         except Exception:
             logger.exception("Failed to send brokers message to user (present_brokers_for_user).")
+
+# ===============================
+# NEW: Trading Account WebApp Form
+# ===============================
+@app.get("/trading_account")
+def trading_account_form(request: Request):
+    lang = (request.query_params.get("lang") or "ar").lower()
+    is_ar = lang == "ar"
+    
+    page_title = "📊 تسجيل بيانات حساب التداول" if is_ar else "📊 Trading Account Registration"
+    account_number_label = "رقم حساب التداول" if is_ar else "Trading Account Number"
+    password_label = "كلمة السر الأساسية" if is_ar else "Main Password" 
+    server_label = "سيرفر حساب التداول" if is_ar else "Trading Account Server"
+    broker_label = "الوسيط (اختياري)" if is_ar else "Broker (optional)"
+    submit_label = "تسجيل" if is_ar else "Register"
+    close_label = "إغلاق" if is_ar else "Close"
+    invalid_conn = "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
+
+    dir_attr = "rtl" if is_ar else "ltr"
+    text_align = "right" if is_ar else "left"
+    input_dir = "ltr"  # Always LTR for account numbers and servers
+
+    html = f"""
+    <!doctype html>
+    <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <title>Trading Account Registration</title>
+      <style>
+        body{{font-family: Arial, Helvetica, sans-serif; padding:16px; background:#f7f7f7; direction:{dir_attr};}}
+        .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white; box-shadow:0 4px 12px rgba(0,0,0,0.08)}}
+        label{{display:block;margin-top:12px;font-weight:600;text-align:{text_align}}}
+        input, select{{width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:6px;font-size:16px;direction:{input_dir}}}
+        .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
+        .btn-primary{{background:#28a745;color:white}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .small{{font-size:13px;color:#666;margin-top:6px;text-align:{text_align}}}
+        .required{{color:#d00}}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2 style="text-align:{text_align}">{page_title}</h2>
+        
+        <label style="text-align:{text_align}">{account_number_label} <span class="required">*</span></label>
+        <input id="account_number" placeholder="{ 'مثال: 12345678' if is_ar else 'e.g. 12345678' }" />
+        
+        <label style="text-align:{text_align}">{password_label} <span class="required">*</span></label>
+        <input id="password" type="password" placeholder="{ 'أدخل كلمة السر' if is_ar else 'Enter password' }" />
+        
+        <label style="text-align:{text_align}">{server_label} <span class="required">*</span></label>
+        <input id="server" placeholder="{ 'مثال: ONEROYALL-LIVE' if is_ar else 'e.g. ONEROYALL-LIVE' }" />
+        
+        <label style="text-align:{text_align}">{broker_label}</label>
+        <select id="broker">
+          <option value="">{ 'اختر وسيطًا' if is_ar else 'Select a broker' }</option>
+          <option value="Oneroyall">Oneroyall</option>
+          <option value="Tickmill">Tickmill</option>
+          <option value="Other">{ 'أخرى' if is_ar else 'Other' }</option>
+        </select>
+        
+        <div class="small">{ 'سيتم حفظ بياناتك بأمان في قاعدة البيانات.' if is_ar else 'Your data will be securely saved in the database.' }</div>
+        <div style="margin-top:12px;text-align:{text_align};">
+          <button class="btn btn-primary" id="submit">{submit_label}</button>
+          <button class="btn btn-ghost" id="close">{close_label}</button>
+        </div>
+        <div id="status" class="small" style="margin-top:10px;color:#b00;text-align:{text_align}"></div>
+      </div>
+
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <script>
+        const tg = window.Telegram.WebApp || {{}} ;
+        try {{ tg.expand(); }} catch(e){{ /* ignore */ }}
+        const statusEl = document.getElementById('status');
+
+        function validateAccountNumber(account) {{
+          const re = /^[0-9]{{3,20}}$/;
+          return re.test(String(account));
+        }}
+        
+        function validateServer(server) {{
+          const re = /^[a-zA-Z0-9\.\-_]{{2,50}}$/;
+          return re.test(String(server));
+        }}
+        
+        function validatePassword(password) {{
+          return password && password.length >= 4;
+        }}
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageLang = (urlParams.get('lang') || '{ "ar" if is_ar else "en" }').toLowerCase();
+
+        async function submitForm() {{
+          const account_number = document.getElementById('account_number').value.trim();
+          const password = document.getElementById('password').value.trim();
+          const server = document.getElementById('server').value.trim();
+          const broker = document.getElementById('broker').value;
+
+          if (!validateAccountNumber(account_number)) {{
+            statusEl.textContent = '{ "رقم الحساب غير صالح / Invalid account number" if is_ar else "Invalid account number" }';
+            return;
+          }}
+          if (!validatePassword(password)) {{
+            statusEl.textContent = '{ "كلمة السر قصيرة جدًا / Password too short" if is_ar else "Password too short" }';
+            return;
+          }}
+          if (!validateServer(server)) {{
+            statusEl.textContent = '{ "اسم السيرفر غير صالح / Invalid server name" if is_ar else "Invalid server name" }';
+            return;
+          }}
+
+          const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+
+          const payload = {{
+            account_number,
+            password,
+            server,
+            broker,
+            tg_user: initUser,
+            lang: pageLang
+          }};
+
+          try {{
+            const resp = await fetch(window.location.origin + '/trading_account/submit', {{
+              method: 'POST',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify(payload)
+            }});
+            const data = await resp.json();
+            if (resp.ok) {{
+              statusEl.style.color = 'green';
+              statusEl.textContent = data.message || '{ "تم التسجيل بنجاح! سيتم إغلاق النافذة..." if is_ar else "Registered successfully! Window will close..." }';
+              try {{ setTimeout(()=>tg.close(), 1000); }} catch(e){{ /* ignore */ }}
+              try {{ tg.sendData(JSON.stringify({{ status: 'trading_account_registered', lang: pageLang }})); }} catch(e){{}}
+            }} else {{
+              statusEl.textContent = data.error || '{invalid_conn}';
+            }}
+          }} catch (e) {{
+            statusEl.textContent = '{invalid_conn}: ' + e.message;
+          }}
+        }}
+
+        document.getElementById('submit').addEventListener('click', submitForm);
+        document.getElementById('close').addEventListener('click', () => {{ try{{ tg.close(); }}catch(e){{}} }});
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+# ===============================
+# NEW: Trading Account Submit Endpoint
+# ===============================
+@app.post("/trading_account/submit")
+async def trading_account_submit(payload: dict = Body(...)):
+    try:
+        account_number = (payload.get("account_number") or "").strip()
+        password = (payload.get("password") or "").strip()
+        server = (payload.get("server") or "").strip()
+        broker = (payload.get("broker") or "").strip()
+        tg_user = payload.get("tg_user") or {}
+        page_lang = (payload.get("lang") or "").lower() or None
+
+        # validation
+        if not ACCOUNT_NUMBER_RE.match(account_number):
+            return JSONResponse(status_code=400, content={"error": "Invalid account number."})
+        if not password or len(password) < 4:
+            return JSONResponse(status_code=400, content={"error": "Password too short."})
+        if not SERVER_RE.match(server):
+            return JSONResponse(status_code=400, content={"error": "Invalid server name."})
+
+        telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
+
+        if not telegram_id:
+            return JSONResponse(status_code=400, content={"error": "Telegram user ID not found."})
+
+        # Save trading account
+        result = save_trading_account(
+            telegram_id=telegram_id,
+            account_number=account_number,
+            password=password,
+            server=server,
+            broker=broker if broker else None
+        )
+
+        # Determine display language
+        display_lang = page_lang if page_lang in ("ar", "en") else "ar"
+        
+        # Prepare success message
+        if display_lang == "ar":
+            success_title = "✅ تم تسجيل بيانات حساب التداول بنجاح"
+            success_message = "سنتواصل معك قريبًا لتأكيد الحساب ومتابعة الخطوات التالية."
+            back_label = "🔙 الرجوع للقائمة الرئيسية"
+        else:
+            success_title = "✅ Trading Account Registered Successfully"
+            success_message = "We will contact you soon to confirm your account and proceed with next steps."
+            back_label = "🔙 Back to Main Menu"
+
+        # Send success message to user
+        if telegram_id:
+            try:
+                keyboard = [[InlineKeyboardButton(back_label, callback_data="back_main")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                message_text = build_header_html(
+                    success_title, 
+                    [back_label], 
+                    header_emoji="✅", 
+                    underline_min=20, 
+                    arabic_indent=1 if display_lang=="ar" else 0
+                ) + f"\n\n{success_message}"
+                
+                await application.bot.send_message(
+                    chat_id=telegram_id,
+                    text=message_text,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+            except Exception as e:
+                logger.exception("Failed to send success message to user: %s", e)
+
+        # Return response to WebApp
+        if result in ["created", "updated"]:
+            return JSONResponse(content={"message": "Trading account saved successfully."})
+        else:
+            return JSONResponse(status_code=500, content={"error": "Failed to save trading account."})
+            
+    except Exception as e:
+        logger.exception("Error in trading_account_submit: %s", e)
+        return JSONResponse(status_code=500, content={"error": "Server error."})
 
 # ===============================
 # /start + menu / language flows
@@ -457,7 +734,7 @@ def webapp_form(request: Request):
             return;
           }}
           if (!validatePhone(phone)) {{
-            statusEl.textContent = '{ "رقم هاتف غير صالح / Invalid phone" if is_ar else "Invalid phone" }';
+            statusEl.textcontent = '{ "رقم هاتف غير صالح / Invalid phone" if is_ar else "Invalid phone" }';
             return;
           }}
 
@@ -564,8 +841,8 @@ async def webapp_submit(payload: dict = Body(...)):
         already_label = ar_already if display_lang == "ar" else en_already
 
         keyboard = [
-            [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-             InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
+            [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+             InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
         ]
 
         if telegram_id and WEBAPP_URL:
@@ -573,7 +850,8 @@ async def webapp_submit(payload: dict = Body(...)):
             url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
             keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
-        keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+        # UPDATED: Change callback to open trading account form
+        keyboard.append([InlineKeyboardButton(already_label, callback_data="open_trading_account_form")])
 
         keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -613,7 +891,7 @@ async def webapp_submit(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 # ===============================
-# menu_handler
+# menu_handler - UPDATED to handle trading account form
 # ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -622,28 +900,55 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # prefer current context language if available, else default to 'ar'
     lang = context.user_data.get("lang", "ar")
 
-    # handle "already has account" callback
-    if q.data == "already_has_account":
+    # handle "open_trading_account_form" callback - NEW
+    if q.data == "open_trading_account_form":
         # try to detect language of the message reference if present, else use context.user_data
         ref = get_form_ref(user_id)
         display_lang = lang
         if ref and ref.get("lang"):
             display_lang = ref.get("lang")
-        # craft response
+        
+        # Show WebApp button for trading account registration
         if display_lang == "ar":
-            text = "✅ تم تسجيل أنك لديك حساب بالفعل لدى الوسيط. شكرًا لك!"
-            back_label = "🔙 الرجوع لتداول الفوركس"
+            title = "📊 تسجيل بيانات حساب التداول"
+            back_label_text = "🔙 الرجوع"
+            open_label = "📝 افتح نموذج تسجيل الحساب"
         else:
-            text = "✅ Noted — you already have an account with the broker. Thank you!"
-            back_label = "🔙 Back to Forex"
-        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(back_label, callback_data="forex_main")]])
+            title = "📊 Trading Account Registration"
+            back_label_text = "🔙 Back"
+            open_label = "📝 Open Account Registration Form"
+
+        labels = [open_label, back_label_text]
+        header = build_header_html(title, labels, header_emoji="📊", underline_enabled=True, underline_min=20, arabic_indent=1 if display_lang == "ar" else 0)
+
+        keyboard = []
+        if TRADING_ACCOUNT_WEBAPP_URL:
+            url_with_lang = f"{TRADING_ACCOUNT_WEBAPP_URL}?lang={display_lang}"
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
+        else:
+            # Fallback to regular webapp URL if trading-specific URL not set
+            url_with_lang = f"{WEBAPP_URL}/trading_account?lang={display_lang}"
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
+
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="forex_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         try:
-            await q.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="trading_account_form", lang=display_lang)
         except Exception:
             try:
-                await context.bot.send_message(chat_id=q.message.chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="trading_account_form", lang=display_lang)
             except Exception:
-                logger.exception("Failed to respond to already_has_account action")
+                logger.exception("Failed to show trading account form button to user.")
+        return
+
+    # handle "already has account" callback - UPDATED to open trading form
+    if q.data == "already_has_account":
+        # This is now handled by open_trading_account_form above
+        # Redirect to the same functionality for backward compatibility
+        await menu_handler(update, context)
         return
 
     if q.data == "back_language":
@@ -719,8 +1024,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # create keyboard and include edit button with prefill
             keyboard = [
-                [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-                 InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
+                [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+                 InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
             ]
 
             if WEBAPP_URL:
@@ -734,7 +1039,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
                 keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
-            keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+            # UPDATED: Change to open trading account form
+            keyboard.append([InlineKeyboardButton(already_label, callback_data="open_trading_account_form")])
 
             keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -817,90 +1123,141 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         await msg.reply_text("❌ Invalid data received.")
         return
 
-    name = payload.get("name", "").strip()
-    email = payload.get("email", "").strip()
-    phone = payload.get("phone", "").strip()
-    page_lang = (payload.get("lang") or "").lower()
-    lang = "ar" if page_lang not in ("en",) else "en"
+    # Check if this is trading account data or regular subscriber data
+    if "account_number" in payload and "server" in payload:
+        # This is trading account data
+        account_number = payload.get("account_number", "").strip()
+        password = payload.get("password", "").strip()
+        server = payload.get("server", "").strip()
+        broker = payload.get("broker", "").strip()
+        page_lang = (payload.get("lang") or "").lower()
+        lang = "ar" if page_lang not in ("en",) else "en"
 
-    if not name or len(name) < 2:
-        await msg.reply_text("⚠️ الاسم قصير جدًا." if lang == "ar" else "⚠️ Name is too short.")
-        return
-    if not EMAIL_RE.match(email):
-        await msg.reply_text("⚠️ البريد الإلكتروني غير صالح." if lang == "ar" else "⚠️ Invalid email address.")
-        return
-    if not PHONE_RE.match(phone):
-        await msg.reply_text("⚠️ رقم الهاتف غير صالح." if lang == "ar" else "⚠️ Invalid phone number.")
-        return
+        if not ACCOUNT_NUMBER_RE.match(account_number):
+            await msg.reply_text("⚠️ رقم الحساب غير صالح." if lang == "ar" else "⚠️ Invalid account number.")
+            return
+        if not password or len(password) < 4:
+            await msg.reply_text("⚠️ كلمة السر قصيرة جدًا." if lang == "ar" else "⚠️ Password too short.")
+            return
+        if not SERVER_RE.match(server):
+            await msg.reply_text("⚠️ اسم السيرفر غير صالح." if lang == "ar" else "⚠️ Invalid server name.")
+            return
 
-    try:
-        result = save_or_update_subscriber(
-            name=name,
-            email=email,
-            phone=phone,
-            lang=lang,
-            telegram_id=getattr(msg.from_user, "id", None),
-            telegram_username=getattr(msg.from_user, "username", None)
-        )
-    except Exception:
-        logger.exception("Error saving subscriber from web_app message fallback")
-        result = "error"
+        try:
+            result = save_trading_account(
+                telegram_id=getattr(msg.from_user, "id", None),
+                account_number=account_number,
+                password=password,
+                server=server,
+                broker=broker if broker else None
+            )
+        except Exception:
+            logger.exception("Error saving trading account from web_app message fallback")
+            result = "error"
 
-    success_msg = ("✅ تم حفظ بياناتك بنجاح! شكراً." if lang == "ar" else "✅ Your data has been saved successfully! Thank you.") if result != "error" else ("⚠️ حدث خطأ أثناء الحفظ." if lang == "ar" else "⚠️ Error while saving.")
-    try:
-        await msg.reply_text(success_msg)
-    except Exception:
-        pass
-
-    # prepare brokers screen (allow editing)
-    if lang == "ar":
-        header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
-        brokers_title = "اختر وسيطك الآن"
-        back_label = "🔙 الرجوع لتداول الفوركس"
-        edit_label = "✏️ تعديل بياناتي"
+        success_msg = ("✅ تم تسجيل بيانات حساب التداول بنجاح! سنتواصل معك قريبًا." if lang == "ar" else "✅ Trading account registered successfully! We will contact you soon.") if result != "error" else ("⚠️ حدث خطأ أثناء الحفظ." if lang == "ar" else "⚠️ Error while saving.")
+        
+        # Send success message with main menu button
+        if lang == "ar":
+            back_label = "🔙 الرجوع للقائمة الرئيسية"
+        else:
+            back_label = "🔙 Back to Main Menu"
+            
+        keyboard = [[InlineKeyboardButton(back_label, callback_data="back_main")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        try:
+            await msg.reply_text(success_msg, reply_markup=reply_markup)
+        except Exception:
+            pass
+            
     else:
-        header_title = "🎉 Congrats"
-        brokers_title = "Choose your broker now"
-        back_label = "🔙 Back to Forex"
-        edit_label = "✏️ Edit my data"
+        # This is regular subscriber data (existing functionality)
+        name = payload.get("name", "").strip()
+        email = payload.get("email", "").strip()
+        phone = payload.get("phone", "").strip()
+        page_lang = (payload.get("lang") or "").lower()
+        lang = "ar" if page_lang not in ("en",) else "en"
 
-    ar_already = "بالفعل لدي حساب بالشركة"
-    en_already = "I already have an account with the broker"
-    already_label = ar_already if lang == "ar" else en_already
+        if not name or len(name) < 2:
+            await msg.reply_text("⚠️ الاسم قصير جدًا." if lang == "ar" else "⚠️ Name is too short.")
+            return
+        if not EMAIL_RE.match(email):
+            await msg.reply_text("⚠️ البريد الإلكتروني غير صالح." if lang == "ar" else "⚠️ Invalid email address.")
+            return
+        if not PHONE_RE.match(phone):
+            await msg.reply_text("⚠️ رقم الهاتف غير صالح." if lang == "ar" else "⚠️ Invalid phone number.")
+            return
 
-    keyboard = [
-        [InlineKeyboardButton("🏦 Oneroyall", url="https://t.me/ZoozFX"),
-         InlineKeyboardButton("🏦 Tickmill", url="https://t.me/ZoozFX")]
-    ]
+        try:
+            result = save_or_update_subscriber(
+                name=name,
+                email=email,
+                phone=phone,
+                lang=lang,
+                telegram_id=getattr(msg.from_user, "id", None),
+                telegram_username=getattr(msg.from_user, "username", None)
+            )
+        except Exception:
+            logger.exception("Error saving subscriber from web_app message fallback")
+            result = "error"
 
-    user_id = getattr(msg.from_user, "id", None)
-    if WEBAPP_URL and user_id:
-        params = {"lang": lang, "edit": "1", "name": name, "email": email, "phone": phone}
-        url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-        keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+        success_msg = ("✅ تم حفظ بياناتك بنجاح! شكراً." if lang == "ar" else "✅ Your data has been saved successfully! Thank you.") if result != "error" else ("⚠️ حدث خطأ أثناء الحفظ." if lang == "ar" else "⚠️ Error while saving.")
+        try:
+            await msg.reply_text(success_msg)
+        except Exception:
+            pass
 
-    keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+        # prepare brokers screen (allow editing)
+        if lang == "ar":
+            header_title = "🎉 مبروك — تم تسجيل بياناتك بنجاح"
+            brokers_title = "اختر وسيطك الآن"
+            back_label = "🔙 الرجوع لتداول الفوركس"
+            edit_label = "✏️ تعديل بياناتي"
+        else:
+            header_title = "🎉 Congrats"
+            brokers_title = "Choose your broker now"
+            back_label = "🔙 Back to Forex"
+            edit_label = "✏️ Edit my data"
 
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    try:
-        edited = False
-        ref = get_form_ref(user_id) if user_id else None
-        if ref:
-            try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
-                edited = True
-                clear_form_ref(user_id)
-            except Exception:
-                logger.exception("Failed to edit form message in fallback path")
-        if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
-            try:
-                if user_id:
-                    save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
-            except Exception:
-                logger.exception("Could not save form message reference (fallback response).")
-    except Exception:
-        logger.exception("Failed to send brokers to user (fallback).")
+        ar_already = "بالفعل لدي حساب بالشركة"
+        en_already = "I already have an account with the broker"
+        already_label = ar_already if lang == "ar" else en_already
+
+        keyboard = [
+            [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+             InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+        ]
+
+        user_id = getattr(msg.from_user, "id", None)
+        if WEBAPP_URL and user_id:
+            params = {"lang": lang, "edit": "1", "name": name, "email": email, "phone": phone}
+            url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+            keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+
+        # UPDATED: Change to open trading account form
+        keyboard.append([InlineKeyboardButton(already_label, callback_data="open_trading_account_form")])
+
+        keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+        try:
+            edited = False
+            ref = get_form_ref(user_id) if user_id else None
+            if ref:
+                try:
+                    await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                    edited = True
+                    clear_form_ref(user_id)
+                except Exception:
+                    logger.exception("Failed to edit form message in fallback path")
+            if not edited:
+                sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], header_emoji=HEADER_EMOJI, underline_min=20, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                try:
+                    if user_id:
+                        save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
+                except Exception:
+                    logger.exception("Could not save form message reference (fallback response).")
+        except Exception:
+            logger.exception("Failed to send brokers to user (fallback).")
 
 # ===============================
 # Handlers registration
@@ -950,7 +1307,7 @@ async def on_shutdown():
     await application.shutdown()
 
 # ===============================
-# New: REST endpoints for subscribers (fix for your https://.../subscribers)
+# REST endpoints for subscribers
 # ===============================
 @app.get("/subscribers")
 def api_list_subscribers(limit: int = 200):
