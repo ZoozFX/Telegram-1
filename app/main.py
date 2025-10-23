@@ -143,7 +143,7 @@ def build_header_html(
     arabic_indent: int = 0,
 ) -> str:
     """
-    Unified centered header with perfectly aligned underline of fixed length (25).
+    Unified centered header with perfectly aligned underline of fixed length (20).
     Works for both Arabic (RTL) and English (LTR) titles in Telegram.
     """
     NBSP = "\u00A0"
@@ -153,6 +153,16 @@ def build_header_html(
     # إزالة رموز الاتجاه والتحكم عند القياس
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
+
+    # ✨ هنا الجزء الجديد لتثبيت طول العنوان
+    MIN_TITLE_WIDTH = 20
+    clean_title = remove_emoji(title)
+    title_len = display_width(clean_title)
+    if title_len < MIN_TITLE_WIDTH:
+        extra_spaces = MIN_TITLE_WIDTH - title_len
+        left_pad = extra_spaces // 2
+        right_pad = extra_spaces - left_pad
+        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
@@ -168,7 +178,7 @@ def build_header_html(
     title_width = display_width(measure_title)
 
     # الطول الثابت للخط (لا يتغير أبداً)
-    target_width = FIXED_UNDERLINE_LENGTH
+    target_width = FIXED_UNDERLINE_LENGTH  # يمكنك أيضًا جعله 20 إن أردت توحيد الطول مع العنوان
 
     # نحسب الفراغات لتوسيط العنوان
     space_needed = max(0, target_width - title_width)
@@ -182,7 +192,6 @@ def build_header_html(
         underline_line = "\n" + (underline_char * target_width)
 
     return centered_line + underline_line
-
 
 # -------------------------------
 # DB helpers
