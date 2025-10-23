@@ -142,14 +142,9 @@ def build_header_html(
     underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
-    """Builds a unified HTML header for both Arabic and English sections.
-    
-    Ensures perfect centering of both title and underline.
-    """
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
-    LRM = "\u200E"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
@@ -157,30 +152,24 @@ def build_header_html(
         indent_spaces = NBSP * arabic_indent
         full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
+        # 🔧 FIX: remove invisible LRM and use plain NBSP padding only
+        full_title = f"{header_emoji} {title} {header_emoji}"
 
-    # Calculate title width WITHOUT emojis for centering
     title_clean = remove_emoji(full_title)
     title_width = display_width(title_clean)
-    
-    # Use FIXED_UNDERLINE_LENGTH for consistent width
     target_width = FIXED_UNDERLINE_LENGTH
-    
-    # Calculate padding to center the title within the fixed width
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
-    
+
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     underline_line = ""
     if underline_enabled:
-        # Create underline with exact fixed length
-        line = underline_char * FIXED_UNDERLINE_LENGTH
-        # No need for additional padding - the underline should match the fixed width
-        underline_line = f"\n{line}"
+        underline_line = f"\n{underline_char * FIXED_UNDERLINE_LENGTH}"
 
     return centered_line + underline_line
+
 # -------------------------------
 # DB helpers
 # -------------------------------
