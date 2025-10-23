@@ -137,34 +137,30 @@ def build_header_html(
     title: str,
     keyboard_labels: List[str],
     header_emoji: str = HEADER_EMOJI,
+    underline_min: int = 20,
     underline_enabled: bool = True,
     underline_char: str = "━",
+    arabic_indent: int = 0,
 ) -> str:
     """Builds a unified HTML header for both Arabic and English sections.
     
-    Ensures perfect centering and proper text direction for all languages.
+    Ensures perfect centering of both title and underline.
     """
     NBSP = "\u00A0"
-    RLE = "\u202B"  # Right-to-Left Embedding
-    PDF = "\u202C"  # Pop Directional Formatting
-    LRE = "\u202A"  # Left-to-Right Embedding
-    LRM = "\u200E"  # Left-to-Right Mark
+    RLE = "\u202B"
+    PDF = "\u202C"
+    LRM = "\u200E"
 
-    # Detect language more accurately
-    is_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', title))
-    
-    # Create title with proper directional embedding
+    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
+
     if is_arabic:
-        # For Arabic: use RLE to ensure right-to-left rendering
-        full_title = f"{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+        indent_spaces = NBSP * arabic_indent
+        full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        # For English: use LRE to ensure left-to-right rendering and prevent wrong alignment
-        full_title = f"{LRE}{header_emoji} {title} {header_emoji}{PDF}"
+        full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
-    # Calculate title width WITHOUT emojis and directional characters for centering
+    # Calculate title width WITHOUT emojis for centering
     title_clean = remove_emoji(full_title)
-    # Remove directional characters for width calculation
-    title_clean = re.sub(r'[\u200E\u200F\u202A-\u202E]', '', title_clean)
     title_width = display_width(title_clean)
     
     # Use FIXED_UNDERLINE_LENGTH for consistent width
@@ -175,16 +171,13 @@ def build_header_html(
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
     
-    # Apply padding with proper direction
-    if is_arabic:
-        centered_line = f"{NBSP * pad_right}<b>{full_title}</b>{NBSP * pad_left}"
-    else:
-        centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
+    centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     underline_line = ""
     if underline_enabled:
         # Create underline with exact fixed length
         line = underline_char * FIXED_UNDERLINE_LENGTH
+        # No need for additional padding - the underline should match the fixed width
         underline_line = f"\n{line}"
 
     return centered_line + underline_line
@@ -281,7 +274,7 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
     already_label = ar_already if lang == "ar" else en_already
 
     labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, already_label]
-    header = build_header_html(title, labels)
+    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
          InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
@@ -336,7 +329,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
-    header = build_header_html(title, labels)
+    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
     if update.callback_query:
         q = update.callback_query
         await q.answer()
@@ -366,7 +359,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = [name for name, _ in sections] + [back_button[0]]
-    header = build_header_html(title, labels)
+    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
     try:
         await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
@@ -748,7 +741,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             open_label = "🧾 تسجيل بيانات حسابي" if lang == "ar" else "🧾 Register My Account"
             back_label = "🔙 الرجوع لتداول الفوركس" if lang == "ar" else "🔙 Back to Forex"
             labels = [open_label, back_label]
-            header = build_header_html(title, labels)
+            header = build_header_html("بيانات الحساب" if lang == "ar" else "Account Details", labels, header_emoji=HEADER_EMOJI, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
             keyboard = [
                 [InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))],
                 [InlineKeyboardButton(back_label, callback_data="forex_main")]
@@ -902,7 +895,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             header_emoji_for_lang = "✨"
 
         labels = [open_label, back_label_text]
-        header = build_header_html(title, labels)
+        header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
 
         keyboard = []
         if WEBAPP_URL:
