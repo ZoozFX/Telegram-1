@@ -1067,7 +1067,7 @@ async def submit_existing_account(payload: dict = Body(...)):
 
         # Edit the referenced message to confirmation + back button
         ref = get_form_ref(telegram_id)
-        msg_text = "✅ تم تسجيل بيانات حساب التداول بنجاح" if lang == "ar" else "✅ Your trading account details have been saved successfully"
+        msg_text = "✅ تم تسجيل الحساب. سنتواصل معك قريباً!" if lang == "ar" else "✅ Account registered. We will contact you soon."
         back_label = "🔙 الرجوع لتداول الفوركس" if lang == "ar" else "🔙 Back to Forex"
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(back_label, callback_data="forex_main")]])
 
