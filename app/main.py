@@ -144,7 +144,8 @@ def build_header_html(
 ) -> str:
     """Builds a unified HTML header for both Arabic and English sections.
     
-    Enhanced version with better centering algorithm.
+    Now uses FIXED_UNDERLINE_LENGTH for both title centering and underline,
+    ensuring consistent visual appearance across all sections.
     """
     NBSP = "\u00A0"
     RLE = "\u202B"
@@ -153,43 +154,35 @@ def build_header_html(
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # بناء العنوان الأساسي
-    base_title = f"{header_emoji} {title} {header_emoji}"
-    
-    # إضافة علامات الاتجاه
     if is_arabic:
-        directional_title = f"{RLE}{base_title}{PDF}"
+        indent_spaces = NBSP * arabic_indent
+        full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        directional_title = f"{LRM}{base_title}{LRM}"
+        full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
-    # حساب الطول الفعلي للنص (بدون علامات HTML والاتجاه)
-    # إزالة الإيموجيات للحساب الدقيق
-    clean_text = remove_emoji(title)
-    text_length = len(clean_text)
+    # Calculate title width WITHOUT emojis for centering
+    title_clean = remove_emoji(full_title)
+    title_width = display_width(title_clean)
     
-    # الطول الإجمالي المقدر (النص + الإيموجيات + المسافات)
-    # الإيموجي يحسب كحرفين، المسافات العادية كحرف واحد
-    total_estimated_length = text_length + 4  # إيموجيان + مسافتان
+    # Use FIXED_UNDERLINE_LENGTH for consistent centering
+    target_width = FIXED_UNDERLINE_LENGTH
     
-    # استخدام الطول الثابت دائماً
-    target_length = FIXED_UNDERLINE_LENGTH
+    # Calculate padding to center the title within the fixed width
+    space_needed = max(0, target_width - title_width)
+    pad_left = space_needed // 2
+    pad_right = space_needed - pad_left
     
-    # إذا كان النص أطول من الطول المستهدف، نضبط الطول المستهدف
-    if total_estimated_length > target_length:
-        target_length = total_estimated_length + 2  # إضافة هامش صغير
-    
-    # حساب المسافات المطلوبة للتوسيط
-    padding_needed = target_length - total_estimated_length
-    left_padding = padding_needed // 2
-    right_padding = padding_needed - left_padding
-    
-    # بناء السطر النهائي
-    centered_line = f"{NBSP * left_padding}<b>{directional_title}</b>{NBSP * right_padding}"
+    centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
-    # الخط السفلي
     underline_line = ""
     if underline_enabled:
-        underline_line = f"\n{underline_char * target_length}"
+        # Use the same fixed length for underline
+        line = underline_char * FIXED_UNDERLINE_LENGTH
+        # Center the underline within the same fixed width
+        diff = max(0, target_width - FIXED_UNDERLINE_LENGTH)
+        pad_left_line = diff // 2
+        pad_right_line = diff - pad_left_line
+        underline_line = f"\n{NBSP * pad_left_line}{line}{NBSP * pad_right_line}"
 
     return centered_line + underline_line
 # -------------------------------
