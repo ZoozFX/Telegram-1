@@ -155,31 +155,33 @@ def build_header_html(
 
     # بناء العنوان مع الاتجاه الصحيح
     if is_arabic:
-        indent_spaces = NBSP * arabic_indent
-        full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+        # للنصوص العربية: استخدام RLE/PDF مع مسافات متساوية على الجانبين
+        full_title = f"{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        # للنصوص الإنجليزية: استخدام LRM فقط في البداية والنهاية بدون RLE/PDF
+        # للنصوص الإنجليزية: استخدام LRM فقط في البداية والنهاية
         full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
 
-    # Calculate title width WITHOUT emojis for centering
-    title_clean = remove_emoji(full_title)
+    # Calculate title width WITHOUT emojis and control characters for centering
+    title_clean = remove_emoji(title)
+    # إزالة الأحرف المتحكمة في الاتجاه للحساب
+    title_clean = re.sub(r'[\u202B\u202C\u200E]', '', title_clean)
     title_width = display_width(title_clean)
     
     # Use FIXED_UNDERLINE_LENGTH for consistent width
     target_width = FIXED_UNDERLINE_LENGTH
     
-    # Calculate padding to center the title within the fixed width
+    # حساب المسافات المطلوبة للتوسيط
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
     
+    # تطبيق المسافات بالتساوي على الجانبين
     centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
 
     underline_line = ""
     if underline_enabled:
         # Create underline with exact fixed length
         line = underline_char * FIXED_UNDERLINE_LENGTH
-        # No need for additional padding - the underline should match the fixed width
         underline_line = f"\n{line}"
 
     return centered_line + underline_line
