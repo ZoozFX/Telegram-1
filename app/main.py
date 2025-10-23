@@ -142,31 +142,49 @@ def build_header_html(
     underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
+    """
+    Builds a unified HTML header. Centers the title exactly within a fixed-width
+    underline. Handles Arabic (RLE/PDF) wrapping but excludes direction marks
+    when measuring visual width. Keeps emoji in measurement because they occupy
+    visible width in Telegram.
+    """
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
 
+    # helper: remove invisible direction/control characters before measuring
+    def _strip_directional_and_controls(s: str) -> str:
+        # remove LRM, RLM, RLE, LRE, PDF, ZWJ, ZWNJ, bidi overrides etc.
+        # keep visible characters including emoji
+        return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
+
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
+    # Build the visible full title (what user sees). For Arabic wrap with RLE/PDF and optional indent.
     if is_arabic:
         indent_spaces = NBSP * arabic_indent
-        full_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+        visible_title = f"{indent_spaces}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        # 🔧 FIX: remove invisible LRM and use plain NBSP padding only
-        full_title = f"{header_emoji} {title} {header_emoji}"
+        # don't insert LRM; keep plain title so clients render consistently
+        visible_title = f"{header_emoji} {title} {header_emoji}"
 
-    title_clean = remove_emoji(full_title)
-    title_width = display_width(title_clean)
-    target_width = FIXED_UNDERLINE_LENGTH
+    # Measure the display width using display_width but strip control chars first
+    measure_title = _strip_directional_and_controls(visible_title)
+    title_width = display_width(measure_title)
+
+    # ensure underline can at least be underline_min (or the fixed global length)
+    target_width = max(FIXED_UNDERLINE_LENGTH, underline_min, title_width)
+
+    # Compute padding (in NBSP) to center the title within target_width
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
 
-    centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
+    centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
 
     underline_line = ""
     if underline_enabled:
-        underline_line = f"\n{underline_char * FIXED_UNDERLINE_LENGTH}"
+        underline_line = "\n" + (underline_char * target_width)
 
     return centered_line + underline_line
 
