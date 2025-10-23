@@ -144,7 +144,7 @@ def build_header_html(
 ) -> str:
     """Builds a unified HTML header for both Arabic and English sections.
     
-    Ensures perfect centering and proper text direction for both languages.
+    Enhanced version with better centering algorithm.
     """
     NBSP = "\u00A0"
     RLE = "\u202B"
@@ -153,36 +153,43 @@ def build_header_html(
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # بناء العنوان مع الاتجاه الصحيح
-    if is_arabic:
-        # للنصوص العربية: استخدام RLE/PDF مع مسافات متساوية على الجانبين
-        full_title = f"{RLE}{header_emoji} {title} {header_emoji}{PDF}"
-    else:
-        # للنصوص الإنجليزية: استخدام LRM فقط في البداية والنهاية
-        full_title = f"{LRM}{header_emoji} {title} {header_emoji}{LRM}"
-
-    # Calculate title width WITHOUT emojis and control characters for centering
-    title_clean = remove_emoji(title)
-    # إزالة الأحرف المتحكمة في الاتجاه للحساب
-    title_clean = re.sub(r'[\u202B\u202C\u200E]', '', title_clean)
-    title_width = display_width(title_clean)
+    # بناء العنوان الأساسي
+    base_title = f"{header_emoji} {title} {header_emoji}"
     
-    # Use FIXED_UNDERLINE_LENGTH for consistent width
-    target_width = FIXED_UNDERLINE_LENGTH
+    # إضافة علامات الاتجاه
+    if is_arabic:
+        directional_title = f"{RLE}{base_title}{PDF}"
+    else:
+        directional_title = f"{LRM}{base_title}{LRM}"
+
+    # حساب الطول الفعلي للنص (بدون علامات HTML والاتجاه)
+    # إزالة الإيموجيات للحساب الدقيق
+    clean_text = remove_emoji(title)
+    text_length = len(clean_text)
+    
+    # الطول الإجمالي المقدر (النص + الإيموجيات + المسافات)
+    # الإيموجي يحسب كحرفين، المسافات العادية كحرف واحد
+    total_estimated_length = text_length + 4  # إيموجيان + مسافتان
+    
+    # استخدام الطول الثابت دائماً
+    target_length = FIXED_UNDERLINE_LENGTH
+    
+    # إذا كان النص أطول من الطول المستهدف، نضبط الطول المستهدف
+    if total_estimated_length > target_length:
+        target_length = total_estimated_length + 2  # إضافة هامش صغير
     
     # حساب المسافات المطلوبة للتوسيط
-    space_needed = max(0, target_width - title_width)
-    pad_left = space_needed // 2
-    pad_right = space_needed - pad_left
+    padding_needed = target_length - total_estimated_length
+    left_padding = padding_needed // 2
+    right_padding = padding_needed - left_padding
     
-    # تطبيق المسافات بالتساوي على الجانبين
-    centered_line = f"{NBSP * pad_left}<b>{full_title}</b>{NBSP * pad_right}"
+    # بناء السطر النهائي
+    centered_line = f"{NBSP * left_padding}<b>{directional_title}</b>{NBSP * right_padding}"
 
+    # الخط السفلي
     underline_line = ""
     if underline_enabled:
-        # Create underline with exact fixed length
-        line = underline_char * FIXED_UNDERLINE_LENGTH
-        underline_line = f"\n{line}"
+        underline_line = f"\n{underline_char * target_length}"
 
     return centered_line + underline_line
 # -------------------------------
