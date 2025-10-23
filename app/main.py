@@ -144,8 +144,7 @@ def build_header_html(
 ) -> str:
     """Builds a unified HTML header for both Arabic and English sections.
     
-    Now uses FIXED_UNDERLINE_LENGTH for both title centering and underline,
-    ensuring consistent visual appearance across all sections.
+    Ensures perfect centering of both title and underline.
     """
     NBSP = "\u00A0"
     RLE = "\u202B"
@@ -164,7 +163,7 @@ def build_header_html(
     title_clean = remove_emoji(full_title)
     title_width = display_width(title_clean)
     
-    # Use FIXED_UNDERLINE_LENGTH for consistent centering
+    # Use FIXED_UNDERLINE_LENGTH for consistent width
     target_width = FIXED_UNDERLINE_LENGTH
     
     # Calculate padding to center the title within the fixed width
@@ -176,13 +175,10 @@ def build_header_html(
 
     underline_line = ""
     if underline_enabled:
-        # Use the same fixed length for underline
+        # Create underline with exact fixed length
         line = underline_char * FIXED_UNDERLINE_LENGTH
-        # Center the underline within the same fixed width
-        diff = max(0, target_width - FIXED_UNDERLINE_LENGTH)
-        pad_left_line = diff // 2
-        pad_right_line = diff - pad_left_line
-        underline_line = f"\n{NBSP * pad_left_line}{line}{NBSP * pad_right_line}"
+        # No need for additional padding - the underline should match the fixed width
+        underline_line = f"\n{line}"
 
     return centered_line + underline_line
 # -------------------------------
