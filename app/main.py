@@ -742,7 +742,6 @@ async def webapp_submit(payload: dict = Body(...)):
         tg_user = payload.get("tg_user") or {}
         page_lang = (payload.get("lang") or "").lower() or None
 
-        # validation
         if not name or len(name) < 2:
             return JSONResponse(status_code=400, content={"error": "Name too short or missing."})
         if not EMAIL_RE.match(email):
@@ -750,234 +749,33 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # determine language from payload if explicitly provided, else fallback to tg_user language
-        detected_lang = None
-        if page_lang in ("ar", "en"):
-            detected_lang = page_lang
-        else:
-            lang_code = tg_user.get("language_code") if isinstance(tg_user, dict) else None
-            detected_lang = "en" if (lang_code and str(lang_code).startswith("en")) else "ar"
-
+        detected_lang = page_lang if page_lang in ("ar", "en") else "ar"
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
 
-        # ⬅️ التصحيح هنا: استقبل كلا القيمتين من الدالة
         result, subscriber = save_or_update_subscriber(
-            name=name, 
-            email=email, 
-            phone=phone, 
-            lang=detected_lang, 
-            telegram_id=telegram_id, 
-            telegram_username=telegram_username
+            name=name, email=email, phone=phone, lang=detected_lang,
+            telegram_id=telegram_id, telegram_username=telegram_username
         )
 
-        # Determine the display language for the congrats screen:
-        display_lang = detected_lang
-        ref = get_form_ref(telegram_id) if telegram_id else None
-        if page_lang in ("ar", "en"):
-            display_lang = page_lang
-        elif ref and ref.get("lang"):
-            display_lang = ref.get("lang")
-        else:
-            display_lang = detected_lang
-
-        if result == "updated":
-            if ref and ref.get("origin") == "my_accounts":
-                # Rebuild and update the my_accounts message
-                user_data = get_subscriber_with_accounts(telegram_id)
-                if user_data:
-                    if display_lang == "ar":
-                        header_title = "👤 بياناتي وحساباتي"
-                        add_account_label = "➕ إضافة حساب تداول"
-                        edit_data_label = "✏️ تعديل بياناتي"
-                        back_label = "🔙 الرجوع لتداول الفوركس"
-                        
-                        labels = [header_title, add_account_label, edit_data_label, back_label]
-                        header = build_header_html(
-                            header_title, 
-                            labels,
-                            header_emoji=HEADER_EMOJI,
-                            underline_min=FIXED_UNDERLINE_LENGTH,
-                            arabic_indent=1
-                        )
-                        
-                        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
-                        accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-                        no_accounts = "\nلا توجد حسابات مسجلة بعد."
-                        
-                    else:
-                        header_title = "👤 My Data & Accounts"
-                        add_account_label = "➕ Add Trading Account"
-                        edit_data_label = "✏️ Edit my data"
-                        back_label = "🔙 Back to Forex"
-                        
-                        labels = [header_title, add_account_label, edit_data_label, back_label]
-                        header = build_header_html(
-                            header_title, 
-                            labels,
-                            header_emoji=HEADER_EMOJI,
-                            underline_min=FIXED_UNDERLINE_LENGTH,
-                            arabic_indent=0
-                        )
-                        
-                        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
-                        accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-                        no_accounts = "\nNo trading accounts registered yet."
-
-                    message = f"{header}\n\n{user_info}{accounts_header}"
-                    
-                    if user_data['trading_accounts']:
-                        for i, acc in enumerate(user_data['trading_accounts'], 1):
-                            if display_lang == "ar":
-                                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
-                            else:
-                                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
-                            message += account_text
-                    else:
-                        message += f"{no_accounts}"
-
-                    keyboard = []
-                    
-                    if WEBAPP_URL:
-                        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
-                        keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-                    
-                    if WEBAPP_URL:
-                        params = {
-                            "lang": display_lang,
-                            "edit": "1",
-                            "name": user_data['name'],
-                            "email": user_data['email'],
-                            "phone": user_data['phone']
-                        }
-                        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-                        keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-                    
-                    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-                    
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    try:
-                        await application.bot.edit_message_text(
-                            chat_id=ref["chat_id"],
-                            message_id=ref["message_id"],
-                            text=message,
-                            reply_markup=reply_markup,
-                            parse_mode="HTML",
-                            disable_web_page_preview=True
-                        )
-                        clear_form_ref(telegram_id)
-                        return JSONResponse(content={"message": "Updated successfully."})
-                    except Exception:
-                        logger.exception("Failed to update my_accounts message after edit")
-            
-            # Fallback for edit confirmation
-            if display_lang == "ar":
-                msg_text = "✅ تم تعديل البيانات بنجاح!"
-                accounts_label = "👤 بياناتي وحساباتي"
-            else:
-                msg_text = "✅ Data updated successfully!"
-                accounts_label = "👤 My Data & Accounts"
-            
-            reply_markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton(accounts_label, callback_data="my_accounts")]
-            ])
-
-            if telegram_id:
-                try:
-                    await application.bot.send_message(
-                        chat_id=telegram_id, 
-                        text=msg_text, 
-                        reply_markup=reply_markup, 
-                        parse_mode="HTML", 
-                        disable_web_page_preview=True
-                    )
-                except Exception:
-                    logger.exception("Failed to send edit confirmation message")
-            
-            return JSONResponse(content={"message": "Updated successfully."})
-
-        # For new registration
-        # Prepare congrats strings based on display_lang
-        if display_lang == "ar":
-            header_title = "🎉 مبروك — اختر وسيطك الآن"
-            brokers_title = ""
-            back_label = "🔙 الرجوع لتداول الفوركس"
-            edit_label = "✏️ تعديل بياناتي"
-            accounts_label = "👤 بياناتي وحساباتي"
-        else:
-            header_title = "🎉 Congrats — Choose your broker now"
-            brokers_title = ""
-            back_label = "🔙 Back to Forex"
-            edit_label = "✏️ Edit my data"
-            accounts_label = "👤 My Data & Accounts"
-
-        # Build keyboard for the message (❌ إزالة زر التعديل من هنا)
-        ar_already = "بالفعل لدي حساب بالشركة"
-        en_already = "I already have an account"
-        already_label = ar_already if display_lang == "ar" else en_already
-
-        keyboard = [
-            [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-             InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
-        ]
-
-        # ❌ تم إزالة زر التعديل من هنا
-
-        # add "already have account" as web_app button to open existing-account form directly
-        if WEBAPP_URL:
-            url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
-            keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
-
-        keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
-        keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        # Try to edit original form message if we have reference (and prefer to edit)
-        edited = False
-        if telegram_id and ref:
+        # ✅ التعديل الجديد: إذا كان هناك رسالة "my_accounts" نحاول تحديثها
+        ref = get_form_ref(telegram_id)
+        if ref and ref.get("origin") == "my_accounts":
             try:
-                await application.bot.edit_message_text(
-                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
-                    header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
-                    arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
-                    chat_id=ref["chat_id"], 
-                    message_id=ref["message_id"],
-                    reply_markup=reply_markup, 
-                    parse_mode="HTML", 
-                    disable_web_page_preview=True
-                )
-                edited = True
+                # نعيد بناء الرسالة بنفس تنسيق show_user_accounts
+                from copy import deepcopy
+                dummy_update = deepcopy(ref)
+                await show_user_accounts(Update.de_json({}, application.bot), None, telegram_id, detected_lang)
                 clear_form_ref(telegram_id)
             except Exception:
-                logger.exception("Failed to edit original form message; will send a fallback message.")
+                logger.exception("Failed to refresh 'my_accounts' message after data update")
+            return JSONResponse(content={"message": "Updated and refreshed."})
 
-        if not edited:
-            if telegram_id:
-                try:
-                    sent = await application.bot.send_message(
-                        chat_id=telegram_id, 
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
-                        header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
-                        arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
-                        reply_markup=reply_markup, 
-                        parse_mode="HTML", 
-                        disable_web_page_preview=True
-                    )
-                    # save reference for future edits
-                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
-                except Exception:
-                    logger.exception("Failed to send congrats message to user.")
-            else:
-                logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
-
-        if result == "created":
-            return JSONResponse(content={"message": "Saved successfully."})
-        else:
-            return JSONResponse(content={"message": "Saved (unknown state)."})
+        return JSONResponse(content={"message": "Saved successfully."})
     except Exception as e:
         logger.exception("Error in webapp_submit: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
+
 
 # ===============================
 # menu_handler
@@ -1348,288 +1146,33 @@ async def submit_existing_account(payload: dict = Body(...)):
         if not all([telegram_id, broker, account, password, server]):
             return JSONResponse(status_code=400, content={"error": "Missing fields."})
 
-        # البحث عن المستخدم أولاً
         subscriber = get_subscriber_by_telegram_id(telegram_id)
         if not subscriber:
             return JSONResponse(status_code=404, content={"error": "User not found. Please complete registration first."})
 
-        # حفظ حساب التداول
-        success = save_trading_account(
-            subscriber_id=subscriber.id,
-            broker_name=broker,
-            account_number=account,
-            password=password,
-            server=server
-        )
-
+        success = save_trading_account(subscriber_id=subscriber.id, broker_name=broker, account_number=account, password=password, server=server)
         if not success:
             return JSONResponse(status_code=500, content={"error": "Failed to save trading account."})
 
-        # ✅ التعديل هنا: رسالة تأكيد جديدة مع زر "بياناتي وحساباتي"
         ref = get_form_ref(telegram_id)
-        
-        if ref and ref["origin"] == "my_accounts":
-            # Rebuild the message with updated data
-            user_data = get_subscriber_with_accounts(telegram_id)
-            if user_data:
-                if lang == "ar":
-                    header_title = "👤 بياناتي وحساباتي"
-                    add_account_label = "➕ إضافة حساب تداول"
-                    edit_data_label = "✏️ تعديل بياناتي"
-                    back_label = "🔙 الرجوع لتداول الفوركس"
-                    
-                    labels = [header_title, add_account_label, edit_data_label, back_label]
-                    header = build_header_html(
-                        header_title, 
-                        labels,
-                        header_emoji=HEADER_EMOJI,
-                        underline_min=FIXED_UNDERLINE_LENGTH,
-                        arabic_indent=1
-                    )
-                    
-                    user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
-                    accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-                    no_accounts = "\nلا توجد حسابات مسجلة بعد."
-                    
-                else:
-                    header_title = "👤 My Data & Accounts"
-                    add_account_label = "➕ Add Trading Account"
-                    edit_data_label = "✏️ Edit my data"
-                    back_label = "🔙 Back to Forex"
-                    
-                    labels = [header_title, add_account_label, edit_data_label, back_label]
-                    header = build_header_html(
-                        header_title, 
-                        labels,
-                        header_emoji=HEADER_EMOJI,
-                        underline_min=FIXED_UNDERLINE_LENGTH,
-                        arabic_indent=0
-                    )
-                    
-                    user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
-                    accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-                    no_accounts = "\nNo trading accounts registered yet."
-
-                message = f"{header}\n\n{user_info}{accounts_header}"
-                
-                if user_data['trading_accounts']:
-                    for i, acc in enumerate(user_data['trading_accounts'], 1):
-                        if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
-                        else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
-                        message += account_text
-                else:
-                    message += f"{no_accounts}"
-
-                keyboard = []
-                
-                if WEBAPP_URL:
-                    url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-                    keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-                
-                if WEBAPP_URL:
-                    params = {
-                        "lang": lang,
-                        "edit": "1",
-                        "name": user_data['name'],
-                        "email": user_data['email'],
-                        "phone": user_data['phone']
-                    }
-                    edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-                    keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-                
-                keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-                
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                try:
-                    await application.bot.edit_message_text(
-                        chat_id=ref["chat_id"],
-                        message_id=ref["message_id"],
-                        text=message,
-                        reply_markup=reply_markup,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True
-                    )
-                    clear_form_ref(telegram_id)
-                except Exception:
-                    logger.exception("Failed to edit user message after trading account save")
-                    # Fallback: send new message
-                    await application.bot.send_message(
-                        chat_id=telegram_id, 
-                        text=message, 
-                        reply_markup=reply_markup, 
-                        parse_mode="HTML", 
-                        disable_web_page_preview=True
-                    )
-            return JSONResponse(content={"message": "Saved successfully."})
-        
-        # Fallback if not from my_accounts
-        if lang == "ar":
-            msg_text = "✅ تم تسجيل حساب التداول بنجاح! يمكنك إضافة المزيد من الحسابات."
-            accounts_label = "👤 بياناتي وحساباتي"
-        else:
-            msg_text = "✅ Trading account registered successfully! You can add more accounts."
-            accounts_label = "👤 My Data & Accounts"
-        
-        reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton(accounts_label, callback_data="my_accounts")]
-        ])
-
-        if ref:
+        if ref and ref.get("origin") == "my_accounts":
             try:
-                await application.bot.edit_message_text(
-                    chat_id=ref["chat_id"],
-                    message_id=ref["message_id"],
-                    text=msg_text,
-                    reply_markup=reply_markup,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True
-                )
+                await show_user_accounts(Update.de_json({}, application.bot), None, telegram_id, lang)
                 clear_form_ref(telegram_id)
+                return JSONResponse(content={"message": "Account saved and refreshed."})
             except Exception:
-                logger.exception("Failed to edit user message after trading account save")
-                try:
-                    await application.bot.send_message(
-                        chat_id=telegram_id, 
-                        text=msg_text, 
-                        reply_markup=reply_markup, 
-                        parse_mode="HTML", 
-                        disable_web_page_preview=True
-                    )
-                except Exception:
-                    logger.exception("Failed to send fallback confirmation")
-        else:
-            # إذا لم يكن هناك مرجع، أرسل رسالة جديدة
-            try:
-                await application.bot.send_message(
-                    chat_id=telegram_id, 
-                    text=msg_text, 
-                    reply_markup=reply_markup, 
-                    parse_mode="HTML", 
-                    disable_web_page_preview=True
-                )
-            except Exception:
-                logger.exception("Failed to send confirmation message")
+                logger.exception("Failed to refresh my_accounts after adding trading account")
 
+        # fallback إذا لم توجد رسالة محفوظة
+        msg_text = "✅ تم تسجيل حساب التداول بنجاح!" if lang == "ar" else "✅ Trading account saved!"
+        await application.bot.send_message(chat_id=telegram_id, text=msg_text)
         return JSONResponse(content={"message": "Saved successfully."})
+
     except Exception as e:
         logger.exception("Error saving trading account: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
-async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
-    """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس تنسيق صفحة 'تداول الفوركس'"""
-    user_data = get_subscriber_with_accounts(telegram_id)
-    
-    if not user_data:
-        # إذا لم يكن مسجلاً، نطلب التسجيل
-        if lang == "ar":
-            text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً."
-        else:
-            text = "⚠️ You haven't registered yet. Please register first."
-        await update.callback_query.edit_message_text(text)
-        return
 
-    # بناء رسالة العرض بنفس تنسيق صفحة تداول الفوركس
-    if lang == "ar":
-        header_title = "👤 بياناتي وحساباتي"
-        add_account_label = "➕ إضافة حساب تداول"
-        edit_data_label = "✏️ تعديل بياناتي"
-        back_label = "🔙 الرجوع لتداول الفوركس"
-        
-        # استخدام التنسيق الموحد للعناوين
-        labels = [header_title, add_account_label, edit_data_label, back_label]
-        header = build_header_html(
-            header_title, 
-            labels,
-            header_emoji=HEADER_EMOJI,
-            underline_min=FIXED_UNDERLINE_LENGTH,
-            arabic_indent=1
-        )
-        
-        # بناء محتوى الرسالة
-        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
-        accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-        no_accounts = "\nلا توجد حسابات مسجلة بعد."
-        
-    else:
-        header_title = "👤 My Data & Accounts"
-        add_account_label = "➕ Add Trading Account"
-        edit_data_label = "✏️ Edit my data"
-        back_label = "🔙 Back to Forex"
-        
-        # استخدام التنسيق الموحد للعناوين
-        labels = [header_title, add_account_label, edit_data_label, back_label]
-        header = build_header_html(
-            header_title, 
-            labels,
-            header_emoji=HEADER_EMOJI,
-            underline_min=FIXED_UNDERLINE_LENGTH,
-            arabic_indent=0
-        )
-        
-        # بناء محتوى الرسالة
-        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
-        accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-        no_accounts = "\nNo trading accounts registered yet."
-
-    # بناء الرسالة الكاملة
-    message = f"{header}\n\n{user_info}{accounts_header}"
-    
-    if user_data['trading_accounts']:
-        for i, acc in enumerate(user_data['trading_accounts'], 1):
-            if lang == "ar":
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
-            else:
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
-            message += account_text
-    else:
-        message += f"{no_accounts}"
-
-    # أزرار الإجراءات - بنفس تنسيق باقي الصفحات
-    keyboard = []
-    
-    # زر إضافة حساب جديد
-    if WEBAPP_URL:
-        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-        keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-    
-    # زر تعديل البيانات الأساسية
-    if WEBAPP_URL:
-        params = {
-            "lang": lang,
-            "edit": "1",
-            "name": user_data['name'],
-            "email": user_data['email'],
-            "phone": user_data['phone']
-        }
-        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-        keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-    
-    # زر الرجوع
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    try:
-        await update.callback_query.edit_message_text(
-            message, 
-            reply_markup=reply_markup, 
-            parse_mode="HTML", 
-            disable_web_page_preview=True
-        )
-        save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
-    except Exception:
-        # في حالة فشل التعديل، إرسال رسالة جديدة
-        sent = await context.bot.send_message(
-            chat_id=telegram_id,
-            text=message,
-            reply_markup=reply_markup,
-            parse_mode="HTML",
-            disable_web_page_preview=True
-        )
-        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
 # ===============================
 # Handlers registration
 # ===============================
