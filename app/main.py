@@ -808,17 +808,17 @@ async def webapp_submit(payload: dict = Body(...)):
                     accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
                     no_accounts = "\nNo trading accounts registered yet."
 
-                updated_message = f"{header}\n\n{user_info}{accounts_header}"
+                updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
                 
                 if updated_data['trading_accounts']:
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
                         if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
                         else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
                         updated_message += account_text
                 else:
-                    updated_message += f"{no_accounts}"
+                    updated_message += f"\n{no_accounts}"
 
                 keyboard = []
                 
@@ -1361,17 +1361,17 @@ async def submit_existing_account(payload: dict = Body(...)):
                     no_accounts = "\nNo trading accounts registered yet."
 
                 # بناء الرسالة الكاملة المحدثة
-                updated_message = f"{header}\n\n{user_info}{accounts_header}"
+                updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
                 
                 if updated_data['trading_accounts']:
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
                         if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
                         else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
                         updated_message += account_text
                 else:
-                    updated_message += f"{no_accounts}"
+                    updated_message += f"\n{no_accounts}"
 
                 # بناء الأزرار مرة أخرى
                 keyboard = []
@@ -1506,17 +1506,17 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         no_accounts = "\nNo trading accounts registered yet."
 
     # بناء الرسالة الكاملة
-    message = f"{header}\n\n{user_info}{accounts_header}"
+    message = f"{header}\n\n{user_info}{accounts_header}\n"
     
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
             if lang == "ar":
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
             else:
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
             message += account_text
     else:
-        message += f"{no_accounts}"
+        message += f"\n{no_accounts}"
 
     # أزرار الإجراءات - بنفس تنسيق باقي الصفحات
     keyboard = []
