@@ -385,15 +385,10 @@ PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 # small helper to send or edit a "congrats / brokers" message and save ref
 # -------------------------------
 async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_title: str, back_label: str, edit_label: str, lang: str, reply_to_chat_id: Optional[int]=None, reply_to_message_id: Optional[int]=None):
-    # labels for width calculation
-    ar_already = "بالفعل لدي حساب بالشركة"
-    en_already = "I already have an account"
-    already_label = ar_already if lang == "ar" else en_already
-    
     # إضافة زر "بياناتي وحساباتي"
     accounts_label = "👤 بياناتي وحساباتي" if lang == "ar" else "👤 My Data & Accounts"
 
-    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, already_label, accounts_label]  # ⬅️ إضافة accounts_label هنا
+    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, accounts_label]  # ⬅️ إزالة already_label
     header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
@@ -402,11 +397,6 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
 
     # ❌ تم إزالة زر التعديل من هنا
 
-    # add "already have account" as web_app button to open existing-account form directly
-    if WEBAPP_URL:
-        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-        keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
-    
     # ⬅️ إضافة زر "بياناتي وحساباتي" هنا
     keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
 
@@ -630,107 +620,6 @@ def webapp_form(request: Request):
     return HTMLResponse(content=html, status_code=200)
 
 # ===============================
-# New WebApp: existing-account form (for users who already have a broker account)
-# ===============================
-@app.get("/webapp/existing-account")
-def webapp_existing_account(request: Request):
-    lang = (request.query_params.get("lang") or "ar").lower()
-    is_ar = lang == "ar"
-
-    page_title = "🧾 تسجيل بيانات حساب التداول" if is_ar else "🧾 Register Trading Account"
-    labels = {
-        "broker": "اسم الشركة" if is_ar else "Broker Name",
-        "account": "رقم الحساب" if is_ar else "Account Number",
-        "password": "كلمة السر" if is_ar else "Password",
-        "server": "سيرفر التداول" if is_ar else "Trading Server",
-        "submit": "تسجيل" if is_ar else "Submit",
-        "close": "إغلاق" if is_ar else "Close",
-        "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
-    }
-    dir_attr = "rtl" if is_ar else "ltr"
-    text_align = "right" if is_ar else "left"
-
-    html = f"""
-    <!doctype html>
-    <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
-    <head>
-      <meta charset="utf-8"/>
-      <meta name="viewport" content="width=device-width,initial-scale=1"/>
-      <title>{page_title}</title>
-      <style>
-        body{{font-family:Arial;padding:16px;background:#f7f7f7;direction:{dir_attr};}}
-        .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white;box-shadow:0 4px 12px rgba(0,0,0,0.1)}}
-        label{{display:block;margin-top:10px;font-weight:600;text-align:{text_align}}}
-        input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:16px;}}
-        .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
-        .btn-primary{{background:#1E90FF;color:white}}
-        .btn-ghost{{background:transparent;border:1px solid #ccc}}
-        .small{{font-size:13px;color:#666;text-align:{text_align}}}
-      </style>
-    </head>
-    <body>
-      <div class="card">
-        <h2 style="text-align:{text_align}">{page_title}</h2>
-        <label>{labels['broker']}</label>
-        <input id="broker" placeholder="Oneroyal / Tickmill" />
-        <label>{labels['account']}</label>
-        <input id="account" placeholder="123456" />
-        <label>{labels['password']}</label>
-        <input id="password" type="password" placeholder="••••••••" />
-        <label>{labels['server']}</label>
-        <input id="server" placeholder="Oneroyal-Live" />
-        <div style="margin-top:12px;text-align:{text_align}">
-          <button class="btn btn-primary" id="submit">{labels['submit']}</button>
-          <button class="btn btn-ghost" id="close">{labels['close']}</button>
-        </div>
-        <div id="status" class="small" style="margin-top:10px;color:#b00;"></div>
-      </div>
-
-      <script src="https://telegram.org/js/telegram-web-app.js"></script>
-      <script>
-        const tg = window.Telegram.WebApp || {{}};
-        try{{tg.expand();}}catch(e){{}}
-        const statusEl = document.getElementById('status');
-
-        async function submitForm(){{
-          const broker = document.getElementById('broker').value.trim();
-          const account = document.getElementById('account').value.trim();
-          const password = document.getElementById('password').value.trim();
-          const server = document.getElementById('server').value.trim();
-          if(!broker || !account || !password || !server){{
-            statusEl.textContent = '{ "يرجى ملء جميع الحقول" if is_ar else "Please fill all fields" }';
-            return;
-          }}
-          const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-          const payload = {{broker,account,password,server,tg_user:initUser,lang:"{lang}"}};
-          try{{
-            const resp = await fetch(window.location.origin + '/webapp/existing-account/submit', {{
-              method:'POST',
-              headers:{{'Content-Type':'application/json'}},
-              body:JSON.stringify(payload)
-            }});
-            const data = await resp.json();
-            if(resp.ok){{
-              statusEl.style.color='green';
-              statusEl.textContent=data.message||'تم الحفظ بنجاح';
-              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},700);
-              try{{tg.sendData(JSON.stringify({{status:'sent',type:'existing_account'}}));}}catch(e){{}}
-            }}else{{
-              statusEl.textContent=data.error||'{labels["error"]}';
-            }}
-          }}catch(e){{
-            statusEl.textContent='{labels["error"]}: '+e.message;
-          }}
-        }}
-        document.getElementById('submit').addEventListener('click',submitForm);
-        document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
-      </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html, status_code=200)
-
-# ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
 # ===============================
 @app.post("/webapp/submit")
@@ -895,19 +784,10 @@ async def webapp_submit(payload: dict = Body(...)):
             accounts_label = "👤 My Data & Accounts"
 
         # Build keyboard for the message (❌ إزالة زر التعديل من هنا)
-        ar_already = "بالفعل لدي حساب بالشركة"
-        en_already = "I already have an account"
-        already_label = ar_already if display_lang == "ar" else en_already
-
         keyboard = [
             [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
              InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
         ]
-
-        # add "already have account" as web_app button to open existing-account form directly
-        if WEBAPP_URL:
-            url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
-            keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
 
         keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
         keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
@@ -918,7 +798,7 @@ async def webapp_submit(payload: dict = Body(...)):
         if telegram_id and ref:
             try:
                 await application.bot.edit_message_text(
-                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
+                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
                     header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
                     arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                     chat_id=ref["chat_id"], 
@@ -937,7 +817,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 try:
                     sent = await application.bot.send_message(
                         chat_id=telegram_id, 
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
                         header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
                         arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                         reply_markup=reply_markup, 
@@ -1124,10 +1004,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 edit_label = "✏️ Edit my data"
                 accounts_label = "👤 My Data & Accounts"
 
-            ar_already = "بالفعل لدي حساب بالشركة"
-            en_already = "I already have an account"
-            already_label = ar_already if display_lang == "ar" else en_already
-
             # create keyboard (❌ إزالة زر التعديل من هنا)
             keyboard = [
                 [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
@@ -1136,23 +1012,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # ❌ تم إزالة زر التعديل من هنا
 
-            # add "already have account" as web_app button to open existing-account form directly
-            if WEBAPP_URL:
-                url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
-                keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
-            
             keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
             keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             try:
-                await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 # Save reference for future edits (so edit button can return to this message)
                 save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
             except Exception:
                 # fallback: send new message and save its reference
                 try:
-                    sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                    sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
                 except Exception:
                     logger.exception("Failed to show congrats screen for already-registered user.")
@@ -1277,10 +1148,6 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         edit_label = "✏️ Edit my data"
         accounts_label = "👤 My Data & Accounts"
 
-    ar_already = "بالفعل لدي حساب بالشركة"
-    en_already = "I already have an account"
-    already_label = ar_already if lang == "ar" else en_already
-
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
          InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
@@ -1288,15 +1155,6 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
 
     user_id = getattr(msg.from_user, "id", None)
     # ❌ إزالة زر التعديل من هنا أيضاً
-    # if WEBAPP_URL and user_id:
-    #     params = {"lang": lang, "edit": "1", "name": name, "email": email, "phone": phone}
-    #     url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-    #     keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
-
-    # add "already have account" as web_app button to open existing-account form directly
-    if WEBAPP_URL:
-        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-        keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
 
     keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
@@ -1305,13 +1163,13 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         ref = get_form_ref(user_id) if user_id else None
         if ref:
             try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
                 clear_form_ref(user_id)
             except Exception:
                 logger.exception("Failed to edit form message in fallback path")
         if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
             try:
                 if user_id:
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
