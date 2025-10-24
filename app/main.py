@@ -1148,7 +1148,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(header_box + f"\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
         await context.bot.send_message(chat_id=q.message.chat_id, text=header_box + f"\n\n{details}", disable_web_page_preview=True)
-
 # ===============================
 # web_app_message_handler fallback
 # ===============================
