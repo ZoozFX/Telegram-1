@@ -1315,7 +1315,7 @@ async def submit_existing_account(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
-    """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس أزرار صفحة 'بالفعل لدي حساب'"""
+    """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس تنسيق صفحة 'تداول الفوركس'"""
     user_data = get_subscriber_with_accounts(telegram_id)
     
     if not user_data:
@@ -1327,49 +1327,64 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await update.callback_query.edit_message_text(text)
         return
 
-    # بناء رسالة العرض مع التنسيق الموحد للعناوين
+    # بناء رسالة العرض بنفس تنسيق صفحة تداول الفوركس
     if lang == "ar":
         header_title = "بياناتي وحساباتي"
-        user_info = f"👤 الاسم: {user_data['name']}\n📧 البريد: {user_data['email']}\n📞 الهاتف: {user_data['phone']}"
-        accounts_header = "🏦 حسابات التداول:"
-        no_accounts = "لا توجد حسابات مسجلة بعد."
         
         # نفس الأزرار المستخدمة في صفحة "بالفعل لدي حساب"
         open_label = "🧾 تسجيل بيانات حسابي"
         edit_label = "✏️ تعديل بياناتي"
         back_label = "🔙 الرجوع لتداول الفوركس"
         button_labels = [open_label, edit_label, back_label]
+        
+        # استخدام التنسيق الموحد للعناوين بنفس الطريقة
+        header = build_header_html(
+            header_title, 
+            button_labels, 
+            header_emoji=HEADER_EMOJI,
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=1
+        )
+        
+        # بناء محتوى الرسالة
+        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
+        accounts_header = "\n🏦 <b>حسابات التداول:</b>"
+        no_accounts = "\nلا توجد حسابات مسجلة بعد."
+        
     else:
         header_title = "My Data & Accounts"
-        user_info = f"👤 Name: {user_data['name']}\n📧 Email: {user_data['email']}\n📞 Phone: {user_data['phone']}"
-        accounts_header = "🏦 Trading Accounts:"
-        no_accounts = "No trading accounts registered yet."
         
         # نفس الأزرار المستخدمة في صفحة "بالفعل لدي حساب"
         open_label = "🧾 Register My Account"
         edit_label = "✏️ Edit my data"
         back_label = "🔙 Back to Forex"
         button_labels = [open_label, edit_label, back_label]
+        
+        # استخدام التنسيق الموحد للعناوين بنفس الطريقة
+        header = build_header_html(
+            header_title, 
+            button_labels, 
+            header_emoji=HEADER_EMOJI,
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=0
+        )
+        
+        # بناء محتوى الرسالة
+        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
+        accounts_header = "\n🏦 <b>Trading Accounts:</b>"
+        no_accounts = "\nNo trading accounts registered yet."
 
-    # استخدام التنسيق الموحد للعناوين
-    header = build_header_html(
-        header_title, 
-        button_labels, 
-        header_emoji=HEADER_EMOJI,
-        underline_min=FIXED_UNDERLINE_LENGTH,
-        arabic_indent=1 if lang == "ar" else 0
-    )
-    
-    message = f"{header}\n\n{user_info}\n\n{accounts_header}\n"
+    # بناء الرسالة الكاملة
+    message = f"{header}\n\n{user_info}{accounts_header}"
     
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
             if lang == "ar":
-                message += f"\n{i}. {acc['broker_name']} - {acc['account_number']}\n   🖥️ {acc['server']}"
+                message += f"\n\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
             else:
-                message += f"\n{i}. {acc['broker_name']} - {acc['account_number']}\n   🖥️ {acc['server']}"
+                message += f"\n\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
     else:
-        message += f"\n{no_accounts}"
+        message += f"{no_accounts}"
 
     # أزرار الإجراءات - نفس أزرار صفحة "بالفعل لدي حساب"
     keyboard = []
@@ -1396,12 +1411,22 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.edit_message_text(
-        message, 
-        reply_markup=reply_markup, 
-        parse_mode="HTML", 
-        disable_web_page_preview=True
-    )
+    try:
+        await update.callback_query.edit_message_text(
+            message, 
+            reply_markup=reply_markup, 
+            parse_mode="HTML", 
+            disable_web_page_preview=True
+        )
+    except Exception:
+        # في حالة فشل التعديل، إرسال رسالة جديدة
+        await context.bot.send_message(
+            chat_id=telegram_id,
+            text=message,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
 # ===============================
 # Handlers registration
 # ===============================
