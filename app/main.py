@@ -389,8 +389,11 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
     ar_already = "بالفعل لدي حساب بالشركة"
     en_already = "I already have an account"
     already_label = ar_already if lang == "ar" else en_already
+    
+    # إضافة زر "بياناتي وحساباتي"
+    accounts_label = "👤 بياناتي وحساباتي" if lang == "ar" else "👤 My Data & Accounts"
 
-    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, already_label]
+    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, already_label, accounts_label]  # ⬅️ إضافة accounts_label هنا
     header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
@@ -401,6 +404,9 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
 
     # add "already have account" as callback
     keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+    
+    # ⬅️ إضافة زر "بياناتي وحساباتي" هنا
+    keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
 
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1335,21 +1341,30 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         open_label = "🧾 تسجيل بيانات حسابي"
         edit_label = "✏️ تعديل بياناتي"
         back_label = "🔙 الرجوع لتداول الفوركس"
-        button_labels = [open_label, edit_label, back_label]
+        
+        # ⬅️ التصحيح: إضافة جميع النصوص التي ستظهر في الرسالة
+        user_info_text = f"👤 <b>الاسم:</b> {user_data['name']}"
+        email_text = f"📧 <b>البريد:</b> {user_data['email']}"
+        phone_text = f"📞 <b>الهاتف:</b> {user_data['phone']}"
+        accounts_header_text = "🏦 <b>حسابات التداول:</b>"
+        no_accounts_text = "لا توجد حسابات مسجلة بعد."
+        
+        # تضمين جميع النصوص في labels لحساب العرض الصحيح
+        all_texts = [header_title, open_label, edit_label, back_label, user_info_text, email_text, phone_text, accounts_header_text, no_accounts_text]
         
         # استخدام التنسيق الموحد للعناوين بنفس الطريقة
         header = build_header_html(
             header_title, 
-            button_labels, 
+            all_texts,  # ⬅️ استخدام جميع النصوص بدلاً من الأزرار فقط
             header_emoji=HEADER_EMOJI,
             underline_min=FIXED_UNDERLINE_LENGTH,
             arabic_indent=1
         )
         
         # بناء محتوى الرسالة
-        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
-        accounts_header = "\n🏦 <b>حسابات التداول:</b>"
-        no_accounts = "\nلا توجد حسابات مسجلة بعد."
+        user_info = f"{user_info_text}\n{email_text}\n{phone_text}"
+        accounts_header = f"\n{accounts_header_text}"
+        no_accounts = f"\n{no_accounts_text}"
         
     else:
         header_title = "My Data & Accounts"
@@ -1358,21 +1373,30 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         open_label = "🧾 Register My Account"
         edit_label = "✏️ Edit my data"
         back_label = "🔙 Back to Forex"
-        button_labels = [open_label, edit_label, back_label]
+        
+        # ⬅️ التصحيح: إضافة جميع النصوص التي ستظهر في الرسالة
+        user_info_text = f"👤 <b>Name:</b> {user_data['name']}"
+        email_text = f"📧 <b>Email:</b> {user_data['email']}"
+        phone_text = f"📞 <b>Phone:</b> {user_data['phone']}"
+        accounts_header_text = "🏦 <b>Trading Accounts:</b>"
+        no_accounts_text = "No trading accounts registered yet."
+
+        # تضمين جميع النصوص في labels لحساب العرض الصحيح
+        all_texts = [header_title, open_label, edit_label, back_label, user_info_text, email_text, phone_text, accounts_header_text, no_accounts_text]
         
         # استخدام التنسيق الموحد للعناوين بنفس الطريقة
         header = build_header_html(
             header_title, 
-            button_labels, 
+            all_texts,  # ⬅️ استخدام جميع النصوص بدلاً من الأزرار فقط
             header_emoji=HEADER_EMOJI,
             underline_min=FIXED_UNDERLINE_LENGTH,
             arabic_indent=0
         )
         
         # بناء محتوى الرسالة
-        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
-        accounts_header = "\n🏦 <b>Trading Accounts:</b>"
-        no_accounts = "\nNo trading accounts registered yet."
+        user_info = f"{user_info_text}\n{email_text}\n{phone_text}"
+        accounts_header = f"\n{accounts_header_text}"
+        no_accounts = f"\n{no_accounts_text}"
 
     # بناء الرسالة الكاملة
     message = f"{header}\n\n{user_info}{accounts_header}"
@@ -1380,9 +1404,15 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
             if lang == "ar":
-                message += f"\n\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                account_text = f"\n\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                message += account_text
+                # ⬅️ إضافة نص الحساب للحساب أيضاً
+                all_texts.append(account_text)
             else:
-                message += f"\n\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                account_text = f"\n\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}"
+                message += account_text
+                # ⬅️ إضافة نص الحساب للحساب أيضاً
+                all_texts.append(account_text)
     else:
         message += f"{no_accounts}"
 
