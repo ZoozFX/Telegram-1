@@ -402,8 +402,10 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
 
     # ❌ تم إزالة زر التعديل من هنا
 
-    # add "already have account" as callback
-    keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+    # add "already have account" as web_app button to open existing-account form directly
+    if WEBAPP_URL:
+        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
+        keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
     
     # ⬅️ إضافة زر "بياناتي وحساباتي" هنا
     keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
@@ -837,7 +839,11 @@ async def webapp_submit(payload: dict = Body(...)):
 
         # ❌ تم إزالة زر التعديل من هنا
 
-        keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+        # add "already have account" as web_app button to open existing-account form directly
+        if WEBAPP_URL:
+            url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
+            keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
+
         keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
         keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -901,47 +907,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # prefer current context language if available, else default to 'ar'
     lang = context.user_data.get("lang", "ar")
 
-    # handle "already has account" callback by opening WebApp existing-account form DIRECTLY
-    if q.data == "already_has_account":
-        # التحقق من وجود بيانات المستخدم الأساسية أولاً
-        subscriber = get_subscriber_by_telegram_id(user_id)
-        if not subscriber:
-            # إذا لم يسجل بعد، نطلب منه التسجيل أولاً
-            if lang == "ar":
-                text = "⚠️ يرجى التسجيل أولاً باستخدام زر \"نسخ الصفقات\" قبل إضافة حساب تداول."
-            else:
-                text = "⚠️ Please register first using the \"Copy Trading\" button before adding a trading account."
-            
-            await q.edit_message_text(text)
-            return
-
-        # فتح نموذج حساب التداول مباشرة إذا كان المستخدم مسجلاً
-        if WEBAPP_URL:
-            url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-            
-            # ❌ فتح النموذج مباشرة بدون رسالة وسيطة
-            try:
-                await q.edit_message_text(
-                    "⏳ جاري فتح نموذج تسجيل الحساب..." if lang == "ar" else "⏳ Opening account registration form...",
-                    parse_mode="HTML"
-                )
-                
-                # إرسال رسالة مع زر لفتح النموذج مباشرة
-                open_label = "🧾 افتح نموذج تسجيل الحساب" if lang == "ar" else "🧾 Open Account Registration"
-                keyboard = [[InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="اضغط لفتح نموذج تسجيل حساب التداول:" if lang == "ar" else "Click to open trading account registration:",
-                    reply_markup=reply_markup
-                )
-            except Exception:
-                logger.exception("Failed to open account form directly")
-        else:
-            text = "⚠️ لا يمكن فتح النموذج حالياً." if lang == "ar" else "⚠️ Cannot open form at the moment."
-            await q.edit_message_text(text)
-        return
+    # ❌ تم إزالة الجزء الخاص بـ "already_has_account" لأنه أصبح web_app مباشرة
 
     # عرض بيانات المستخدم وحسابات التداول
     if q.data == "my_accounts":
@@ -1099,7 +1065,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # ❌ تم إزالة زر التعديل من هنا
 
-            keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+            # add "already have account" as web_app button to open existing-account form directly
+            if WEBAPP_URL:
+                url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
+                keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
+            
             keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
             keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1252,7 +1222,11 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     #     url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
     #     keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
-    keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+    # add "already have account" as web_app button to open existing-account form directly
+    if WEBAPP_URL:
+        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
+        keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
+
     keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     try:
