@@ -901,65 +901,46 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # prefer current context language if available, else default to 'ar'
     lang = context.user_data.get("lang", "ar")
 
-    # handle "already has account" callback by opening WebApp existing-account form
+    # handle "already has account" callback by opening WebApp existing-account form DIRECTLY
     if q.data == "already_has_account":
-        # open WebApp form for existing account if we have WEBAPP_URL
+        # التحقق من وجود بيانات المستخدم الأساسية أولاً
+        subscriber = get_subscriber_by_telegram_id(user_id)
+        if not subscriber:
+            # إذا لم يسجل بعد، نطلب منه التسجيل أولاً
+            if lang == "ar":
+                text = "⚠️ يرجى التسجيل أولاً باستخدام زر \"نسخ الصفقات\" قبل إضافة حساب تداول."
+            else:
+                text = "⚠️ Please register first using the \"Copy Trading\" button before adding a trading account."
+            
+            await q.edit_message_text(text)
+            return
+
+        # فتح نموذج حساب التداول مباشرة إذا كان المستخدم مسجلاً
         if WEBAPP_URL:
             url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-            open_label = "🧾 تسجيل بيانات حسابي" if lang == "ar" else "🧾 Register My Account"
-            back_label = "🔙 الرجوع لتداول الفوركس" if lang == "ar" else "🔙 Back to Forex"
             
-            # ✅ الحفاظ على زر تعديل البيانات في شاشة "لدي حساب بالفعل"
-            edit_label = "✏️ تعديل بياناتي" if lang == "ar" else "✏️ Edit my data"
-            subscriber = get_subscriber_by_telegram_id(user_id)
-            if subscriber and WEBAPP_URL:
-                params = {
-                    "lang": lang,
-                    "edit": "1",
-                    "name": subscriber.name,
-                    "email": subscriber.email,
-                    "phone": subscriber.phone
-                }
-                edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-            
-            labels = [open_label, edit_label, back_label]
-            header = build_header_html("بيانات الحساب" if lang == "ar" else "Account Details", labels, header_emoji=HEADER_EMOJI, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
-            keyboard = [
-                [InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))],
-            ]
-            
-            # ✅ إضافة زر تعديل البيانات إذا كان المستخدم مسجلاً
-            if subscriber:
-                keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=edit_url))])
+            # ❌ فتح النموذج مباشرة بدون رسالة وسيطة
+            try:
+                await q.edit_message_text(
+                    "⏳ جاري فتح نموذج تسجيل الحساب..." if lang == "ar" else "⏳ Opening account registration form...",
+                    parse_mode="HTML"
+                )
                 
-            keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            try:
-                await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="existing_account", lang=lang)
+                # إرسال رسالة مع زر لفتح النموذج مباشرة
+                open_label = "🧾 افتح نموذج تسجيل الحساب" if lang == "ar" else "🧾 Open Account Registration"
+                keyboard = [[InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="اضغط لفتح نموذج تسجيل حساب التداول:" if lang == "ar" else "Click to open trading account registration:",
+                    reply_markup=reply_markup
+                )
             except Exception:
-                try:
-                    await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                    save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="existing_account", lang=lang)
-                except Exception:
-                    logger.exception("Failed to show existing-account webapp button to user.")
+                logger.exception("Failed to open account form directly")
         else:
-            # fallback: respond with text and keep previous behavior
-            display_lang = lang
-            if display_lang == "ar":
-                text = "✅ تم تسجيل أنك لديك حساب بالفعل لدى الوسيط. شكرًا لك!"
-                back_label = "🔙 الرجوع لتداول الفوركس"
-            else:
-                text = "✅ Noted — you already have an account with the broker. Thank you!"
-                back_label = "🔙 Back to Forex"
-            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(back_label, callback_data="forex_main")]])
-            try:
-                await q.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            except Exception:
-                try:
-                    await context.bot.send_message(chat_id=q.message.chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                except Exception:
-                    logger.exception("Failed to respond to already_has_account action")
+            text = "⚠️ لا يمكن فتح النموذج حالياً." if lang == "ar" else "⚠️ Cannot open form at the moment."
+            await q.edit_message_text(text)
         return
 
     # عرض بيانات المستخدم وحسابات التداول
