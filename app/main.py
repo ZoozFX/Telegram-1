@@ -785,11 +785,13 @@ async def webapp_submit(payload: dict = Body(...)):
             brokers_title = ""
             back_label = "🔙 الرجوع لتداول الفوركس"
             edit_label = "✏️ تعديل بياناتي"
+            accounts_label = "👤 بياناتي وحساباتي"
         else:
             header_title = "🎉 Congrats — Choose your broker now"
             brokers_title = ""
             back_label = "🔙 Back to Forex"
             edit_label = "✏️ Edit my data"
+            accounts_label = "👤 My Data & Accounts"
 
         # Build keyboard for the message (❌ إزالة زر التعديل من هنا)
         ar_already = "بالفعل لدي حساب بالشركة"
@@ -804,6 +806,7 @@ async def webapp_submit(payload: dict = Body(...)):
         # ❌ تم إزالة زر التعديل من هنا
 
         keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
+        keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
         keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -812,7 +815,7 @@ async def webapp_submit(payload: dict = Body(...)):
         if telegram_id and ref:
             try:
                 await application.bot.edit_message_text(
-                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], 
+                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
                     header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
                     arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                     chat_id=ref["chat_id"], 
@@ -831,7 +834,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 try:
                     sent = await application.bot.send_message(
                         chat_id=telegram_id, 
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], 
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
                         header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
                         arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                         reply_markup=reply_markup, 
@@ -1212,11 +1215,13 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         brokers_title = ""
         back_label = "🔙 الرجوع لتداول الفوركس"
         edit_label = "✏️ تعديل بياناتي"
+        accounts_label = "👤 بياناتي وحساباتي"
     else:
         header_title = "🎉 Congrats — Choose your broker now"
         brokers_title = ""
         back_label = "🔙 Back to Forex"
         edit_label = "✏️ Edit my data"
+        accounts_label = "👤 My Data & Accounts"
 
     ar_already = "بالفعل لدي حساب بالشركة"
     en_already = "I already have an account"
@@ -1235,20 +1240,20 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     #     keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
     keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
-
+    keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     try:
         edited = False
         ref = get_form_ref(user_id) if user_id else None
         if ref:
             try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
                 clear_form_ref(user_id)
             except Exception:
                 logger.exception("Failed to edit form message in fallback path")
         if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
             try:
                 if user_id:
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
