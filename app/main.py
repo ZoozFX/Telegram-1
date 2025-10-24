@@ -862,13 +862,103 @@ async def webapp_submit(payload: dict = Body(...)):
                     )
                     # إعادة حفظ المرجع
                     save_form_ref(telegram_id, ref["chat_id"], ref["message_id"], origin="my_accounts", lang=lang)
+                    return JSONResponse(content={"message": "Updated successfully."})
                 except Exception:
                     logger.exception("Failed to update my accounts message after edit")
-            
+                    # في حالة الفشل، نستمر في الكود العادي
+
+        # ⬇️ ⬇️ ⬇️ هذا هو الجزء المفقود - يجب أن يستمر الكود الأصلي هنا ⬇️ ⬇️ ⬇️
+
+        # الباقي من الكود الأصلي للتعامل مع التسجيل الجديد...
+        # Determine the display language for the congrats screen:
+        display_lang = detected_lang
+        ref = get_form_ref(telegram_id) if telegram_id else None
+        if page_lang in ("ar", "en"):
+            display_lang = page_lang
+        elif ref and ref.get("lang"):
+            display_lang = ref.get("lang")
+        else:
+            display_lang = detected_lang
+
+        # Prepare congrats strings based on display_lang
+        if display_lang == "ar":
+            header_title = "🎉 مبروك — اختر وسيطك الآن"
+            brokers_title = ""
+            back_label = "🔙 الرجوع لتداول الفوركس"
+            edit_label = "✏️ تعديل بياناتي"
+            accounts_label = "👤 بياناتي وحساباتي"
+        else:
+            header_title = "🎉 Congrats — Choose your broker now"
+            brokers_title = ""
+            back_label = "🔙 Back to Forex"
+            edit_label = "✏️ Edit my data"
+            accounts_label = "👤 My Data & Accounts"
+
+        # Build keyboard for the message (❌ إزالة زر التعديل من هنا)
+        ar_already = "بالفعل لدي حساب بالشركة"
+        en_already = "I already have an account"
+        already_label = ar_already if display_lang == "ar" else en_already
+
+        keyboard = [
+            [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+             InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+        ]
+
+        # add "already have account" as web_app button to open existing-account form directly
+        if WEBAPP_URL:
+            url_with_lang = f"{WEBAPP_URL}/existing-account?lang={display_lang}"
+            keyboard.append([InlineKeyboardButton(already_label, web_app=WebAppInfo(url=url_with_lang))])
+
+        keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
+        keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Try to edit original form message if we have reference (and prefer to edit)
+        edited = False
+        if telegram_id and ref:
+            try:
+                await application.bot.edit_message_text(
+                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
+                    header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
+                    arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
+                    chat_id=ref["chat_id"], 
+                    message_id=ref["message_id"],
+                    reply_markup=reply_markup, 
+                    parse_mode="HTML", 
+                    disable_web_page_preview=True
+                )
+                edited = True
+                clear_form_ref(telegram_id)
+            except Exception:
+                logger.exception("Failed to edit original form message; will send a fallback message.")
+
+        if not edited:
+            if telegram_id:
+                try:
+                    sent = await application.bot.send_message(
+                        chat_id=telegram_id, 
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], 
+                        header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
+                        arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
+                        reply_markup=reply_markup, 
+                        parse_mode="HTML", 
+                        disable_web_page_preview=True
+                    )
+                    # save reference for future edits
+                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
+                except Exception:
+                    logger.exception("Failed to send congrats message to user.")
+            else:
+                logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
+
+        # ⬅️ التصحيح هنا: استخدم result الصحيح
+        if result == "created":
+            return JSONResponse(content={"message": "Saved successfully."})
+        elif result == "updated":
             return JSONResponse(content={"message": "Updated successfully."})
-
-        # ... باقي الكود الأصلي ...
-
+        else:
+            return JSONResponse(content={"message": "Saved (unknown state)."})
+            
     except Exception as e:
         logger.exception("Error in webapp_submit: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
@@ -877,8 +967,13 @@ async def webapp_submit(payload: dict = Body(...)):
 # menu_handler
 # ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query:
+        return
     q = update.callback_query
     await q.answer()
+    if not q.message:
+        logger.error("No message in callback_query")
+        return
     user_id = q.from_user.id
     # prefer current context language if available, else default to 'ar'
     lang = context.user_data.get("lang", "ar")
@@ -1401,7 +1496,11 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً."
         else:
             text = "⚠️ You haven't registered yet. Please register first."
-        await update.callback_query.edit_message_text(text)
+        
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_text(text)
+        else:
+            await context.bot.send_message(chat_id=telegram_id, text=text)
         return
 
     # بناء رسالة العرض بنفس تنسيق صفحة تداول الفوركس
@@ -1486,15 +1585,28 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await update.callback_query.edit_message_text(
-            message, 
-            reply_markup=reply_markup, 
-            parse_mode="HTML", 
-            disable_web_page_preview=True
-        )
-        # ✅ حفظ المرجع بعد التعديل
-        save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
-    except Exception:
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_text(
+                message, 
+                reply_markup=reply_markup, 
+                parse_mode="HTML", 
+                disable_web_page_preview=True
+            )
+            # ✅ حفظ المرجع بعد التعديل
+            save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
+        else:
+            # إذا لم يكن هناك callback_query، أرسل رسالة جديدة
+            sent = await context.bot.send_message(
+                chat_id=telegram_id,
+                text=message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+            # ✅ حفظ المرجع بعد الإرسال
+            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
+    except Exception as e:
+        logger.exception("Failed to show user accounts: %s", e)
         # في حالة فشل التعديل، إرسال رسالة جديدة
         sent = await context.bot.send_message(
             chat_id=telegram_id,
