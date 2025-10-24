@@ -1003,11 +1003,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, context, lang)
         return
 
-    # mapping for sections
+    # mapping for sections - التعديل هنا: إزالة "بياناتي وحساباتي" من قسم الفوركس
     sections_data = {
         "forex_main": {
-            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية", "👤 بياناتي وحساباتي"],
-            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News", "👤 My Data & Accounts"],
+            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
+            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -1315,7 +1315,7 @@ async def submit_existing_account(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
-    """عرض بيانات المستخدم مع جميع حسابات التداول"""
+    """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس أزرار صفحة 'بالفعل لدي حساب'"""
     user_data = get_subscriber_with_accounts(telegram_id)
     
     if not user_data:
@@ -1333,13 +1333,23 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         user_info = f"👤 الاسم: {user_data['name']}\n📧 البريد: {user_data['email']}\n📞 الهاتف: {user_data['phone']}"
         accounts_header = "🏦 حسابات التداول:"
         no_accounts = "لا توجد حسابات مسجلة بعد."
-        button_labels = ["➕ إضافة حساب تداول", "✏️ تعديل بياناتي", "🔙 القائمة الرئيسية"]
+        
+        # نفس الأزرار المستخدمة في صفحة "بالفعل لدي حساب"
+        open_label = "🧾 تسجيل بيانات حسابي"
+        edit_label = "✏️ تعديل بياناتي"
+        back_label = "🔙 الرجوع لتداول الفوركس"
+        button_labels = [open_label, edit_label, back_label]
     else:
         header_title = "My Data & Accounts"
         user_info = f"👤 Name: {user_data['name']}\n📧 Email: {user_data['email']}\n📞 Phone: {user_data['phone']}"
         accounts_header = "🏦 Trading Accounts:"
         no_accounts = "No trading accounts registered yet."
-        button_labels = ["➕ Add Trading Account", "✏️ Edit My Data", "🔙 Main Menu"]
+        
+        # نفس الأزرار المستخدمة في صفحة "بالفعل لدي حساب"
+        open_label = "🧾 Register My Account"
+        edit_label = "✏️ Edit my data"
+        back_label = "🔙 Back to Forex"
+        button_labels = [open_label, edit_label, back_label]
 
     # استخدام التنسيق الموحد للعناوين
     header = build_header_html(
@@ -1361,16 +1371,28 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     else:
         message += f"\n{no_accounts}"
 
-    # أزرار الإجراءات
+    # أزرار الإجراءات - نفس أزرار صفحة "بالفعل لدي حساب"
     keyboard = []
-    if lang == "ar":
-        keyboard.append([InlineKeyboardButton("➕ إضافة حساب تداول", callback_data="add_trading_account")])
-        keyboard.append([InlineKeyboardButton("✏️ تعديل بياناتي", callback_data="edit_my_data")])
-        keyboard.append([InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="back_main")])
-    else:
-        keyboard.append([InlineKeyboardButton("➕ Add Trading Account", callback_data="add_trading_account")])
-        keyboard.append([InlineKeyboardButton("✏️ Edit My Data", callback_data="edit_my_data")])
-        keyboard.append([InlineKeyboardButton("🔙 Main Menu", callback_data="back_main")])
+    
+    # زر تسجيل حساب جديد
+    if WEBAPP_URL:
+        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
+        keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
+    
+    # زر تعديل البيانات الأساسية
+    if WEBAPP_URL:
+        params = {
+            "lang": lang,
+            "edit": "1",
+            "name": user_data['name'],
+            "email": user_data['email'],
+            "phone": user_data['phone']
+        }
+        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+        keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=edit_url))])
+    
+    # زر الرجوع
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -1380,7 +1402,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         parse_mode="HTML", 
         disable_web_page_preview=True
     )
-
 # ===============================
 # Handlers registration
 # ===============================
