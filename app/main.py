@@ -620,6 +620,107 @@ def webapp_form(request: Request):
     return HTMLResponse(content=html, status_code=200)
 
 # ===============================
+# New WebApp: existing-account form (for users who already have a broker account)
+# ===============================
+@app.get("/webapp/existing-account")
+def webapp_existing_account(request: Request):
+    lang = (request.query_params.get("lang") or "ar").lower()
+    is_ar = lang == "ar"
+
+    page_title = "🧾 تسجيل بيانات حساب التداول" if is_ar else "🧾 Register Trading Account"
+    labels = {
+        "broker": "اسم الشركة" if is_ar else "Broker Name",
+        "account": "رقم الحساب" if is_ar else "Account Number",
+        "password": "كلمة السر" if is_ar else "Password",
+        "server": "سيرفر التداول" if is_ar else "Trading Server",
+        "submit": "تسجيل" if is_ar else "Submit",
+        "close": "إغلاق" if is_ar else "Close",
+        "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
+    }
+    dir_attr = "rtl" if is_ar else "ltr"
+    text_align = "right" if is_ar else "left"
+
+    html = f"""
+    <!doctype html>
+    <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <title>{page_title}</title>
+      <style>
+        body{{font-family:Arial;padding:16px;background:#f7f7f7;direction:{dir_attr};}}
+        .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white;box-shadow:0 4px 12px rgba(0,0,0,0.1)}}
+        label{{display:block;margin-top:10px;font-weight:600;text-align:{text_align}}}
+        input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:16px;}}
+        .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
+        .btn-primary{{background:#1E90FF;color:white}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .small{{font-size:13px;color:#666;text-align:{text_align}}}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2 style="text-align:{text_align}">{page_title}</h2>
+        <label>{labels['broker']}</label>
+        <input id="broker" placeholder="Oneroyal / Tickmill" />
+        <label>{labels['account']}</label>
+        <input id="account" placeholder="123456" />
+        <label>{labels['password']}</label>
+        <input id="password" type="password" placeholder="••••••••" />
+        <label>{labels['server']}</label>
+        <input id="server" placeholder="Oneroyal-Live" />
+        <div style="margin-top:12px;text-align:{text_align}">
+          <button class="btn btn-primary" id="submit">{labels['submit']}</button>
+          <button class="btn btn-ghost" id="close">{labels['close']}</button>
+        </div>
+        <div id="status" class="small" style="margin-top:10px;color:#b00;"></div>
+      </div>
+
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <script>
+        const tg = window.Telegram.WebApp || {{}};
+        try{{tg.expand();}}catch(e){{}}
+        const statusEl = document.getElementById('status');
+
+        async function submitForm(){{
+          const broker = document.getElementById('broker').value.trim();
+          const account = document.getElementById('account').value.trim();
+          const password = document.getElementById('password').value.trim();
+          const server = document.getElementById('server').value.trim();
+          if(!broker || !account || !password || !server){{
+            statusEl.textContent = '{ "يرجى ملء جميع الحقول" if is_ar else "Please fill all fields" }';
+            return;
+          }}
+          const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+          const payload = {{broker,account,password,server,tg_user:initUser,lang:"{lang}"}};
+          try{{
+            const resp = await fetch(window.location.origin + '/webapp/existing-account/submit', {{
+              method:'POST',
+              headers:{{'Content-Type':'application/json'}},
+              body:JSON.stringify(payload)
+            }});
+            const data = await resp.json();
+            if(resp.ok){{
+              statusEl.style.color='green';
+              statusEl.textContent=data.message||'تم الحفظ بنجاح';
+              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},700);
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'existing_account'}}));}}catch(e){{}}
+            }}else{{
+              statusEl.textContent=data.error||'{labels["error"]}';
+            }}
+          }}catch(e){{
+            statusEl.textContent='{labels["error"]}: '+e.message;
+          }}
+        }}
+        document.getElementById('submit').addEventListener('click',submitForm);
+        document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+# ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
 # ===============================
 @app.post("/webapp/submit")
