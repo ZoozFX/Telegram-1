@@ -397,12 +397,7 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
          InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
     ]
 
-    # add edit button if possible (prefill params)
-    if telegram_id and WEBAPP_URL:
-        params = {"lang": lang, "edit": "1"}
-        # prefill values are filled by the caller when needed
-        url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-        keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+    # ❌ تم إزالة زر التعديل من هنا
 
     # add "already have account" as callback
     keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
@@ -790,7 +785,7 @@ async def webapp_submit(payload: dict = Body(...)):
             back_label = "🔙 Back to Forex"
             edit_label = "✏️ Edit my data"
 
-        # Build keyboard for the message (include edit button with prefill if possible)
+        # Build keyboard for the message (❌ إزالة زر التعديل من هنا)
         ar_already = "بالفعل لدي حساب بالشركة"
         en_already = "I already have an account"
         already_label = ar_already if display_lang == "ar" else en_already
@@ -800,13 +795,9 @@ async def webapp_submit(payload: dict = Body(...)):
              InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
         ]
 
-        if telegram_id and WEBAPP_URL:
-            params = {"lang": display_lang, "edit": "1", "name": name, "email": email, "phone": phone}
-            url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-            keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+        # ❌ تم إزالة زر التعديل من هنا
 
         keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
-
         keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -876,12 +867,31 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
             open_label = "🧾 تسجيل بيانات حسابي" if lang == "ar" else "🧾 Register My Account"
             back_label = "🔙 الرجوع لتداول الفوركس" if lang == "ar" else "🔙 Back to Forex"
-            labels = [open_label, back_label]
+            
+            # ✅ الحفاظ على زر تعديل البيانات في شاشة "لدي حساب بالفعل"
+            edit_label = "✏️ تعديل بياناتي" if lang == "ar" else "✏️ Edit my data"
+            subscriber = get_subscriber_by_telegram_id(user_id)
+            if subscriber and WEBAPP_URL:
+                params = {
+                    "lang": lang,
+                    "edit": "1",
+                    "name": subscriber.name,
+                    "email": subscriber.email,
+                    "phone": subscriber.phone
+                }
+                edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+            
+            labels = [open_label, edit_label, back_label]
             header = build_header_html("بيانات الحساب" if lang == "ar" else "Account Details", labels, header_emoji=HEADER_EMOJI, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
             keyboard = [
                 [InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))],
-                [InlineKeyboardButton(back_label, callback_data="forex_main")]
             ]
+            
+            # ✅ إضافة زر تعديل البيانات إذا كان المستخدم مسجلاً
+            if subscriber:
+                keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=edit_url))])
+                
+            keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
             try:
                 await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
@@ -916,46 +926,35 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_user_accounts(update, context, user_id, lang)
         return
 
-    # إضافة حساب تداول جديد - يفتح النموذج مباشرة
+    # إضافة حساب تداول جديد - ❌ فتح النموذج مباشرة
     if q.data == "add_trading_account":
         if WEBAPP_URL:
             url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
             
-            # فتح النموذج مباشرة بدون زر إضافي
+            # ❌ فتح النموذج مباشرة بدون رسالة وسيطة
             try:
-                # إرسال رسالة مؤقتة
-                temp_text = "⏳ جاري فتح نموذج إضافة حساب التداول..." if lang == "ar" else "⏳ Opening trading account form..."
-                temp_msg = await q.edit_message_text(temp_text)
-                
-                # فتح WebApp مباشرة
-                webapp_button = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "🧾 افتح النموذج" if lang == "ar" else "🧾 Open Form", 
-                        web_app=WebAppInfo(url=url_with_lang)
-                    )
-                ]])
-                
-                header_text = "إضافة حساب تداول" if lang == "ar" else "Add Trading Account"
-                header = build_header_html(header_text, [], header_emoji=HEADER_EMOJI, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
-                
-                await temp_msg.edit_text(
-                    header + f"\n\n{'اضغط على الزر لفتح نموذج إضافة حساب التداول' if lang == 'ar' else 'Click the button to open the trading account form'}",
-                    reply_markup=webapp_button,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True
+                await q.edit_message_text(
+                    "⏳ جاري فتح نموذج إضافة الحساب..." if lang == "ar" else "⏳ Opening account form...",
+                    parse_mode="HTML"
                 )
-                save_form_ref(user_id, temp_msg.chat_id, temp_msg.message_id, origin="add_account", lang=lang)
-            except Exception as e:
-                logger.exception("Failed to open trading account form directly")
-                text = "⚠️ لا يمكن فتح النموذج حالياً. يرجى المحاولة لاحقاً." if lang == "ar" else "⚠️ Cannot open form at the moment. Please try later."
-                await q.edit_message_text(text)
+                # إرسال رسالة مع زر لفتح النموذج
+                open_label = "🧾 افتح نموذج إضافة الحساب" if lang == "ar" else "🧾 Open Account Form"
+                keyboard = [[InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="اضغط لفتح نموذج إضافة الحساب:" if lang == "ar" else "Click to open account form:",
+                    reply_markup=reply_markup
+                )
+            except Exception:
+                logger.exception("Failed to open account form directly")
         else:
-            # fallback
-            text = "⚠️ لا يمكن فتح النموذج حالياً. يرجى المحاولة لاحقاً." if lang == "ar" else "⚠️ Cannot open form at the moment. Please try later."
+            text = "⚠️ لا يمكن فتح النموذج حالياً." if lang == "ar" else "⚠️ Cannot open form at the moment."
             await q.edit_message_text(text)
         return
 
-    # تعديل بيانات المستخدم الأساسية - يفتح النموذج مباشرة
+    # تعديل بيانات المستخدم الأساسية - ❌ فتح النموذج مباشرة
     if q.data == "edit_my_data":
         subscriber = get_subscriber_by_telegram_id(user_id)
         if not subscriber:
@@ -973,34 +972,24 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
             
-            # فتح النموذج مباشرة بدون زر إضافي
+            # ❌ فتح النموذج مباشرة بدون رسالة وسيطة
             try:
-                # إرسال رسالة مؤقتة
-                temp_text = "⏳ جاري فتح نموذج تعديل البيانات..." if lang == "ar" else "⏳ Opening edit form..."
-                temp_msg = await q.edit_message_text(temp_text)
-                
-                # فتح WebApp مباشرة
-                webapp_button = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "✏️ افتح النموذج" if lang == "ar" else "✏️ Open Form", 
-                        web_app=WebAppInfo(url=url_with_prefill)
-                    )
-                ]])
-                
-                header_text = "تعديل البيانات" if lang == "ar" else "Edit Data"
-                header = build_header_html(header_text, [], header_emoji=HEADER_EMOJI, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
-                
-                await temp_msg.edit_text(
-                    header + f"\n\n{'اضغط على الزر لفتح نموذج تعديل البيانات' if lang == 'ar' else 'Click the button to open the edit form'}",
-                    reply_markup=webapp_button,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True
+                await q.edit_message_text(
+                    "⏳ جاري فتح نموذج التعديل..." if lang == "ar" else "⏳ Opening edit form...",
+                    parse_mode="HTML"
                 )
-                save_form_ref(user_id, temp_msg.chat_id, temp_msg.message_id, origin="edit_data", lang=lang)
-            except Exception as e:
+                # إرسال رسالة مع زر لفتح النموذج
+                open_label = "✏️ افتح نموذج التعديل" if lang == "ar" else "✏️ Open Edit Form"
+                keyboard = [[InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_prefill))]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="اضغط لفتح نموذج تعديل البيانات:" if lang == "ar" else "Click to open edit form:",
+                    reply_markup=reply_markup
+                )
+            except Exception:
                 logger.exception("Failed to open edit form directly")
-                text = "⚠️ لا يمكن فتح النموذج حالياً. يرجى المحاولة لاحقاً." if lang == "ar" else "⚠️ Cannot open form at the moment. Please try later."
-                await q.edit_message_text(text)
         else:
             text = "⚠️ لا يمكن فتح النموذج حالياً." if lang == "ar" else "⚠️ Cannot open form at the moment."
             await q.edit_message_text(text)
@@ -1014,11 +1003,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_sections(update, context, lang)
         return
 
-    # mapping for sections - إزالة "بياناتي وحساباتي" من قسم الفوركس
+    # mapping for sections
     sections_data = {
         "forex_main": {
-            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],  # ⬅️ إزالة "بياناتي وحساباتي"
-            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],    # ⬅️ إزالة "My Data & Accounts"
+            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية", "👤 بياناتي وحساباتي"],
+            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News", "👤 My Data & Accounts"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -1067,51 +1056,40 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 header_title = "🎉 مبروك — اختر وسيطك الآن"
                 brokers_title = ""
                 back_label = "🔙 الرجوع لتداول الفوركس"
-                # ⬅️ إزالة edit_label و accounts_label من هذه الصفحة
+                edit_label = "✏️ تعديل بياناتي"
+                accounts_label = "👤 بياناتي وحساباتي"
             else:
                 header_title = "🎉 Congrats — Choose your broker now"
                 brokers_title = ""
                 back_label = "🔙 Back to Forex"
-                # ⬅️ إزالة edit_label و accounts_label من هذه الصفحة
+                edit_label = "✏️ Edit my data"
+                accounts_label = "👤 My Data & Accounts"
 
             ar_already = "بالفعل لدي حساب بالشركة"
             en_already = "I already have an account"
             already_label = ar_already if display_lang == "ar" else en_already
 
-            # create keyboard - ⬅️ إزالة أزرار التعديل وعرض الحسابات
+            # create keyboard (❌ إزالة زر التعديل من هنا)
             keyboard = [
                 [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
                  InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
             ]
 
+            # ❌ تم إزالة زر التعديل من هنا
+
             keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
-            # ⬅️ إزالة زر accounts_label
+            keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
             keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             try:
-                await q.edit_message_text(
-                    build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], 
-                    header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
-                    arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
-                    reply_markup=reply_markup, 
-                    parse_mode="HTML", 
-                    disable_web_page_preview=True
-                )
-                # Save reference for future edits
+                await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                # Save reference for future edits (so edit button can return to this message)
                 save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
             except Exception:
                 # fallback: send new message and save its reference
                 try:
-                    sent = await context.bot.send_message(
-                        chat_id=q.message.chat_id, 
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label], 
-                        header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
-                        arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
-                        reply_markup=reply_markup, 
-                        parse_mode="HTML", 
-                        disable_web_page_preview=True
-                    )
+                    sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, already_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
                 except Exception:
                     logger.exception("Failed to show congrats screen for already-registered user.")
@@ -1163,12 +1141,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # fallback: generic selected service
     placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
     details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
+    # Use build_header_html to ensure unified header formatting (fixed underline length enforced)
     labels_for_header = [q.data]
     header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
     try:
         await q.edit_message_text(header_box + f"\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
         await context.bot.send_message(chat_id=q.message.chat_id, text=header_box + f"\n\n{details}", disable_web_page_preview=True)
+
 # ===============================
 # web_app_message_handler fallback
 # ===============================
@@ -1243,10 +1223,11 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
     ]
 
     user_id = getattr(msg.from_user, "id", None)
-    if WEBAPP_URL and user_id:
-        params = {"lang": lang, "edit": "1", "name": name, "email": email, "phone": phone}
-        url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-        keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
+    # ❌ إزالة زر التعديل من هنا أيضاً
+    # if WEBAPP_URL and user_id:
+    #     params = {"lang": lang, "edit": "1", "name": name, "email": email, "phone": phone}
+    #     url_with_prefill = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+    #     keyboard.append([InlineKeyboardButton(edit_label, web_app=WebAppInfo(url=url_with_prefill))])
 
     keyboard.append([InlineKeyboardButton(already_label, callback_data="already_has_account")])
 
@@ -1333,6 +1314,7 @@ async def submit_existing_account(payload: dict = Body(...)):
     except Exception as e:
         logger.exception("Error saving trading account: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
+
 async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
     """عرض بيانات المستخدم مع جميع حسابات التداول"""
     user_data = get_subscriber_with_accounts(telegram_id)
@@ -1346,20 +1328,28 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await update.callback_query.edit_message_text(text)
         return
 
-    # بناء رسالة العرض مع التنسيق الموحد
+    # بناء رسالة العرض مع التنسيق الموحد للعناوين
     if lang == "ar":
-        header_title = "📊 بياناتك وحساباتك"
+        header_title = "بياناتي وحساباتي"
         user_info = f"👤 الاسم: {user_data['name']}\n📧 البريد: {user_data['email']}\n📞 الهاتف: {user_data['phone']}"
         accounts_header = "🏦 حسابات التداول:"
         no_accounts = "لا توجد حسابات مسجلة بعد."
+        button_labels = ["➕ إضافة حساب تداول", "✏️ تعديل بياناتي", "🔙 القائمة الرئيسية"]
     else:
-        header_title = "📊 Your Data & Accounts"
+        header_title = "My Data & Accounts"
         user_info = f"👤 Name: {user_data['name']}\n📧 Email: {user_data['email']}\n📞 Phone: {user_data['phone']}"
         accounts_header = "🏦 Trading Accounts:"
         no_accounts = "No trading accounts registered yet."
+        button_labels = ["➕ Add Trading Account", "✏️ Edit My Data", "🔙 Main Menu"]
 
-    # استخدام build_header_html للتنسيق الموحد
-    header = build_header_html(header_title, [], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+    # استخدام التنسيق الموحد للعناوين
+    header = build_header_html(
+        header_title, 
+        button_labels, 
+        header_emoji=HEADER_EMOJI,
+        underline_min=FIXED_UNDERLINE_LENGTH,
+        arabic_indent=1 if lang == "ar" else 0
+    )
     
     message = f"{header}\n\n{user_info}\n\n{accounts_header}\n"
     
