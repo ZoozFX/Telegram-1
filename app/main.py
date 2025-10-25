@@ -290,6 +290,7 @@ def get_subscriber_by_telegram_id(tg_id: int) -> Optional[Subscriber]:
     except Exception as e:
         logger.exception("DB lookup failed")
         return None
+
 def get_trading_accounts_by_telegram_id(tg_id: int) -> List[TradingAccount]:
     """الحصول على جميع حسابات التداول للمستخدم"""
     try:
@@ -304,6 +305,7 @@ def get_trading_accounts_by_telegram_id(tg_id: int) -> List[TradingAccount]:
     except Exception as e:
         logger.exception("Failed to get trading accounts")
         return []
+
 def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
     """الحصول على بيانات المستخدم مع حسابات التداول في شكل dictionary"""
     try:
@@ -341,6 +343,82 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.exception("Failed to get subscriber with accounts")
         return None
+
+def get_trading_account_by_id(account_id: int) -> Optional[TradingAccount]:
+    """الحصول على حساب تداول معين بواسطة ID"""
+    try:
+        db = SessionLocal()
+        account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
+        db.close()
+        return account
+    except Exception as e:
+        logger.exception("Failed to get trading account by ID")
+        return None
+
+def update_trading_account(
+    account_id: int,
+    broker_name: str = None,
+    account_number: str = None,
+    password: str = None,
+    server: str = None,
+    initial_balance: str = None,
+    current_balance: str = None,
+    withdrawals: str = None,
+    copy_start_date: str = None,
+    agent: str = None
+) -> bool:
+    """تحديث بيانات حساب تداول موجود"""
+    try:
+        db = SessionLocal()
+        account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
+        if not account:
+            db.close()
+            return False
+        
+        if broker_name is not None:
+            account.broker_name = broker_name
+        if account_number is not None:
+            account.account_number = account_number
+        if password is not None:
+            account.password = password
+        if server is not None:
+            account.server = server
+        if initial_balance is not None:
+            account.initial_balance = initial_balance
+        if current_balance is not None:
+            account.current_balance = current_balance
+        if withdrawals is not None:
+            account.withdrawals = withdrawals
+        if copy_start_date is not None:
+            account.copy_start_date = copy_start_date
+        if agent is not None:
+            account.agent = agent
+        
+        db.commit()
+        db.close()
+        return True
+        
+    except Exception as e:
+        logger.exception("Failed to update trading account: %s", e)
+        return False
+
+def delete_trading_account(account_id: int) -> bool:
+    """حذف حساب تداول"""
+    try:
+        db = SessionLocal()
+        account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
+        if not account:
+            db.close()
+            return False
+        
+        db.delete(account)
+        db.commit()
+        db.close()
+        return True
+        
+    except Exception as e:
+        logger.exception("Failed to delete trading account: %s", e)
+        return False
         
 def list_subscribers(limit: int = 100) -> List[Dict[str, Any]]:
     try:
@@ -782,6 +860,231 @@ def webapp_existing_account(request: Request):
     return HTMLResponse(content=html, status_code=200)
 
 # ===============================
+# New WebApp: edit-account form (for users to edit existing trading accounts)
+# ===============================
+@app.get("/webapp/edit-account")
+def webapp_edit_account(request: Request):
+    lang = (request.query_params.get("lang") or "ar").lower()
+    account_id = request.query_params.get("account_id")
+    is_ar = lang == "ar"
+
+    if not account_id:
+        return HTMLResponse(content="Account ID is required", status_code=400)
+
+    # جلب بيانات الحساب من قاعدة البيانات
+    account = get_trading_account_by_id(int(account_id))
+    if not account:
+        return HTMLResponse(content="Account not found", status_code=404)
+
+    page_title = "✏️ تعديل حساب التداول" if is_ar else "✏️ Edit Trading Account"
+    labels = {
+        "broker": "اسم الشركة" if is_ar else "Broker Name",
+        "account": "رقم الحساب" if is_ar else "Account Number",
+        "password": "كلمة السر" if is_ar else "Password",
+        "server": "سيرفر التداول" if is_ar else "Trading Server",
+        "initial_balance": "رصيد البداية" if is_ar else "Initial Balance",
+        "current_balance": "الرصيد الحالي" if is_ar else "Current Balance",
+        "withdrawals": "المسحوبات" if is_ar else "Withdrawals",
+        "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
+        "agent": "الوكيل" if is_ar else "Agent",
+        "submit": "تحديث" if is_ar else "Update",
+        "delete": "🗑️ حذف الحساب" if is_ar else "🗑️ Delete Account",
+        "close": "إغلاق" if is_ar else "Close",
+        "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
+    }
+    dir_attr = "rtl" if is_ar else "ltr"
+    text_align = "right" if is_ar else "left"
+
+    # تحويل التاريخ للتنسيق المناسب لـ input type="date"
+    copy_start_date_value = ""
+    if account.copy_start_date:
+        try:
+            # تحويل من تنسيق ISO إلى تنسيق YYYY-MM-DD
+            date_obj = datetime.fromisoformat(account.copy_start_date.replace('Z', '+00:00'))
+            copy_start_date_value = date_obj.strftime('%Y-%m-%d')
+        except:
+            copy_start_date_value = account.copy_start_date
+
+    html = f"""
+    <!doctype html>
+    <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <title>{page_title}</title>
+      <style>
+        body{{font-family:Arial;padding:16px;background:#f7f7f7;direction:{dir_attr};}}
+        .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white;box-shadow:0 4px 12px rgba(0,0,0,0.1)}}
+        label{{display:block;margin-top:10px;font-weight:600;text-align:{text_align}}}
+        input, select{{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:16px;}}
+        .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
+        .btn-primary{{background:#1E90FF;color:white}}
+        .btn-danger{{background:#dc3545;color:white}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .small{{font-size:13px;color:#666;text-align:{text_align}}}
+        .form-row{{display:flex;gap:10px;margin-top:10px;}}
+        .form-row > div{{flex:1;}}
+        .button-group{{display:flex;gap:10px;margin-top:16px;justify-content:{text_align}}}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2 style="text-align:{text_align}">{page_title}</h2>
+        
+        <label>{labels['broker']}</label>
+        <select id="broker">
+          <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
+          <option value="Oneroyal" {"selected" if account.broker_name == "Oneroyal" else ""}>Oneroyal</option>
+          <option value="Tickmill" {"selected" if account.broker_name == "Tickmill" else ""}>Tickmill</option>
+        </select>
+
+        <div class="form-row">
+          <div>
+            <label>{labels['account']}</label>
+            <input id="account" placeholder="123456" value="{account.account_number}" />
+          </div>
+          <div>
+            <label>{labels['password']}</label>
+            <input id="password" type="password" placeholder="••••••••" value="{account.password}" />
+          </div>
+        </div>
+
+        <label>{labels['server']}</label>
+        <input id="server" placeholder="Oneroyal-Live" value="{account.server}" />
+
+        <div class="form-row">
+          <div>
+            <label>{labels['initial_balance']}</label>
+            <input id="initial_balance" type="number" placeholder="0.00" step="0.01" value="{account.initial_balance or ''}" />
+          </div>
+          <div>
+            <label>{labels['current_balance']}</label>
+            <input id="current_balance" type="number" placeholder="0.00" step="0.01" value="{account.current_balance or ''}" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label>{labels['withdrawals']}</label>
+            <input id="withdrawals" type="number" placeholder="0.00" step="0.01" value="{account.withdrawals or ''}" />
+          </div>
+          <div>
+            <label>{labels['copy_start_date']}</label>
+            <input id="copy_start_date" type="date" value="{copy_start_date_value}" />
+          </div>
+        </div>
+
+        <label>{labels['agent']}</label>
+        <select id="agent">
+          <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
+          <option value="ملك الدهب" {"selected" if account.agent == "ملك الدهب" else ""}>ملك الدهب</option>
+        </select>
+
+        <div class="button-group">
+          <button class="btn btn-primary" id="submit">{labels['submit']}</button>
+          <button class="btn btn-danger" id="delete">{labels['delete']}</button>
+          <button class="btn btn-ghost" id="close">{labels['close']}</button>
+        </div>
+        <div id="status" class="small" style="margin-top:10px;color:#b00;"></div>
+      </div>
+
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <script>
+        const tg = window.Telegram.WebApp || {{}};
+        try{{tg.expand();}}catch(e){{}}
+        const statusEl = document.getElementById('status');
+        const accountId = "{account_id}";
+
+        async function submitForm(){{
+          const broker = document.getElementById('broker').value.trim();
+          const account = document.getElementById('account').value.trim();
+          const password = document.getElementById('password').value.trim();
+          const server = document.getElementById('server').value.trim();
+          const initial_balance = document.getElementById('initial_balance').value.trim();
+          const current_balance = document.getElementById('current_balance').value.trim();
+          const withdrawals = document.getElementById('withdrawals').value.trim();
+          const copy_start_date = document.getElementById('copy_start_date').value.trim();
+          const agent = document.getElementById('agent').value.trim();
+
+          if(!broker || !account || !password || !server){{
+            statusEl.textContent = '{ "يرجى ملئ جميع الحقول الأساسية" if is_ar else "Please fill all required fields" }';
+            return;
+          }}
+
+          const payload = {{
+            account_id: accountId,
+            broker,
+            account,
+            password,
+            server,
+            initial_balance,
+            current_balance,
+            withdrawals,
+            copy_start_date,
+            agent,
+            lang:"{lang}"
+          }};
+
+          try{{
+            const resp = await fetch(window.location.origin + '/webapp/edit-account/submit', {{
+              method:'POST',
+              headers:{{'Content-Type':'application/json'}},
+              body:JSON.stringify(payload)
+            }});
+            const data = await resp.json();
+            if(resp.ok){{
+              statusEl.style.color='green';
+              statusEl.textContent=data.message||'تم التحديث بنجاح';
+              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},700);
+              try{{tg.sendData(JSON.stringify({{status:'updated',type:'edit_account'}}));}}catch(e){{}}
+            }}else{{
+              statusEl.textContent=data.error||'{labels["error"]}';
+            }}
+          }}catch(e){{
+            statusEl.textContent='{labels["error"]}: '+e.message;
+          }}
+        }}
+
+        async function deleteAccount(){{
+          if(!confirm('{"هل أنت متأكد من حذف هذا الحساب؟" if is_ar else "Are you sure you want to delete this account?"}')){{
+            return;
+          }}
+
+          const payload = {{
+            account_id: accountId,
+            lang:"{lang}"
+          }};
+
+          try{{
+            const resp = await fetch(window.location.origin + '/webapp/edit-account/delete', {{
+              method:'POST',
+              headers:{{'Content-Type':'application/json'}},
+              body:JSON.stringify(payload)
+            }});
+            const data = await resp.json();
+            if(resp.ok){{
+              statusEl.style.color='green';
+              statusEl.textContent=data.message||'تم الحذف بنجاح';
+              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},700);
+              try{{tg.sendData(JSON.stringify({{status:'deleted',type:'edit_account'}}));}}catch(e){{}}
+            }}else{{
+              statusEl.textContent=data.error||'{labels["error"]}';
+            }}
+          }}catch(e){{
+            statusEl.textContent='{labels["error"]}: '+e.message;
+          }}
+        }}
+
+        document.getElementById('submit').addEventListener('click',submitForm);
+        document.getElementById('delete').addEventListener('click',deleteAccount);
+        document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+# ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
 # ===============================
 @app.post("/webapp/submit")
@@ -832,9 +1135,10 @@ async def webapp_submit(payload: dict = Body(...)):
                     header_title = "👤 بياناتي وحساباتي"
                     add_account_label = "➕ إضافة حساب تداول"
                     edit_data_label = "✏️ تعديل بياناتي"
+                    edit_accounts_label = "✏️ تعديل حساباتي"
                     back_label = "🔙 الرجوع لتداول الفوركس"
                     
-                    labels = [header_title, add_account_label, edit_data_label, back_label]
+                    labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
                     header = build_header_html(
                         header_title, 
                         labels,
@@ -851,9 +1155,10 @@ async def webapp_submit(payload: dict = Body(...)):
                     header_title = "👤 My Data & Accounts"
                     add_account_label = "➕ Add Trading Account"
                     edit_data_label = "✏️ Edit my data"
+                    edit_accounts_label = "✏️ Edit my accounts"
                     back_label = "🔙 Back to Forex"
                     
-                    labels = [header_title, add_account_label, edit_data_label, back_label]
+                    labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
                     header = build_header_html(
                         header_title, 
                         labels,
@@ -894,6 +1199,9 @@ async def webapp_submit(payload: dict = Body(...)):
                     }
                     edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
                     keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
+                
+                # زر تعديل الحسابات
+                keyboard.append([InlineKeyboardButton(edit_accounts_label, callback_data="edit_my_accounts")])
                 
                 keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
                 
@@ -1010,6 +1318,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
    
     if q.data == "my_accounts":
         await show_user_accounts(update, context, user_id, lang)
+        return
+
+    if q.data == "edit_my_accounts":
+        await show_edit_accounts(update, context, user_id, lang)
         return
 
     
@@ -1372,9 +1684,10 @@ async def submit_existing_account(payload: dict = Body(...)):
                     header_title = "👤 بياناتي وحساباتي"
                     add_account_label = "➕ إضافة حساب تداول"
                     edit_data_label = "✏️ تعديل بياناتي"
+                    edit_accounts_label = "✏️ تعديل حساباتي"
                     back_label = "🔙 الرجوع لتداول الفوركس"
                     
-                    labels = [header_title, add_account_label, edit_data_label, back_label]
+                    labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
                     header = build_header_html(
                         header_title, 
                         labels,
@@ -1391,9 +1704,10 @@ async def submit_existing_account(payload: dict = Body(...)):
                     header_title = "👤 My Data & Accounts"
                     add_account_label = "➕ Add Trading Account"
                     edit_data_label = "✏️ Edit my data"
+                    edit_accounts_label = "✏️ Edit my accounts"
                     back_label = "🔙 Back to Forex"
                     
-                    labels = [header_title, add_account_label, edit_data_label, back_label]
+                    labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
                     header = build_header_html(
                         header_title, 
                         labels,
@@ -1457,6 +1771,9 @@ async def submit_existing_account(payload: dict = Body(...)):
                     edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
                     keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
                 
+                # زر تعديل الحسابات
+                keyboard.append([InlineKeyboardButton(edit_accounts_label, callback_data="edit_my_accounts")])
+                
                 keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1508,6 +1825,204 @@ async def submit_existing_account(payload: dict = Body(...)):
         logger.exception("Error saving trading account: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
+# ===============================
+# New: endpoints for edit-account form
+# ===============================
+@app.post("/webapp/edit-account/submit")
+async def submit_edit_account(payload: dict = Body(...)):
+    try:
+        account_id = payload.get("account_id")
+        broker = (payload.get("broker") or "").strip()
+        account = (payload.get("account") or "").strip()
+        password = (payload.get("password") or "").strip()
+        server = (payload.get("server") or "").strip()
+        initial_balance = (payload.get("initial_balance") or "").strip()
+        current_balance = (payload.get("current_balance") or "").strip()
+        withdrawals = (payload.get("withdrawals") or "").strip()
+        copy_start_date = (payload.get("copy_start_date") or "").strip()
+        agent = (payload.get("agent") or "").strip()
+        lang = (payload.get("lang") or "ar").lower()
+
+        if not account_id:
+            return JSONResponse(status_code=400, content={"error": "Account ID is required."})
+
+        success = update_trading_account(
+            account_id=int(account_id),
+            broker_name=broker,
+            account_number=account,
+            password=password,
+            server=server,
+            initial_balance=initial_balance,
+            current_balance=current_balance,
+            withdrawals=withdrawals,
+            copy_start_date=copy_start_date,
+            agent=agent
+        )
+
+        if not success:
+            return JSONResponse(status_code=500, content={"error": "Failed to update trading account."})
+
+        # الحصول على telegram_id من الحساب المُحدث
+        account_obj = get_trading_account_by_id(int(account_id))
+        if account_obj:
+            telegram_id = account_obj.subscriber.telegram_id
+            
+            # تحديث رسالة "بياناتي وحساباتي"
+            ref = get_form_ref(telegram_id)
+            if ref:
+                await update_user_accounts_message(telegram_id, ref["chat_id"], ref["message_id"], lang)
+
+        return JSONResponse(content={"message": "Updated successfully."})
+    except Exception as e:
+        logger.exception("Error updating trading account: %s", e)
+        return JSONResponse(status_code=500, content={"error": "Server error."})
+
+@app.post("/webapp/edit-account/delete")
+async def delete_account(payload: dict = Body(...)):
+    try:
+        account_id = payload.get("account_id")
+        lang = (payload.get("lang") or "ar").lower()
+
+        if not account_id:
+            return JSONResponse(status_code=400, content={"error": "Account ID is required."})
+
+        # الحصول على telegram_id قبل الحذف
+        account_obj = get_trading_account_by_id(int(account_id))
+        telegram_id = None
+        if account_obj:
+            telegram_id = account_obj.subscriber.telegram_id
+
+        success = delete_trading_account(int(account_id))
+
+        if not success:
+            return JSONResponse(status_code=500, content={"error": "Failed to delete trading account."})
+
+        # تحديث رسالة "بياناتي وحساباتي"
+        if telegram_id:
+            ref = get_form_ref(telegram_id)
+            if ref:
+                await update_user_accounts_message(telegram_id, ref["chat_id"], ref["message_id"], lang)
+
+        return JSONResponse(content={"message": "Deleted successfully."})
+    except Exception as e:
+        logger.exception("Error deleting trading account: %s", e)
+        return JSONResponse(status_code=500, content={"error": "Server error."})
+
+async def update_user_accounts_message(telegram_id: int, chat_id: int, message_id: int, lang: str):
+    """تحديث رسالة بيانات المستخدم وحساباتة"""
+    user_data = get_subscriber_with_accounts(telegram_id)
+    
+    if not user_data:
+        return
+
+    if lang == "ar":
+        header_title = "👤 بياناتي وحساباتي"
+        add_account_label = "➕ إضافة حساب تداول"
+        edit_data_label = "✏️ تعديل بياناتي"
+        edit_accounts_label = "✏️ تعديل حساباتي"
+        back_label = "🔙 الرجوع لتداول الفوركس"
+        
+        labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
+        header = build_header_html(
+            header_title, 
+            labels,
+            header_emoji=HEADER_EMOJI,
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=1
+        )
+        
+        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
+        accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
+        no_accounts = "\nلا توجد حسابات مسجلة بعد."
+        
+    else:
+        header_title = "👤 My Data & Accounts"
+        add_account_label = "➕ Add Trading Account"
+        edit_data_label = "✏️ Edit my data"
+        edit_accounts_label = "✏️ Edit my accounts"
+        back_label = "🔙 Back to Forex"
+        
+        labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
+        header = build_header_html(
+            header_title, 
+            labels,
+            header_emoji=HEADER_EMOJI,
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=0
+        )
+        
+        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
+        accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
+        no_accounts = "\nNo trading accounts registered yet."
+
+    message = f"{header}\n\n{user_info}{accounts_header}\n"
+    
+    if user_data['trading_accounts']:
+        for i, acc in enumerate(user_data['trading_accounts'], 1):
+            if lang == "ar":
+                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                if acc.get('initial_balance'):
+                    account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
+                if acc.get('current_balance'):
+                    account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
+                if acc.get('withdrawals'):
+                    account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
+                if acc.get('copy_start_date'):
+                    account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                if acc.get('agent'):
+                    account_text += f"   👤 الوكيل: {acc['agent']}\n"
+            else:
+                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                if acc.get('initial_balance'):
+                    account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
+                if acc.get('current_balance'):
+                    account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
+                if acc.get('withdrawals'):
+                    account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
+                if acc.get('copy_start_date'):
+                    account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
+                if acc.get('agent'):
+                    account_text += f"   👤 Agent: {acc['agent']}\n"
+            message += account_text
+    else:
+        message += f"\n{no_accounts}"
+
+    keyboard = []
+    
+    if WEBAPP_URL:
+        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
+        keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
+    
+    if WEBAPP_URL:
+        params = {
+            "lang": lang,
+            "edit": "1",
+            "name": user_data['name'],
+            "email": user_data['email'],
+            "phone": user_data['phone']
+        }
+        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+        keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
+    
+    # زر تعديل الحسابات
+    keyboard.append([InlineKeyboardButton(edit_accounts_label, callback_data="edit_my_accounts")])
+    
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        await application.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=message,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.exception("Failed to update user accounts message: %s", e)
+
 async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
     """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس تنسيق صفحة 'تداول الفوركس'"""
     user_data = get_subscriber_with_accounts(telegram_id)
@@ -1528,9 +2043,10 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         header_title = "👤 بياناتي وحساباتي"
         add_account_label = "➕ إضافة حساب تداول"
         edit_data_label = "✏️ تعديل بياناتي"
+        edit_accounts_label = "✏️ تعديل حساباتي"
         back_label = "🔙 الرجوع لتداول الفوركس"
         
-        labels = [header_title, add_account_label, edit_data_label, back_label]
+        labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
         header = build_header_html(
             header_title, 
             labels,
@@ -1547,8 +2063,9 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         header_title = "👤 My Data & Accounts"
         add_account_label = "➕ Add Trading Account"
         edit_data_label = "✏️ Edit my data"
+        edit_accounts_label = "✏️ Edit my accounts"
         back_label = "🔙 Back to Forex"
-        labels = [header_title, add_account_label, edit_data_label, back_label]
+        labels = [header_title, add_account_label, edit_data_label, edit_accounts_label, back_label]
         header = build_header_html(
             header_title, 
             labels,
@@ -1612,6 +2129,9 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
         keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
     
+    # زر تعديل الحسابات
+    keyboard.append([InlineKeyboardButton(edit_accounts_label, callback_data="edit_my_accounts")])
+    
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1648,6 +2168,81 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
        
         save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
+
+async def show_edit_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
+    """عرض قائمة الحسابات للتعديل"""
+    user_data = get_subscriber_with_accounts(telegram_id)
+    
+    if not user_data or not user_data['trading_accounts']:
+        if lang == "ar":
+            text = "⚠️ لا توجد حسابات تداول مسجلة لتعديلها."
+        else:
+            text = "⚠️ No trading accounts registered to edit."
+        
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_text(text)
+        else:
+            await context.bot.send_message(chat_id=telegram_id, text=text)
+        return
+
+    if lang == "ar":
+        header_title = "✏️ تعديل حسابات التداول"
+        back_label = "🔙 الرجوع لبياناتي"
+        no_accounts = "لا توجد حسابات مسجلة بعد."
+    else:
+        header_title = "✏️ Edit Trading Accounts"
+        back_label = "🔙 Back to My Data"
+        no_accounts = "No trading accounts registered yet."
+
+    labels = [header_title, back_label]
+    header = build_header_html(
+        header_title, 
+        labels,
+        header_emoji=HEADER_EMOJI,
+        underline_min=FIXED_UNDERLINE_LENGTH,
+        arabic_indent=1 if lang == "ar" else 0
+    )
+
+    message = f"{header}\n\n"
+    
+    keyboard = []
+    
+    for i, acc in enumerate(user_data['trading_accounts'], 1):
+        if lang == "ar":
+            account_text = f"{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n"
+        else:
+            account_text = f"{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n"
+        message += account_text
+        
+        # زر تعديل لكل حساب
+        if WEBAPP_URL:
+            edit_url = f"{WEBAPP_URL}/edit-account?lang={lang}&account_id={acc['id']}"
+            button_text = f"✏️ {acc['broker_name']} - {acc['account_number']}" if lang == "ar" else f"✏️ {acc['broker_name']} - {acc['account_number']}"
+            keyboard.append([InlineKeyboardButton(button_text, web_app=WebAppInfo(url=edit_url))])
+
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="my_accounts")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    try:
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_text(
+                message, 
+                reply_markup=reply_markup, 
+                parse_mode="HTML", 
+                disable_web_page_preview=True
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=telegram_id,
+                text=message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+    except Exception as e:
+        logger.exception("Failed to show edit accounts: %s", e)
+
 # ===============================
 # Handlers registration
 # ===============================
