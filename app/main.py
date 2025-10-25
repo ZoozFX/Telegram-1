@@ -50,6 +50,12 @@ class TradingAccount(Base):
     account_number = Column(String(100), nullable=False)
     password = Column(String(100), nullable=False)
     server = Column(String(100), nullable=False)
+    # الحقول الجديدة
+    initial_balance = Column(String(50), nullable=True)
+    current_balance = Column(String(50), nullable=True)
+    withdrawals = Column(String(50), nullable=True)
+    copy_start_date = Column(String(50), nullable=True)
+    agent = Column(String(100), nullable=True)
     created_at = Column(String(50), default=lambda: datetime.now().isoformat())
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
@@ -232,7 +238,18 @@ def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar
         logger.exception("Failed to save_or_update subscriber: %s", e)
         return "error", None
 
-def save_trading_account(subscriber_id: int, broker_name: str, account_number: str, password: str, server: str) -> bool:
+def save_trading_account(
+    subscriber_id: int, 
+    broker_name: str, 
+    account_number: str, 
+    password: str, 
+    server: str,
+    initial_balance: str = None,
+    current_balance: str = None,
+    withdrawals: str = None,
+    copy_start_date: str = None,
+    agent: str = None
+) -> bool:
     """حفظ حساب تداول جديد مرتبط بالمستخدم"""
     try:
         db = SessionLocal()
@@ -246,7 +263,12 @@ def save_trading_account(subscriber_id: int, broker_name: str, account_number: s
             broker_name=broker_name,
             account_number=account_number,
             password=password,
-            server=server
+            server=server,
+            initial_balance=initial_balance,
+            current_balance=current_balance,
+            withdrawals=withdrawals,
+            copy_start_date=copy_start_date,
+            agent=agent
         )
         
         db.add(trading_account)
@@ -302,6 +324,11 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
                         "broker_name": acc.broker_name,
                         "account_number": acc.account_number,
                         "server": acc.server,
+                        "initial_balance": acc.initial_balance,
+                        "current_balance": acc.current_balance,
+                        "withdrawals": acc.withdrawals,
+                        "copy_start_date": acc.copy_start_date,
+                        "agent": acc.agent,
                         "created_at": acc.created_at
                     }
                     for acc in subscriber.trading_accounts
@@ -597,6 +624,11 @@ def webapp_existing_account(request: Request):
         "account": "رقم الحساب" if is_ar else "Account Number",
         "password": "كلمة السر" if is_ar else "Password",
         "server": "سيرفر التداول" if is_ar else "Trading Server",
+        "initial_balance": "رصيد البداية" if is_ar else "Initial Balance",
+        "current_balance": "الرصيد الحالي" if is_ar else "Current Balance",
+        "withdrawals": "المسحوبات" if is_ar else "Withdrawals",
+        "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
+        "agent": "الوكيل" if is_ar else "Agent",
         "submit": "تسجيل" if is_ar else "Submit",
         "close": "إغلاق" if is_ar else "Close",
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
@@ -615,24 +647,68 @@ def webapp_existing_account(request: Request):
         body{{font-family:Arial;padding:16px;background:#f7f7f7;direction:{dir_attr};}}
         .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white;box-shadow:0 4px 12px rgba(0,0,0,0.1)}}
         label{{display:block;margin-top:10px;font-weight:600;text-align:{text_align}}}
-        input{{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:16px;}}
+        input, select{{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:16px;}}
         .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
         .btn-primary{{background:#1E90FF;color:white}}
         .btn-ghost{{background:transparent;border:1px solid #ccc}}
         .small{{font-size:13px;color:#666;text-align:{text_align}}}
+        .form-row{{display:flex;gap:10px;margin-top:10px;}}
+        .form-row > div{{flex:1;}}
       </style>
     </head>
     <body>
       <div class="card">
         <h2 style="text-align:{text_align}">{page_title}</h2>
+        
         <label>{labels['broker']}</label>
-        <input id="broker" placeholder="Oneroyal / Tickmill" />
-        <label>{labels['account']}</label>
-        <input id="account" placeholder="123456" />
-        <label>{labels['password']}</label>
-        <input id="password" type="password" placeholder="••••••••" />
+        <select id="broker">
+          <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
+          <option value="Oneroyal">Oneroyal</option>
+          <option value="Tickmill">Tickmill</option>
+        </select>
+
+        <div class="form-row">
+          <div>
+            <label>{labels['account']}</label>
+            <input id="account" placeholder="123456" />
+          </div>
+          <div>
+            <label>{labels['password']}</label>
+            <input id="password" type="password" placeholder="••••••••" />
+          </div>
+        </div>
+
         <label>{labels['server']}</label>
         <input id="server" placeholder="Oneroyal-Live" />
+
+        <div class="form-row">
+          <div>
+            <label>{labels['initial_balance']}</label>
+            <input id="initial_balance" type="number" placeholder="0.00" step="0.01" />
+          </div>
+          <div>
+            <label>{labels['current_balance']}</label>
+            <input id="current_balance" type="number" placeholder="0.00" step="0.01" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label>{labels['withdrawals']}</label>
+            <input id="withdrawals" type="number" placeholder="0.00" step="0.01" />
+          </div>
+          <div>
+            <label>{labels['copy_start_date']}</label>
+            <input id="copy_start_date" type="date" />
+          </div>
+        </div>
+
+        <label>{labels['agent']}</label>
+        <select id="agent">
+          <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
+          <option value="ملك الدهب">ملك الدهب</option>
+        </select>
+
         <div style="margin-top:12px;text-align:{text_align}">
           <button class="btn btn-primary" id="submit">{labels['submit']}</button>
           <button class="btn btn-ghost" id="close">{labels['close']}</button>
@@ -651,12 +727,32 @@ def webapp_existing_account(request: Request):
           const account = document.getElementById('account').value.trim();
           const password = document.getElementById('password').value.trim();
           const server = document.getElementById('server').value.trim();
+          const initial_balance = document.getElementById('initial_balance').value.trim();
+          const current_balance = document.getElementById('current_balance').value.trim();
+          const withdrawals = document.getElementById('withdrawals').value.trim();
+          const copy_start_date = document.getElementById('copy_start_date').value.trim();
+          const agent = document.getElementById('agent').value.trim();
+
           if(!broker || !account || !password || !server){{
-            statusEl.textContent = '{ "يرجى ملئ جميع الحقول" if is_ar else "Please fill all fields" }';
+            statusEl.textContent = '{ "يرجى ملئ جميع الحقول الأساسية" if is_ar else "Please fill all required fields" }';
             return;
           }}
+
           const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-          const payload = {{broker,account,password,server,tg_user:initUser,lang:"{lang}"}};
+          const payload = {{
+            broker,
+            account,
+            password,
+            server,
+            initial_balance,
+            current_balance,
+            withdrawals,
+            copy_start_date,
+            agent,
+            tg_user: initUser,
+            lang:"{lang}"
+          }};
+
           try{{
             const resp = await fetch(window.location.origin + '/webapp/existing-account/submit', {{
               method:'POST',
@@ -676,6 +772,7 @@ def webapp_existing_account(request: Request):
             statusEl.textContent='{labels["error"]}: '+e.message;
           }}
         }}
+
         document.getElementById('submit').addEventListener('click',submitForm);
         document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
       </script>
@@ -1234,6 +1331,12 @@ async def submit_existing_account(payload: dict = Body(...)):
         account = (payload.get("account") or "").strip()
         password = (payload.get("password") or "").strip()
         server = (payload.get("server") or "").strip()
+        # الحقول الجديدة
+        initial_balance = (payload.get("initial_balance") or "").strip()
+        current_balance = (payload.get("current_balance") or "").strip()
+        withdrawals = (payload.get("withdrawals") or "").strip()
+        copy_start_date = (payload.get("copy_start_date") or "").strip()
+        agent = (payload.get("agent") or "").strip()
         lang = (payload.get("lang") or "ar").lower()
 
         if not all([telegram_id, broker, account, password, server]):
@@ -1248,7 +1351,12 @@ async def submit_existing_account(payload: dict = Body(...)):
             broker_name=broker,
             account_number=account,
             password=password,
-            server=server
+            server=server,
+            initial_balance=initial_balance,
+            current_balance=current_balance,
+            withdrawals=withdrawals,
+            copy_start_date=copy_start_date,
+            agent=agent
         )
 
         if not success:
@@ -1257,11 +1365,9 @@ async def submit_existing_account(payload: dict = Body(...)):
         ref = get_form_ref(telegram_id)
         
         if ref:
-          
             updated_data = get_subscriber_with_accounts(telegram_id)
             
             if updated_data:
-               
                 if lang == "ar":
                     header_title = "👤 بياناتي وحساباتي"
                     add_account_label = "➕ إضافة حساب تداول"
@@ -1306,8 +1412,30 @@ async def submit_existing_account(payload: dict = Body(...)):
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
                         if lang == "ar":
                             account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            # إضافة الحقول الجديدة إذا كانت موجودة
+                            if acc.get('initial_balance'):
+                                account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
+                            if acc.get('current_balance'):
+                                account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
+                            if acc.get('withdrawals'):
+                                account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
+                            if acc.get('copy_start_date'):
+                                account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                            if acc.get('agent'):
+                                account_text += f"   👤 الوكيل: {acc['agent']}\n"
                         else:
                             account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            # إضافة الحقول الجديدة إذا كانت موجودة
+                            if acc.get('initial_balance'):
+                                account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
+                            if acc.get('current_balance'):
+                                account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
+                            if acc.get('withdrawals'):
+                                account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
+                            if acc.get('copy_start_date'):
+                                account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
+                            if acc.get('agent'):
+                                account_text += f"   👤 Agent: {acc['agent']}\n"
                         updated_message += account_text
                 else:
                     updated_message += f"\n{no_accounts}"
@@ -1334,7 +1462,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 try:
-                 
                     await application.bot.edit_message_text(
                         chat_id=ref["chat_id"],
                         message_id=ref["message_id"],
@@ -1347,7 +1474,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                     save_form_ref(telegram_id, ref["chat_id"], ref["message_id"], origin="my_accounts", lang=lang)
                 except Exception:
                     logger.exception("Failed to update user accounts message")
-                   
                     try:
                         sent = await application.bot.send_message(
                             chat_id=telegram_id, 
@@ -1362,7 +1488,6 @@ async def submit_existing_account(payload: dict = Body(...)):
             else:
                 logger.error("Failed to get updated user data")
         else:
-           
             if lang == "ar":
                 msg_text = "✅ تم تسجيل حساب التداول بنجاح!"
             else:
