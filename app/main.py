@@ -1513,7 +1513,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     user_data = get_subscriber_with_accounts(telegram_id)
     
     if not user_data:
-       
         if lang == "ar":
             text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً."
         else:
@@ -1568,8 +1567,30 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         for i, acc in enumerate(user_data['trading_accounts'], 1):
             if lang == "ar":
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                # إضافة الحقول الجديدة إذا كانت موجودة
+                if acc.get('initial_balance'):
+                    account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
+                if acc.get('current_balance'):
+                    account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
+                if acc.get('withdrawals'):
+                    account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
+                if acc.get('copy_start_date'):
+                    account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                if acc.get('agent'):
+                    account_text += f"   👤 الوكيل: {acc['agent']}\n"
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                # إضافة الحقول الجديدة إذا كانت موجودة
+                if acc.get('initial_balance'):
+                    account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
+                if acc.get('current_balance'):
+                    account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
+                if acc.get('withdrawals'):
+                    account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
+                if acc.get('copy_start_date'):
+                    account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
+                if acc.get('agent'):
+                    account_text += f"   👤 Agent: {acc['agent']}\n"
             message += account_text
     else:
         message += f"\n{no_accounts}"
@@ -1606,7 +1627,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             
             save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
         else:
-            
             sent = await context.bot.send_message(
                 chat_id=telegram_id,
                 text=message,
