@@ -1,3 +1,5 @@
+## The full updated code with the fixes applied
+
 import os
 import re
 import json
@@ -590,7 +592,7 @@ def webapp_form(request: Request):
         }}
 
         const urlParams = new URLSearchParams(window.location.search);
-        const pageLang = (urlParams.get('lang') || '{ "ar" if is_ar else "en" }').toLowerCase();
+        const pageLang = (urlParams.get('lang') or '{ "ar" if is_ar else "en" }').toLowerCase();
 
         async function submitForm() {{
           const name = document.getElementById('name').value.trim();
@@ -822,9 +824,6 @@ def webapp_existing_account(request: Request):
 # ===============================
 # New WebApp: edit-accounts form
 # ===============================
-# ===============================
-# New WebApp: edit-accounts form - FIXED VERSION
-# ===============================
 @app.get("/webapp/edit-accounts")
 def webapp_edit_accounts(request: Request):
     lang = (request.query_params.get("lang") or "ar").lower()
@@ -870,7 +869,6 @@ def webapp_edit_accounts(request: Request):
         .small{{font-size:13px;color:#666;text-align:{text_align}}}
         .form-row{{display:flex;gap:10px;margin-top:10px;}}
         .form-row > div{{flex:1;}}
-        .hidden{{display:none;}}
       </style>
     </head>
     <body>
@@ -882,12 +880,8 @@ def webapp_edit_accounts(request: Request):
           <option value="">{ 'جاري التحميل...' if is_ar else 'Loading...' }</option>
         </select>
 
-        <!-- إضافة حقل مخفي لتخزين معرف الحساب الحالي -->
-        <input type="hidden" id="current_account_id" value="">
-
         <label>{labels['broker']}</label>
         <select id="broker">
-          <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
           <option value="Oneroyal">Oneroyal</option>
           <option value="Tickmill">Tickmill</option>
         </select>
@@ -930,7 +924,6 @@ def webapp_edit_accounts(request: Request):
 
         <label>{labels['agent']}</label>
         <select id="agent">
-          <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
           <option value="ملك الدهب">ملك الدهب</option>
         </select>
 
@@ -949,7 +942,6 @@ def webapp_edit_accounts(request: Request):
         const statusEl = document.getElementById('status');
         let currentAccountId = null;
 
-        // دالة لتحميل الحسابات
         async function loadAccounts() {{
           const initUser = tg.initDataUnsafe.user;
           if (!initUser) {{
@@ -961,58 +953,26 @@ def webapp_edit_accounts(request: Request):
             const accounts = await resp.json();
             const select = document.getElementById('account_select');
             select.innerHTML = '';
-            
             if (accounts.length === 0) {{
               select.innerHTML = `<option value="">{labels['no_accounts']}</option>`;
-              disableForm();
               return;
             }}
-            
-            // إضافة خيار افتراضي
-            select.innerHTML = `<option value="">{ 'اختر حساب للتعديل' if is_ar else 'Select account to edit' }</option>`;
-            
             accounts.forEach(acc => {{
               const option = document.createElement('option');
               option.value = acc.id;
               option.textContent = `${{acc.broker_name}} - ${{acc.account_number}}`;
               select.appendChild(option);
             }});
+            
+            if (select.options.length > 0) {
+              select.value = select.options[0].value;
+              loadAccountDetails(parseInt(select.value));
+            }
           }} catch (e) {{
             statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
 
-        // دالة لتعطيل النموذج
-        function disableForm() {{
-          document.getElementById('broker').disabled = true;
-          document.getElementById('account').disabled = true;
-          document.getElementById('password').disabled = true;
-          document.getElementById('server').disabled = true;
-          document.getElementById('initial_balance').disabled = true;
-          document.getElementById('current_balance').disabled = true;
-          document.getElementById('withdrawals').disabled = true;
-          document.getElementById('copy_start_date').disabled = true;
-          document.getElementById('agent').disabled = true;
-          document.getElementById('save').disabled = true;
-          document.getElementById('delete').disabled = true;
-        }}
-
-        // دالة لتمكين النموذج
-        function enableForm() {{
-          document.getElementById('broker').disabled = false;
-          document.getElementById('account').disabled = false;
-          document.getElementById('password').disabled = false;
-          document.getElementById('server').disabled = false;
-          document.getElementById('initial_balance').disabled = false;
-          document.getElementById('current_balance').disabled = false;
-          document.getElementById('withdrawals').disabled = false;
-          document.getElementById('copy_start_date').disabled = false;
-          document.getElementById('agent').disabled = false;
-          document.getElementById('save').disabled = false;
-          document.getElementById('delete').disabled = false;
-        }}
-
-        // دالة لتفريغ النموذج
         function clearForm() {{
           document.getElementById('broker').value = '';
           document.getElementById('account').value = '';
@@ -1023,30 +983,17 @@ def webapp_edit_accounts(request: Request):
           document.getElementById('withdrawals').value = '';
           document.getElementById('copy_start_date').value = '';
           document.getElementById('agent').value = '';
-          document.getElementById('current_account_id').value = '';
-          currentAccountId = null;
         }}
 
-        // دالة لتحميل تفاصيل الحساب
-        async function loadAccountDetails(accountId) {{
-          if (!accountId) {{
-            clearForm();
-            disableForm();
-            return;
-          }}
-          
+        async function loadAccountDetails(id) {{
+          id = parseInt(id);
+          if (isNaN(id) || !id) return;
           try {{
-            const initUser = tg.initDataUnsafe.user;
-            const resp = await fetch(`${{window.location.origin}}/api/trading_accounts?tg_id=${{initUser.id}}`);
+            const resp = await fetch(`${{window.location.origin}}/api/trading_accounts?tg_id=${{tg.initDataUnsafe.user.id}}`);
             const accounts = await resp.json();
-            const acc = accounts.find(a => a.id == accountId);
-            
+            const acc = accounts.find(a => a.id == id);
             if (acc) {{
-              // تعيين معرف الحساب الحالي
               currentAccountId = acc.id;
-              document.getElementById('current_account_id').value = acc.id;
-              
-              // تعبئة الحقول بالبيانات
               document.getElementById('broker').value = acc.broker_name || '';
               document.getElementById('account').value = acc.account_number || '';
               document.getElementById('password').value = acc.password || '';
@@ -1056,35 +1003,19 @@ def webapp_edit_accounts(request: Request):
               document.getElementById('withdrawals').value = acc.withdrawals || '';
               document.getElementById('copy_start_date').value = acc.copy_start_date || '';
               document.getElementById('agent').value = acc.agent || '';
-              
-              // تمكين النموذج
-              enableForm();
-              
-              statusEl.textContent = '';
-              statusEl.style.color = '#b00';
-            }} else {{
-              statusEl.textContent = '{ "الحساب غير موجود" if is_ar else "Account not found" }';
-              clearForm();
-              disableForm();
             }}
           }} catch (e) {{
             statusEl.textContent = '{labels["error"]}: ' + e.message;
-            clearForm();
-            disableForm();
           }}
         }}
 
-        // دالة لحفظ التغييرات
         async function saveChanges() {{
-          const accountId = document.getElementById('current_account_id').value;
-          
-          if (!accountId) {{
+          if (!currentAccountId) {{
             statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
             return;
           }}
-
           const payload = {{
-            id: parseInt(accountId),
+            id: currentAccountId,
             broker_name: document.getElementById('broker').value.trim(),
             account_number: document.getElementById('account').value.trim(),
             password: document.getElementById('password').value.trim(),
@@ -1097,129 +1028,63 @@ def webapp_edit_accounts(request: Request):
             tg_user: tg.initDataUnsafe.user,
             lang: "{lang}"
           }};
-
-          // التحقق من الحقول المطلوبة
-          if (!payload.broker_name || !payload.account_number || !payload.password || !payload.server) {{
-            statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
-            return;
-          }}
-
           try {{
-            statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
-            statusEl.style.color = '#1E90FF';
-            
             const resp = await fetch(`${{window.location.origin}}/api/update_trading_account`, {{
               method: 'POST',
               headers: {{'Content-Type': 'application/json'}},
               body: JSON.stringify(payload)
             }});
-            
             const data = await resp.json();
-            
             if (data.success) {{
               statusEl.style.color = 'green';
-              statusEl.textContent = '{ "تم حفظ التغييرات بنجاح" if is_ar else "Changes saved successfully" }';
-              
-              // إعادة تحميل الحسابات لتحديث القائمة
-              await loadAccounts();
-              
-              setTimeout(() => {{ 
-                try{{ 
-                  tg.close(); 
-                }}catch(e){{
-                  console.log('Telegram WebApp closed');
-                }}
-              }}, 1500);
+              statusEl.textContent = '{ "تم الحفظ بنجاح" if is_ar else "Saved successfully" }';
+              setTimeout(() => {{ try{{tg.close();}}catch(e){{}} }}, 700);
             }} else {{
-              statusEl.style.color = '#b00';
-              statusEl.textContent = data.detail || '{labels["error"]}';
+              statusEl.textContent = '{labels["error"]}';
             }}
           }} catch (e) {{
-            statusEl.style.color = '#b00';
             statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
 
-        // دالة لحذف الحساب
         async function deleteAccount() {{
-          const accountId = document.getElementById('current_account_id').value;
-          
-          if (!accountId) {{
+          if (!currentAccountId) {{
             statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
             return;
           }}
-
-          if (!confirm('{ "هل أنت متأكد من حذف هذا الحساب؟" if is_ar else "Are you sure you want to delete this account?" }')) {{
-            return;
-          }}
-
+          if (!confirm('{ "هل أنت متأكد من حذف هذا الحساب؟" if is_ar else "Are you sure you want to delete this account?" }')) return;
           const payload = {{
-            id: parseInt(accountId),
+            id: currentAccountId,
             tg_user: tg.initDataUnsafe.user,
             lang: "{lang}"
           }};
-
           try {{
-            statusEl.textContent = '{ "جاري الحذف..." if is_ar else "Deleting..." }';
-            statusEl.style.color = '#1E90FF';
-            
             const resp = await fetch(`${{window.location.origin}}/api/delete_trading_account`, {{
               method: 'POST',
               headers: {{'Content-Type': 'application/json'}},
               body: JSON.stringify(payload)
             }});
-            
             const data = await resp.json();
-            
             if (data.success) {{
               statusEl.style.color = 'green';
-              statusEl.textContent = '{ "تم حذف الحساب بنجاح" if is_ar else "Account deleted successfully" }';
-              
-              // إعادة تحميل الحسابات وتفريغ النموذج
-              await loadAccounts();
+              statusEl.textContent = '{ "تم الحذف بنجاح" if is_ar else "Deleted successfully" }';
               clearForm();
-              disableForm();
-              
-              setTimeout(() => {{ 
-                try{{ 
-                  tg.close(); 
-                }}catch(e){{
-                  console.log('Telegram WebApp closed');
-                }}
-              }}, 1500);
+              currentAccountId = null;
+              loadAccounts();
+              setTimeout(() => {{ try{{tg.close();}}catch(e){{}} }}, 700);
             }} else {{
-              statusEl.style.color = '#b00';
-              statusEl.textContent = data.detail || '{labels["error"]}';
+              statusEl.textContent = '{labels["error"]}';
             }}
           }} catch (e) {{
-            statusEl.style.color = '#b00';
             statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
 
-        // تهيئة الصفحة
-        document.addEventListener('DOMContentLoaded', function() {{
-          // تحميل الحسابات أولاً
-          loadAccounts();
-          
-          // تعطيل النموذج في البداية
-          disableForm();
-        }});
-
-        // إضافة المستمعين للأحداث
-        document.getElementById('account_select').addEventListener('change', function(e) {{
-          loadAccountDetails(e.target.value);
-        }});
-        
+        document.getElementById('account_select').addEventListener('change', (e) => loadAccountDetails(parseInt(e.target.value)));
         document.getElementById('save').addEventListener('click', saveChanges);
         document.getElementById('delete').addEventListener('click', deleteAccount);
-        document.getElementById('close').addEventListener('click', function() {{ 
-          try{{ 
-            tg.close(); 
-          }}catch(e){{
-            console.log('Telegram WebApp closed');
-          }}
-        }});
+        document.getElementById('close').addEventListener('click', () => {{ try{{tg.close();}}catch(e){{}} }});
+        loadAccounts();
       </script>
     </body>
     </html>
