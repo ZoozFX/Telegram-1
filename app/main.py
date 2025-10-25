@@ -457,7 +457,8 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     q = update.callback_query
     await q.answer()
     if lang == "ar":
-        sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
+        #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
+        sections = [("💹 تداول الفوركس", "forex_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
