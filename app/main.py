@@ -5,7 +5,7 @@ import logging
 import unicodedata
 from typing import List, Optional, Tuple, Dict, Any
 from urllib.parse import urlencode, quote_plus
-from datetime import datetime  # ⬅️ أضف هذا
+from datetime import datetime 
 from fastapi import FastAPI, Request, Body, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -1042,12 +1042,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if q.data == "back_main":
         await show_main_sections(update, context, lang)
         return
-
-    # mapping for sections - التعديل هنا: إزالة "بياناتي وحساباتي" من قسم الفوركس
+        
     sections_data = {
         "forex_main": {
-            "ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
-            "en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
+            #"ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
+            "ar": ["📊 نسخ الصفقات"],
+            #"en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
+            "en": ["📊 Copy Trading"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
