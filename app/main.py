@@ -351,7 +351,6 @@ def clear_form_ref(tg_id: int):
 # -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
-
 # -------------------------------
 # small helper to send or edit a "congrats / brokers" message and save ref
 # -------------------------------
