@@ -344,7 +344,7 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             db.close()
             return False, None
         
-        # حفظ البيانات القديمة للإشعار
+       
         old_data = {
             "broker_name": account.broker_name,
             "account_number": account.account_number,
@@ -355,26 +355,27 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             if hasattr(account, key) and value is not None:
                 setattr(account, key, value)
         
-        # إعادة تعيين الحالة إلى under_review عند التعديل
+        
         account.status = "under_review"
-        account.rejection_reason = None  # مسح السبب إذا كان موجوداً
+        account.rejection_reason = None 
         
         db.commit()
         db.refresh(account)
         
-        # إعداد بيانات للإشعار
+        
         subscriber = account.subscriber
         account_data = {
             "id": account.id,
             "broker_name": account.broker_name,
             "account_number": account.account_number,
+            "password": account.password,
             "server": account.server,
             "initial_balance": account.initial_balance,
             "current_balance": account.current_balance,
             "withdrawals": account.withdrawals,
             "copy_start_date": account.copy_start_date,
             "agent": account.agent,
-            "old_data": old_data  # تضمين البيانات القديمة
+            "old_data": old_data
         }
         
         subscriber_data = {
@@ -388,7 +389,7 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
         
         db.close()
         
-        # إرسال إشعار للمسؤول
+       
         import asyncio
         try:
             asyncio.create_task(send_admin_notification("updated_account", account_data, subscriber_data))
@@ -409,7 +410,7 @@ def delete_trading_account(account_id: int) -> bool:
             db.close()
             return False
         
-        # منع الحذف إذا كان الحساب قيد المراجعة
+       
         if account.status == "under_review":
             db.close()
             return False
