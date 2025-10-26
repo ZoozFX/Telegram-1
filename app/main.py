@@ -897,6 +897,8 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """إرسال إشعار للمسؤول بلغته الحالية"""
     try:
+        logger.info(f"🔔 Starting admin notification for {action_type}")
+        
         if not ADMIN_TELEGRAM_ID:
             logger.warning("⚠️ ADMIN_TELEGRAM_ID not set - admin notifications disabled")
             return
@@ -932,23 +934,23 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             message = f"""
 {title}
 ━━━━━━━━━━━━━━━━━━━━
-👤 **المستخدم:** {subscriber_data['name']}
-📧 **البريد:** {subscriber_data['email']}
-📞 **الهاتف:** {subscriber_data['phone']}
-🌐 **تيليجرام:** @{subscriber_data.get('telegram_username', 'N/A')} ({subscriber_data['telegram_id']})
+<b>👤 المستخدم:</b> {subscriber_data['name']}
+<b>📧 البريد:</b> {subscriber_data['email']}
+<b>📞 الهاتف:</b> {subscriber_data['phone']}
+<b>🌐 تيليجرام:</b> @{subscriber_data.get('telegram_username', 'N/A')} ({subscriber_data['telegram_id']})
 
-🏦 **الوسيط:** {account_data['broker_name']}
-🔢 **رقم الحساب:** {account_data['account_number']}
-🔐 **كلمة المرور:** {account_data.get('password', 'N/A')}
-🖥️ **السيرفر:** {account_data['server']}
-👤 **الوكيل:** {account_data.get('agent', 'N/A')}
+<b>🏦 الوسيط:</b> {account_data['broker_name']}
+<b>🔢 رقم الحساب:</b> {account_data['account_number']}
+<b>🔐 كلمة المرور:</b> {account_data.get('password', 'N/A')}
+<b>🖥️ السيرفر:</b> {account_data['server']}
+<b>👤 الوكيل:</b> {account_data.get('agent', 'N/A')}
 
-💰 **رصيد البداية:** {account_data.get('initial_balance', 'N/A')}
-💳 **الرصيد الحالي:** {account_data.get('current_balance', 'N/A')}  
-💸 **المسحوبات:** {account_data.get('withdrawals', 'N/A')}
-📅 **تاريخ البدء:** {account_data.get('copy_start_date', 'N/A')}
+<b>💰 رصيد البداية:</b> {account_data.get('initial_balance', 'N/A')}
+<b>💳 الرصيد الحالي:</b> {account_data.get('current_balance', 'N/A')}  
+<b>💸 المسحوبات:</b> {account_data.get('withdrawals', 'N/A')}
+<b>📅 تاريخ البدء:</b> {account_data.get('copy_start_date', 'N/A')}
 
-🌐 **معرف الحساب:** {account_data['id']}
+<b>🌐 معرف الحساب:</b> {account_data['id']}
             """
             
             # أزرار باللغة العربية
@@ -962,23 +964,23 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             message = f"""
 {title}
 ━━━━━━━━━━━━━━━━━━━━
-👤 **User:** {subscriber_data['name']}
-📧 **Email:** {subscriber_data['email']}
-📞 **Phone:** {subscriber_data['phone']}
-🌐 **Telegram:** @{subscriber_data.get('telegram_username', 'N/A')} ({subscriber_data['telegram_id']})
+<b>👤 User:</b> {subscriber_data['name']}
+<b>📧 Email:</b> {subscriber_data['email']}
+<b>📞 Phone:</b> {subscriber_data['phone']}
+<b>🌐 Telegram:</b> @{subscriber_data.get('telegram_username', 'N/A')} ({subscriber_data['telegram_id']})
 
-🏦 **Broker:** {account_data['broker_name']}
-🔢 **Account Number:** {account_data['account_number']}
-🔐 **Password:** {account_data.get('password', 'N/A')}
-🖥️ **Server:** {account_data['server']}
-👤 **Agent:** {account_data.get('agent', 'N/A')}
+<b>🏦 Broker:</b> {account_data['broker_name']}
+<b>🔢 Account Number:</b> {account_data['account_number']}
+<b>🔐 Password:</b> {account_data.get('password', 'N/A')}
+<b>🖥️ Server:</b> {account_data['server']}
+<b>👤 Agent:</b> {account_data.get('agent', 'N/A')}
 
-💰 **Initial Balance:** {account_data.get('initial_balance', 'N/A')}
-💳 **Current Balance:** {account_data.get('current_balance', 'N/A')}  
-💸 **Withdrawals:** {account_data.get('withdrawals', 'N/A')}
-📅 **Start Date:** {account_data.get('copy_start_date', 'N/A')}
+<b>💰 Initial Balance:</b> {account_data.get('initial_balance', 'N/A')}
+<b>💳 Current Balance:</b> {account_data.get('current_balance', 'N/A')}  
+<b>💸 Withdrawals:</b> {account_data.get('withdrawals', 'N/A')}
+<b>📅 Start Date:</b> {account_data.get('copy_start_date', 'N/A')}
 
-🌐 **Account ID:** {account_data['id']}
+<b>🌐 Account ID:</b> {account_data['id']}
             """
             
             # أزرار باللغة الإنجليزية
@@ -991,15 +993,19 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        logger.info(f"📤 Sending message to admin {admin_id}")
+        
         await application.bot.send_message(
             chat_id=admin_id,
             text=message,
             reply_markup=reply_markup,
-            parse_mode="Markdown"
+            parse_mode="HTML"  # ⬅️ تغيير من Markdown إلى HTML
         )
         
+        logger.info("✅ Admin notification sent successfully")
+        
     except Exception as e:
-        logger.exception(f"Failed to send admin notification: {e}")
+        logger.exception(f"❌ Failed to send admin notification: {e}")
 
 def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
     """الحصول على نص حالة الحساب"""
