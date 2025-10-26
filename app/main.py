@@ -2153,14 +2153,14 @@ async def webapp_submit(payload: dict = Body(...)):
             # عرض صفحة طلب الاكسبيرت
             ea_link = "https://t.me/Nagyfx"
             if display_lang == "ar":
-                header_title = "🤖 طلب نسخة من الاكسبيرت"
-                message_text = "✅ اضغط على الزر أدناه للانتقال إلى طلب نسخة الاكسبيرت:"
+                header_title = "طلب نسخة من الاكسبيرت"
+                message_text = ""
                 button_text = "🤖 طلب نسخة من الاكسبيرت"
                 back_button = "🔙 الرجوع لتداول الفوركس"
             else:
-                header_title = "🤖 Request EA Copy"
-                message_text = "✅ Click the button below to request EA copy:"
-                button_text = "🤖 Request EA Copy"
+                header_title = "Request EA Version"
+                message_text = ""
+                button_text = "🤖 Request EA Version"
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
