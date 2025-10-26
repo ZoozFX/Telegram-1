@@ -685,7 +685,7 @@ async def handle_notification_confirmation(update: Update, context: ContextTypes
     except Exception as e:
         logger.exception(f"Failed to delete notification message: {e}")
 
-# تحديث دالة notify_user_about_account_status
+
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None, user_lang: str = None):
     """إرسال إشعار للمستخدم بتغيير حالة حسابه بلغته الحالية"""
     try:
@@ -723,8 +723,9 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 You can now start using the service. Thank you for your trust!
                 """
         else:  # rejected
-            reason_text = f"\n📝 السبب: {reason}" if reason else ""
+            # استخدام النص المناسب للغة
             if lang == "ar":
+                reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 ❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
 ━━━━━━━━━━━━━━━━━━━━
@@ -734,6 +735,7 @@ You can now start using the service. Thank you for your trust!
 يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
                 """
             else:
+                reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 ❌ Your trading account was not activated{reason_text}
 ━━━━━━━━━━━━━━━━━━━━
@@ -1009,8 +1011,27 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await show_main_sections(update, context, admin_lang)
                 return
     
-    # إذا لم تكن هناك لغة مخزنة، استخدم الدالة العادية
-    await start(update, context)
+    # إذا لم تكن هناك لغة مخزنة، اعرض اختيار اللغة (حتى للأدمن)
+    keyboard = [
+        [
+            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
+            InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    labels = ["🇺🇸 English", "🇪🇬 العربية"]
+    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
+    
+    if update.callback_query:
+        q = update.callback_query
+        await q.answer()
+        try:
+            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        except Exception:
+            await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+    else:
+        if update.message:
+            await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """إرسال إشعار للمسؤول بلغته الحالية"""
