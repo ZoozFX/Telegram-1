@@ -970,14 +970,14 @@ def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
     """الحصول على نص حالة الحساب"""
     if lang == "ar":
         status_texts = {
-            "under_review": "⏳ قيد المراجعة (لا يمكن التعديل)",
+            "under_review": "⏳ قيد المراجعة",
             "active": "✅ مفعل",
             "rejected": "❌ مرفوض"
         }
         reason_text = f" بسبب: {reason}" if reason else ""
     else:
         status_texts = {
-            "under_review": "⏳ Under Review (cannot edit)", 
+            "under_review": "⏳ Under Review", 
             "active": "✅ Active",
             "rejected": "❌ Rejected"
         }
@@ -1574,165 +1574,199 @@ def webapp_edit_accounts(request: Request):
           currentAccountId = null;
         }}
 
-        
-
-// أضف أيضاً في دالة saveChanges تحقق إضافي:
-async function saveChanges() {
-    const accountId = document.getElementById('current_account_id').value;
-    
-    if (!accountId) {
-        statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
-        return;
-    }
-
-    // الحصول على حالة الحساب الحالية للتحقق
-    try {
-        const initUser = tg.initDataUnsafe.user;
-        const resp = await fetch(`${window.location.origin}/api/trading_accounts?tg_id=${initUser.id}`);
-        const accounts = await resp.json();
-        const currentAccount = accounts.find(a => a.id == parseInt(accountId));
-        
-        if (currentAccount && currentAccount.status === 'under_review') {
-            statusEl.style.color = '#FFA500';
-            statusEl.textContent = '{ "لا يمكن تعديل الحساب أثناء قيد المراجعة" if is_ar else "Cannot edit account while under review" }';
-            return;
-        }
-    } catch (e) {
-        statusEl.textContent = '{labels["error"]}: ' + e.message;
-        return;
-    }
-
-    const payload = {
-        id: parseInt(accountId),
-        broker_name: document.getElementById('broker').value.trim(),
-        account_number: document.getElementById('account').value.trim(),
-        password: document.getElementById('password').value.trim(),
-        server: document.getElementById('server').value.trim(),
-        initial_balance: document.getElementById('initial_balance').value.trim(),
-        current_balance: document.getElementById('current_balance').value.trim(),
-        withdrawals: document.getElementById('withdrawals').value.trim(),
-        copy_start_date: document.getElementById('copy_start_date').value.trim(),
-        agent: document.getElementById('agent').value.trim(),
-        tg_user: tg.initDataUnsafe.user,
-        lang: "{lang}"
-    };
-
-    // التحقق من الحقول المطلوبة
-    if (!payload.broker_name || !payload.account_number || !payload.password || !payload.server) {
-        statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
-        return;
-    }
-
-    try {
-        statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
-        statusEl.style.color = '#1E90FF';
-        
-        const resp = await fetch(`${window.location.origin}/api/update_trading_account`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        });
-        
-        const data = await resp.json();
-        
-        if (data.success) {
-            statusEl.style.color = 'green';
-            statusEl.textContent = '{ "تم حفظ التغييرات بنجاح" if is_ar else "Changes saved successfully" }';
-            
-            // إعادة تحميل الحسابات لتحديث القائمة
-            await loadAccounts();
-            
-            setTimeout(() => { 
-                try{ 
-                    tg.close(); 
-                }catch(e){
-                    console.log('Telegram WebApp closed');
-                }
-            }, 1500);
-        } else {
-            statusEl.style.color = '#b00';
-            statusEl.textContent = data.detail || '{labels["error"]}';
-        }
-    } catch (e) {
-        statusEl.style.color = '#b00';
-        statusEl.textContent = '{labels["error"]}: ' + e.message;
-    }
-}
-
-// أضف أيضاً في دالة deleteAccount تحقق إضافي:
-async function deleteAccount() {
-    const accountId = document.getElementById('current_account_id').value;
-    
-    if (!accountId) {
-        statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
-        return;
-    }
-
-    // الحصول على حالة الحساب الحالية للتحقق
-    try {
-        const initUser = tg.initDataUnsafe.user;
-        const resp = await fetch(`${window.location.origin}/api/trading_accounts?tg_id=${initUser.id}`);
-        const accounts = await resp.json();
-        const currentAccount = accounts.find(a => a.id == parseInt(accountId));
-        
-        if (currentAccount && currentAccount.status === 'under_review') {
-            statusEl.style.color = '#FFA500';
-            statusEl.textContent = '{ "لا يمكن حذف الحساب أثناء قيد المراجعة" if is_ar else "Cannot delete account while under review" }';
-            return;
-        }
-    } catch (e) {
-        statusEl.textContent = '{labels["error"]}: ' + e.message;
-        return;
-    }
-
-    if (!confirm('{ "هل أنت متأكد من حذف هذا الحساب؟" if is_ar else "Are you sure you want to delete this account?" }')) {
-        return;
-    }
-
-    const payload = {
-        id: parseInt(accountId),
-        tg_user: tg.initDataUnsafe.user,
-        lang: "{lang}"
-    };
-
-    try {
-        statusEl.textContent = '{ "جاري الحذف..." if is_ar else "Deleting..." }';
-        statusEl.style.color = '#1E90FF';
-        
-        const resp = await fetch(`${window.location.origin}/api/delete_trading_account`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        });
-        
-        const data = await resp.json();
-        
-        if (data.success) {
-            statusEl.style.color = 'green';
-            statusEl.textContent = '{ "تم حذف الحساب بنجاح" if is_ar else "Account deleted successfully" }';
-            
-            // إعادة تحميل الحسابات وتفريغ النموذج
-            await loadAccounts();
+        // دالة لتحميل تفاصيل الحساب
+        async function loadAccountDetails(accountId) {{
+          if (!accountId) {{
             clearForm();
             disableForm();
+            return;
+          }}
+          
+          try {{
+            const initUser = tg.initDataUnsafe.user;
+            const resp = await fetch(`${{window.location.origin}}/api/trading_accounts?tg_id=${{initUser.id}}`);
+            const accounts = await resp.json();
+            const acc = accounts.find(a => a.id == accountId);
             
-            setTimeout(() => { 
-                try{ 
-                    tg.close(); 
-                }catch(e){
-                    console.log('Telegram WebApp closed');
-                }
-            }, 1500);
-        } else {
+            if (acc) {{
+              // تعيين معرف الحساب الحالي
+              currentAccountId = acc.id;
+              document.getElementById('current_account_id').value = acc.id;
+              
+              // تعبئة الحقول بالبيانات
+              document.getElementById('broker').value = acc.broker_name || '';
+              document.getElementById('account').value = acc.account_number || '';
+              document.getElementById('password').value = acc.password || '';
+              document.getElementById('server').value = acc.server || '';
+              document.getElementById('initial_balance').value = acc.initial_balance || '';
+              document.getElementById('current_balance').value = acc.current_balance || '';
+              document.getElementById('withdrawals').value = acc.withdrawals || '';
+              document.getElementById('copy_start_date').value = acc.copy_start_date || '';
+              document.getElementById('agent').value = acc.agent || '';
+              
+              // تمكين النموذج
+              enableForm();
+              
+              statusEl.textContent = '';
+              statusEl.style.color = '#b00';
+            }} else {{
+              statusEl.textContent = '{ "الحساب غير موجود" if is_ar else "Account not found" }';
+              clearForm();
+              disableForm();
+            }}
+          }} catch (e) {{
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
+            clearForm();
+            disableForm();
+          }}
+        }}
+
+        // دالة لحفظ التغييرات
+        async function saveChanges() {{
+          const accountId = document.getElementById('current_account_id').value;
+          
+          if (!accountId) {{
+            statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
+            return;
+          }}
+
+          const payload = {{
+            id: parseInt(accountId),
+            broker_name: document.getElementById('broker').value.trim(),
+            account_number: document.getElementById('account').value.trim(),
+            password: document.getElementById('password').value.trim(),
+            server: document.getElementById('server').value.trim(),
+            initial_balance: document.getElementById('initial_balance').value.trim(),
+            current_balance: document.getElementById('current_balance').value.trim(),
+            withdrawals: document.getElementById('withdrawals').value.trim(),
+            copy_start_date: document.getElementById('copy_start_date').value.trim(),
+            agent: document.getElementById('agent').value.trim(),
+            tg_user: tg.initDataUnsafe.user,
+            lang: "{lang}"
+          }};
+
+          // التحقق من الحقول المطلوبة
+          if (!payload.broker_name || !payload.account_number || !payload.password || !payload.server) {{
+            statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
+            return;
+          }}
+
+          try {{
+            statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
+            statusEl.style.color = '#1E90FF';
+            
+            const resp = await fetch(`${{window.location.origin}}/api/update_trading_account`, {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/json'}},
+              body: JSON.stringify(payload)
+            }});
+            
+            const data = await resp.json();
+            
+            if (data.success) {{
+              statusEl.style.color = 'green';
+              statusEl.textContent = '{ "تم حفظ التغييرات بنجاح" if is_ar else "Changes saved successfully" }';
+              
+              // إعادة تحميل الحسابات لتحديث القائمة
+              await loadAccounts();
+              
+              setTimeout(() => {{ 
+                try{{ 
+                  tg.close(); 
+                }}catch(e){{
+                  console.log('Telegram WebApp closed');
+                }}
+              }}, 1500);
+            }} else {{
+              statusEl.style.color = '#b00';
+              statusEl.textContent = data.detail || '{labels["error"]}';
+            }}
+          }} catch (e) {{
             statusEl.style.color = '#b00';
-            statusEl.textContent = data.detail || '{labels["error"]}';
-        }
-    } catch (e) {
-        statusEl.style.color = '#b00';
-        statusEl.textContent = '{labels["error"]}: ' + e.message;
-    }
-}
-        #}});
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
+          }}
+        }}
+
+        // دالة لحذف الحساب
+        async function deleteAccount() {{
+          const accountId = document.getElementById('current_account_id').value;
+          
+          if (!accountId) {{
+            statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
+            return;
+          }}
+
+          if (!confirm('{ "هل أنت متأكد من حذف هذا الحساب؟" if is_ar else "Are you sure you want to delete this account?" }')) {{
+            return;
+          }}
+
+          const payload = {{
+            id: parseInt(accountId),
+            tg_user: tg.initDataUnsafe.user,
+            lang: "{lang}"
+          }};
+
+          try {{
+            statusEl.textContent = '{ "جاري الحذف..." if is_ar else "Deleting..." }';
+            statusEl.style.color = '#1E90FF';
+            
+            const resp = await fetch(`${{window.location.origin}}/api/delete_trading_account`, {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/json'}},
+              body: JSON.stringify(payload)
+            }});
+            
+            const data = await resp.json();
+            
+            if (data.success) {{
+              statusEl.style.color = 'green';
+              statusEl.textContent = '{ "تم حذف الحساب بنجاح" if is_ar else "Account deleted successfully" }';
+              
+              // إعادة تحميل الحسابات وتفريغ النموذج
+              await loadAccounts();
+              clearForm();
+              disableForm();
+              
+              setTimeout(() => {{ 
+                try{{ 
+                  tg.close(); 
+                }}catch(e){{
+                  console.log('Telegram WebApp closed');
+                }}
+              }}, 1500);
+            }} else {{
+              statusEl.style.color = '#b00';
+              statusEl.textContent = data.detail || '{labels["error"]}';
+            }}
+          }} catch (e) {{
+            statusEl.style.color = '#b00';
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
+          }}
+        }}
+
+        // تهيئة الصفحة
+        document.addEventListener('DOMContentLoaded', function() {{
+          // تحميل الحسابات أولاً
+          loadAccounts();
+          
+          // تعطيل النموذج في البداية
+          disableForm();
+        }});
+
+        // إضافة المستمعين للأحداث
+        document.getElementById('account_select').addEventListener('change', function(e) {{
+          loadAccountDetails(e.target.value);
+        }});
+        
+        document.getElementById('save').addEventListener('click', saveChanges);
+        document.getElementById('delete').addEventListener('click', deleteAccount);
+        document.getElementById('close').addEventListener('click', function() {{ 
+          try{{ 
+            tg.close(); 
+          }}catch(e){{
+            console.log('Telegram WebApp closed');
+          }}
+        }});
       </script>
     </body>
     </html>
@@ -1759,24 +1793,10 @@ async def api_update_trading_account(payload: dict = Body(...)):
         if not telegram_id or not account_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
 
-        # Validate ownership and check status
+        # Validate ownership
         accounts = get_trading_accounts_by_telegram_id(telegram_id)
-        target_account = None
-        for acc in accounts:
-            if acc.id == account_id:
-                target_account = acc
-                break
-        
-        if not target_account:
+        if not any(acc.id == account_id for acc in accounts):
             raise HTTPException(status_code=403, detail="Account not owned by user")
-        
-        # منع التعديل إذا الحساب قيد المراجعة
-        if target_account.status == "under_review":
-            if lang == "ar":
-                error_msg = "⚠️ لا يمكن تعديل الحساب أثناء قيد المراجعة. يرجى الانتظار حتى يتم مراجعة الحساب."
-            else:
-                error_msg = "⚠️ Cannot edit account while under review. Please wait until the account is reviewed."
-            raise HTTPException(status_code=403, detail=error_msg)
 
         # Remove non-updatable fields
         update_data = {k: v for k, v in payload.items() if k not in ["id", "tg_user", "lang", "created_at"]}
@@ -1853,28 +1873,17 @@ async def api_update_trading_account(payload: dict = Body(...)):
                     updated_message += f"\n{no_accounts}"
 
                 keyboard = []
-                
                 if WEBAPP_URL:
                     url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
                     keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-                
                 if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
                     edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
                     keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-                
                 if WEBAPP_URL:
-                    params = {
-                        "lang": lang,
-                        "edit": "1",
-                        "name": updated_data['name'],
-                        "email": updated_data['email'],
-                        "phone": updated_data['phone']
-                    }
+                    params = {"lang": lang, "edit": "1", "name": updated_data['name'], "email": updated_data['email'], "phone": updated_data['phone']}
                     edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
                     keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-                
                 keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-                
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 try:
@@ -1905,24 +1914,10 @@ async def api_delete_trading_account(payload: dict = Body(...)):
         if not telegram_id or not account_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
 
-        # Validate ownership and check status
+        # Validate ownership
         accounts = get_trading_accounts_by_telegram_id(telegram_id)
-        target_account = None
-        for acc in accounts:
-            if acc.id == account_id:
-                target_account = acc
-                break
-        
-        if not target_account:
+        if not any(acc.id == account_id for acc in accounts):
             raise HTTPException(status_code=403, detail="Account not owned by user")
-        
-        # منع الحذف إذا الحساب قيد المراجعة
-        if target_account.status == "under_review":
-            if lang == "ar":
-                error_msg = "⚠️ لا يمكن حذف الحساب أثناء قيد المراجعة. يرجى الانتظار حتى يتم مراجعة الحساب."
-            else:
-                error_msg = "⚠️ Cannot delete account while under review. Please wait until the account is reviewed."
-            raise HTTPException(status_code=403, detail=error_msg)
 
         success = delete_trading_account(account_id)
         if not success:
@@ -1996,28 +1991,17 @@ async def api_delete_trading_account(payload: dict = Body(...)):
                     updated_message += f"\n{no_accounts}"
 
                 keyboard = []
-                
                 if WEBAPP_URL:
                     url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
                     keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-                
                 if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
                     edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
                     keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-                
                 if WEBAPP_URL:
-                    params = {
-                        "lang": lang,
-                        "edit": "1",
-                        "name": updated_data['name'],
-                        "email": updated_data['email'],
-                        "phone": updated_data['phone']
-                    }
+                    params = {"lang": lang, "edit": "1", "name": updated_data['name'], "email": updated_data['email'], "phone": updated_data['phone']}
                     edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
                     keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-                
                 keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-                
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 try:
