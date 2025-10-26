@@ -107,29 +107,6 @@ def save_notification_message(telegram_id: int, message_id: int, account_id: int
         NOTIFICATION_MESSAGES[telegram_id] = NOTIFICATION_MESSAGES[telegram_id][-10:]
     except Exception as e:
         logger.exception(f"Failed to save notification message: {e}")
-
-async def delete_notification_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """حذف رسالة الإشعار عندما يضغط المستخدم على زر الحذف"""
-    q = update.callback_query
-    await q.answer()
-    
-    try:
-        # حذف الرسالة مباشرة
-        await q.message.delete()
-    except Exception as e:
-        logger.exception(f"Failed to delete notification message: {e}")
-        # إذا فشل الحذف، نقوم بتعديل الرسالة لإظهار أنها مقروءة
-        try:
-            # محاولة تحديد اللغة من نص الرسالة
-            message_text = q.message.text
-            lang = "ar" if "تم تفعيل" in message_text or "لم يتم تفعيل" in message_text else "en"
-            read_text = "✅ تم القراءة" if lang == "ar" else "✅ Read"
-            await q.edit_message_text(
-                f"{message_text}\n\n{read_text}",
-                parse_mode="Markdown"
-            )
-        except Exception:
-            pass
             
 def remove_emoji(text: str) -> str:
     out = []
@@ -663,6 +640,17 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         logger.exception(f"Failed to update account status: {e}")
         return False
 
+async def delete_notification_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """حذف رسالة الإشعار عندما يضغط المستخدم على زر حسناً"""
+    q = update.callback_query
+    await q.answer()
+    
+    try:
+        # حذف الرسالة مباشرة
+        await q.message.delete()
+    except Exception as e:
+        logger.exception(f"Failed to delete notification message: {e}")
+
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None, user_lang: str = None):
     """إرسال إشعار للمستخدم بتغيير حالة حسابه بلغته الحالية"""
     try:
@@ -720,9 +708,9 @@ You can now start using the service. Thank you for your trust!
 Please review the submitted data or contact support.
                 """
         
-        # إرسال الرسالة مع إضافة زر لحذفها
+        # إرسال الرسالة مع إضافة زر "حسناً" لحذفها
         keyboard = [
-            [InlineKeyboardButton("🗑️ حذف الرسالة" if lang == "ar" else "🗑️ Delete message", 
+            [InlineKeyboardButton("✅ حسناً" if lang == "ar" else "✅ OK", 
                                 callback_data=f"delete_message")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
