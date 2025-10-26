@@ -23,7 +23,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 
 ADMIN_TELEGRAM_ID = os.getenv("ADMIN_TELEGRAM_ID")
-
+AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
 # -------------------------------
 # logging
 # -------------------------------
@@ -1261,6 +1261,9 @@ def webapp_existing_account(request: Request):
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
 
+    # إنشاء خيارات الوكلاء ديناميكياً
+    agents_options = "".join([f'<option value="{agent}">{agent}</option>' for agent in AGENTS_LIST])
+
     html = f"""
     <!doctype html>
     <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
@@ -1331,7 +1334,7 @@ def webapp_existing_account(request: Request):
         <label>{labels['agent']}</label>
         <select id="agent">
           <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
-          <option value="ملك الدهب">ملك الدهب</option>
+          {agents_options}
         </select>
 
         <div style="margin-top:12px;text-align:{text_align}">
@@ -1434,6 +1437,9 @@ def webapp_edit_accounts(request: Request):
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
 
+    # إنشاء خيارات الوكلاء ديناميكياً
+    agents_options = "".join([f'<option value="{agent}">{agent}</option>' for agent in AGENTS_LIST])
+
     html = f"""
     <!doctype html>
     <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
@@ -1520,7 +1526,7 @@ def webapp_edit_accounts(request: Request):
         <label>{labels['agent']}</label>
         <select id="agent">
           <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
-          <option value="ملك الدهب">ملك الدهب</option>
+          {agents_options}
         </select>
 
         <div style="margin-top:12px;text-align:{text_align}">
