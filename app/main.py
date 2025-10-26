@@ -555,9 +555,15 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         account_id = int(q.data.split("_")[2])
         success = update_account_status(account_id, "active")
         if success:
+            # تحديث الرسالة الأصلية للمسؤول
             await q.message.edit_text(f"✅ تم تفعيل الحساب #{account_id}")
             # إرسال إشعار للمستخدم
             await notify_user_about_account_status(account_id, "active")
+            # إرسال رسالة تأكيد للمسؤول
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ تم إرسال إشعار التفعيل للمستخدم بنجاح للحساب #{account_id}"
+            )
         else:
             await q.message.edit_text(f"❌ فشل في تفعيل الحساب #{account_id}")
     
@@ -589,7 +595,7 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         return False
 
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None):
-    """إرسال إشعار للمستخدم بتغيير حالة حسابه"""
+    """إرسال إشعار للمستخدم بتغيير حالة حسابه مع مراعاة اللغة"""
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -622,22 +628,24 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 You can now start using the service. Thank you for your trust!
                 """
         else:  # rejected
-            reason_text = f" بسبب: {reason}" if reason else ""
+            reason_text = f"\n📝 السبب: {reason}" if reason else ""
             if lang == "ar":
                 message = f"""
-❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
+❌ لم يتم تفعيل حساب التداول الخاص بك
 ━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
+🖥️ السيرفر: {account.server}{reason_text}
 
 يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
                 """
             else:
                 message = f"""
-❌ Your trading account was not activated{reason_text}
+❌ Your trading account was not activated
 ━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
+🖥️ Server: {account.server}{reason_text}
 
 Please review the submitted data or contact support.
                 """
@@ -666,6 +674,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بسبب: {reason}")
             # إرسال إشعار للمستخدم
             await notify_user_about_account_status(account_id, "rejected", reason=reason)
+            # إرسال رسالة تأكيد للمسؤول
+            await update.message.reply_text(f"✅ تم إرسال إشعار الرفض للمستخدم بنجاح للحساب #{account_id}")
         else:
             await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
 
@@ -710,14 +720,11 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 🕒 **الوقت:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         """
         
-        # أزرار للتحكم السريع
+        # أزرار للتحكم السريع (تم إزالة زر "عرض بيانات المستخدم")
         keyboard = [
             [
                 InlineKeyboardButton("✅ تفعيل الحساب", callback_data=f"activate_account_{account_data['id']}"),
                 InlineKeyboardButton("❌ رفض الحساب", callback_data=f"reject_account_{account_data['id']}")
-            ],
-            [
-                InlineKeyboardButton("👤 عرض بيانات المستخدم", callback_data=f"view_user_{subscriber_data['id']}")
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
