@@ -535,28 +535,27 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         account_id = int(q.data.split("_")[2])
         success = update_account_status(account_id, "active")
         if success:
-            if admin_lang == "ar":
-                await q.message.edit_text(f"✅ تم تفعيل الحساب #{account_id}")
-            else:
-                await q.message.edit_text(f"✅ Account #{account_id} activated")
-            
             # إرسال إشعار للمستخدم بلغته الأصلية
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "active", user_lang=user_lang)
             
-            if admin_lang == "ar":
-                await q.message.reply_text(f"✅ لقد قبلت الحساب #{account_id} بنجاح.")
-            else:
-                await q.message.reply_text(f"✅ You have accepted account #{account_id} successfully.")
+            # حذف الرسالة الأصلية للأدمن
+            try:
+                await q.message.delete()
+            except Exception as e:
+                logger.exception(f"Failed to delete admin message: {e}")
         else:
-            if admin_lang == "ar":
-                await q.message.edit_text(f"❌ فشل في تفعيل الحساب #{account_id}")
-            else:
-                await q.message.edit_text(f"❌ Failed to activate account #{account_id}")
+            # في حال الفشل، يمكن حذف أو تجاهل، لكن للأمان: حذف أيضًا
+            try:
+                await q.message.delete()
+            except Exception as e:
+                logger.exception(f"Failed to delete admin message on failure: {e}")
     
     elif q.data.startswith("reject_account_"):
         account_id = int(q.data.split("_")[2])
         context.user_data['awaiting_rejection_reason'] = account_id
+        # حفظ معرف الرسالة الأصلية للحذف لاحقًا
+        context.user_data['admin_notification_message_id'] = q.message.message_id
         if admin_lang == "ar":
             await q.message.reply_text("يرجى تقديم سبب الرفض:")
         else:
@@ -820,23 +819,39 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         account_id = context.user_data.pop('awaiting_rejection_reason')
         success = update_account_status(account_id, "rejected", reason=reason)
         
-        # الحصول على لغة الأدمن الحالية
+        # الحصول على لغة الأدمن الحالية (غير مستخدمة هنا لأننا لا نرسل رسائل إضافية)
         admin_lang = get_admin_language(user_id)
         
         if success:
-            if admin_lang == "ar":
-                await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بسبب: {reason}")
-            else:
-                await update.message.reply_text(f"✅ Account #{account_id} rejected due to: {reason}")
-            
             # إرسال إشعار للمستخدم بلغته الأصلية
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
+            
+            # حذف الرسالة الأصلية للأدمن (الإشعار)
+            admin_notification_message_id = context.user_data.pop('admin_notification_message_id', None)
+            if admin_notification_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=admin_notification_message_id)
+                except Exception as e:
+                    logger.exception(f"Failed to delete original admin notification: {e}")
+            
+            # حذف رسالة السبب نفسها (التي كتبها الأدمن)
+            try:
+                await update.message.delete()
+            except Exception as e:
+                logger.exception(f"Failed to delete rejection reason message: {e}")
         else:
-            if admin_lang == "ar":
-                await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
-            else:
-                await update.message.reply_text(f"❌ Failed to reject account #{account_id}")
+            # في حال الفشل، حذف الرسائل أيضًا
+            admin_notification_message_id = context.user_data.pop('admin_notification_message_id', None)
+            if admin_notification_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=admin_notification_message_id)
+                except Exception as e:
+                    logger.exception(f"Failed to delete original admin notification on failure: {e}")
+            try:
+                await update.message.delete()
+            except Exception as e:
+                logger.exception(f"Failed to delete rejection reason message on failure: {e}")
         return
 
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
