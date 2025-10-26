@@ -1732,7 +1732,7 @@ async function deleteAccount() {
         statusEl.textContent = '{labels["error"]}: ' + e.message;
     }
 }
-        }});
+        #}});
       </script>
     </body>
     </html>
