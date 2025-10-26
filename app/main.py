@@ -996,42 +996,34 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بدء خاص للأدمن مع اللغة المفضلة"""
+    """بدء خاص للأدمن مع إظهار اختيار اللغة دائماً"""
     user_id = update.effective_user.id
     if str(user_id) == ADMIN_TELEGRAM_ID:
-        # إذا كان للأدمن لغة مخزنة، استخدمها مباشرة
-        admin_lang = get_admin_language(user_id)
-        if admin_lang:
-            context.user_data["lang"] = admin_lang
-            # استخدم الدالة المناسبة لنوع التحديث
-            if update.message:
-                await show_main_sections_message(update, context, admin_lang)
-                return
-            elif update.callback_query:
-                await show_main_sections(update, context, admin_lang)
-                return
-    
-    # إذا لم تكن هناك لغة مخزنة، اعرض اختيار اللغة (حتى للأدمن)
-    keyboard = [
-        [
-            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
-            InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar")
+        # دائماً اعرض اختيار اللغة للأدمن (حتى إذا كانت لديه لغة مخزنة)
+        keyboard = [
+            [
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
+                InlineKeyboardButton("🇪🇬 العربية", callback_data="lang_ar")
+            ]
         ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    labels = ["🇺🇸 English", "🇪🇬 العربية"]
-    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
-    
-    if update.callback_query:
-        q = update.callback_query
-        await q.answer()
-        try:
-            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-        except Exception:
-            await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        labels = ["🇺🇸 English", "🇪🇬 العربية"]
+        header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
+        
+        if update.callback_query:
+            q = update.callback_query
+            await q.answer()
+            try:
+                await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            except Exception:
+                await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        else:
+            if update.message:
+                await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
-        if update.message:
-            await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        # إذا لم يكن أدمن، استخدم الدالة العادية
+        await start(update, context)
+
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """إرسال إشعار للمسؤول بلغته الحالية"""
@@ -1165,22 +1157,10 @@ def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
 # /start + menu / language flows
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """الدالة الرئيسية لبدء البوت"""
     user_id = update.effective_user.id if update.effective_user else None
     
-    # إذا كان المستخدم هو الأدمن، استخدم لغته المخزنة
-    if user_id and str(user_id) == ADMIN_TELEGRAM_ID:
-        admin_lang = get_admin_language(user_id)
-        if admin_lang:
-            context.user_data["lang"] = admin_lang
-            # استخدم الدالة المناسبة لنوع التحديث
-            if update.message:
-                await show_main_sections_message(update, context, admin_lang)
-                return
-            elif update.callback_query:
-                await show_main_sections(update, context, admin_lang)
-                return
-    
-    # إذا لم يكن أدمن أو ليس لديه لغة مخزنة، اعرض اختيار اللغة
+    # دائماً اعرض اختيار اللغة أولاً (لجميع المستخدمين بما فيهم الأدمن)
     keyboard = [
         [
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
