@@ -2343,6 +2343,8 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     message = f"{header}\n\n{user_info}{accounts_header}\n"
     
+    today = datetime(2025, 10, 27)  # التاريخ الحالي المحدد
+    
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
             status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
@@ -2362,6 +2364,26 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
                 if acc.get('expected_return'):
                     account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
+                
+                # حساب الربح إذا كانت البيانات متوفرة
+                if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
+                    try:
+                        initial = float(acc['initial_balance'])
+                        current = float(acc['current_balance'])
+                        withdrawals = float(acc['withdrawals'])
+                        start_date_str = acc['copy_start_date']
+                        start_date = datetime.fromisoformat(start_date_str) if ':' in start_date_str else datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        delta = today - start_date
+                        months = (today.year - start_date.year) * 12 + (today.month - start_date.month)
+                        if today.day < start_date.day:
+                            months -= 1
+                        
+                        if initial > 0:
+                            profit_percentage = ((current + withdrawals - initial) / initial) * 100
+                            account_text += f"   📊 تم تحقيق عائد قدره {profit_percentage:.0f}% خلال {months} شهور\n"
+                    except ValueError:
+                        pass  # تجاهل إذا فشل التحويل
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 # إضافة الحقول الجديدة إذا كانت موجودة
@@ -2375,8 +2397,28 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 Agent: {acc['agent']}\n"
-                if acc.get('expected_return'):  # أضف هذا السطر
+                if acc.get('expected_return'):
                     account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
+                
+                # حساب الربح إذا كانت البيانات متوفرة
+                if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
+                    try:
+                        initial = float(acc['initial_balance'])
+                        current = float(acc['current_balance'])
+                        withdrawals = float(acc['withdrawals'])
+                        start_date_str = acc['copy_start_date']
+                        start_date = datetime.fromisoformat(start_date_str) if ':' in start_date_str else datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        delta = today - start_date
+                        months = (today.year - start_date.year) * 12 + (today.month - start_date.month)
+                        if today.day < start_date.day:
+                            months -= 1
+                        
+                        if initial > 0:
+                            profit_percentage = ((current + withdrawals - initial) / initial) * 100
+                            account_text += f"   📊 Achieved return of {profit_percentage:.0f}% over {months} months\n"
+                    except ValueError:
+                        pass  # تجاهل إذا فشل التحويل
             message += account_text
     else:
         message += f"\n{no_accounts}"
