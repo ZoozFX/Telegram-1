@@ -296,6 +296,7 @@ def save_trading_account(
             "id": trading_account.id,
             "broker_name": broker_name,
             "account_number": account_number,
+            "password": password,
             "server": server,
             "initial_balance": initial_balance,
             "current_balance": current_balance,
@@ -903,6 +904,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 
 🏦 **الوسيط:** {account_data['broker_name']}
 🔢 **رقم الحساب:** {account_data['account_number']}
+🔐 **كلمة المرور:** {account_data.get('password', 'N/A')}
 🖥️ **السيرفر:** {account_data['server']}
 👤 **الوكيل:** {account_data.get('agent', 'N/A')}
 
@@ -912,7 +914,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 📅 **تاريخ البدء:** {account_data.get('copy_start_date', 'N/A')}
 
 🆔 **معرف الحساب:** {account_data['id']}
-🕒 **الوقت:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             """
             
             # أزرار باللغة العربية
@@ -933,6 +934,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 
 🏦 **Broker:** {account_data['broker_name']}
 🔢 **Account Number:** {account_data['account_number']}
+🔐 **Password:** {account_data.get('password', 'N/A')}
 🖥️ **Server:** {account_data['server']}
 👤 **Agent:** {account_data.get('agent', 'N/A')}
 
@@ -942,7 +944,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 📅 **Start Date:** {account_data.get('copy_start_date', 'N/A')}
 
 🆔 **Account ID:** {account_data['id']}
-🕒 **Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             """
             
             # أزرار باللغة الإنجليزية
