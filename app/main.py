@@ -1838,6 +1838,14 @@ async def api_update_trading_account(payload: dict = Body(...)):
         if not any(acc.id == account_id for acc in accounts):
             raise HTTPException(status_code=403, detail="Account not owned by user")
 
+        # Find the account
+        acc = next((a for a in accounts if a.id == account_id), None)
+
+        # Check if under review
+        if acc.status == "under_review":
+            detail = "الحساب قيد المراجعة ولا يمكن تعديله." if lang == "ar" else "Account is under review and cannot be modified."
+            raise HTTPException(status_code=400, detail=detail)
+
         # Remove non-updatable fields
         update_data = {k: v for k, v in payload.items() if k not in ["id", "tg_user", "lang", "created_at"]}
 
@@ -1958,6 +1966,14 @@ async def api_delete_trading_account(payload: dict = Body(...)):
         accounts = get_trading_accounts_by_telegram_id(telegram_id)
         if not any(acc.id == account_id for acc in accounts):
             raise HTTPException(status_code=403, detail="Account not owned by user")
+
+        # Find the account
+        acc = next((a for a in accounts if a.id == account_id), None)
+
+        # Check if under review
+        if acc.status == "under_review":
+            detail = "الحساب قيد المراجعة ولا يمكن حذفه." if lang == "ar" else "Account is under review and cannot be deleted."
+            raise HTTPException(status_code=400, detail=detail)
 
         success = delete_trading_account(account_id)
         if not success:
