@@ -96,23 +96,7 @@ def set_admin_language(admin_id: int, lang: str):
 def get_admin_language(admin_id: int) -> str:
     """الحصول على لغة الأدمن الحالية، الافتراضي العربية"""
     return ADMIN_LANGUAGE.get(admin_id, "ar")
-def save_notification_message(telegram_id: int, message_id: int, account_id: int):
-    """حفظ رسالة الإشعار للإشارة إليها لاحقاً"""
-    try:
-        if telegram_id not in NOTIFICATION_MESSAGES:
-            NOTIFICATION_MESSAGES[telegram_id] = []
-        
-        # إضافة الرسالة الجديدة
-        NOTIFICATION_MESSAGES[telegram_id].append({
-            "message_id": message_id,
-            "account_id": account_id,
-            "timestamp": datetime.now()
-        })
-        
-        # الاحتفاظ فقط بآخر 10 رسائل لكل مستخدم
-        NOTIFICATION_MESSAGES[telegram_id] = NOTIFICATION_MESSAGES[telegram_id][-10:]
-    except Exception as e:
-        logger.exception(f"Failed to save notification message: {e}")
+
             
 def remove_emoji(text: str) -> str:
     out = []
@@ -491,18 +475,6 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
         logger.exception("Failed to get subscriber with accounts")
         return None
         
-def list_subscribers(limit: int = 100) -> List[Dict[str, Any]]:
-    try:
-        db = SessionLocal()
-        rows = db.query(Subscriber).limit(limit).all()
-        db.close()
-        return [
-            {"id": r.id, "name": r.name, "email": r.email, "phone": r.phone, "telegram_username": r.telegram_username, "telegram_id": r.telegram_id, "lang": r.lang}
-            for r in rows
-        ]
-    except Exception as e:
-        logger.exception("Failed to list subscribers")
-        return []
 
 # -------------------------------
 # helpers for form-message references
@@ -530,40 +502,7 @@ PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 # -------------------------------
 # small helper to send or edit a "congrats / brokers" message and save ref
 # -------------------------------
-async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_title: str, back_label: str, edit_label: str, lang: str, reply_to_chat_id: Optional[int]=None, reply_to_message_id: Optional[int]=None):
-    accounts_label = "👤 بياناتي وحساباتي" if lang == "ar" else "👤 My Data & Accounts"
 
-    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, accounts_label]  # ⬅️ إزالة already_label
-    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
-    keyboard = [
-        [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-         InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
-    ]
-
-    keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
-
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    edited = False
-    ref = get_form_ref(telegram_id)
-    if ref:
-        try:
-            await application.bot.edit_message_text(text=header + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            edited = True
-            clear_form_ref(telegram_id)
-        except Exception:
-            logger.exception("Failed to edit referenced message in present_brokers_for_user")
-    if not edited:
-        try:
-            target_chat = telegram_id if telegram_id else reply_to_chat_id
-            if target_chat:
-                sent = await application.bot.send_message(chat_id=target_chat, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                try:
-                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
-                except Exception:
-                    logger.exception("Could not save form message reference after sending congrats.")
-        except Exception:
-            logger.exception("Failed to send brokers message to user (present_brokers_for_user).")
 #------------------------------------------------------------------
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة إجراءات المسؤول بلغته الحالية"""
@@ -659,19 +598,6 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         logger.exception(f"Failed to update account status: {e}")
         return False
 
-async def delete_notification_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """حذف رسالة الإشعار عندما يضغط المستخدم على زر حسناً"""
-    q = update.callback_query
-    await q.answer()
-    
-    try:
-        # حذف الرسالة مباشرة
-        await q.message.delete()
-        return  # إرجاع هنا لمنع أي معالجة إضافية
-    except Exception as e:
-        logger.exception(f"Failed to delete notification message: {e}")
-        # إذا فشل الحذف، لا تفعل أي شيء آخر
-        return
 
 
 async def handle_notification_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -871,100 +797,7 @@ async def refresh_my_accounts_interface(telegram_id: int, lang: str, chat_id: in
     except Exception as e:
         logger.exception(f"Failed to refresh user interface: {e}")
 
-async def update_user_interface_after_status_change(telegram_id: int, lang: str):
-    """تحديث واجهة المستخدم بعد تغيير حالة الحساب"""
-    ref = get_form_ref(telegram_id)
-    if ref and ref.get("origin") == "my_accounts":
-        updated_data = get_subscriber_with_accounts(telegram_id)
-        if updated_data:
-            if lang == "ar":
-                header_title = "👤 بياناتي وحساباتي"
-                add_account_label = "➕ إضافة حساب تداول"
-                edit_accounts_label = "✏️ تعديل حساباتي" if len(updated_data['trading_accounts']) > 0 else None
-                edit_data_label = "✏️ تعديل بياناتي"
-                back_label = "🔙 الرجوع لتداول الفوركس"
-                labels = [header_title, add_account_label]
-                if edit_accounts_label:
-                    labels.append(edit_accounts_label)
-                labels.extend([edit_data_label, back_label])
-                header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1)
-                user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
-                accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-                no_accounts = "\nلا توجد حسابات مسجلة بعد."
-            else:
-                header_title = "👤 My Data & Accounts"
-                add_account_label = "➕ Add Trading Account"
-                edit_accounts_label = "✏️ Edit My Accounts" if len(updated_data['trading_accounts']) > 0 else None
-                edit_data_label = "✏️ Edit my data"
-                back_label = "🔙 Back to Forex"
-                labels = [header_title, add_account_label]
-                if edit_accounts_label:
-                    labels.append(edit_accounts_label)
-                labels.extend([edit_data_label, back_label])
-                header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=0)
-                user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
-                accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-                no_accounts = "\nNo trading accounts registered yet."
 
-            updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
-            
-            if updated_data['trading_accounts']:
-                for i, acc in enumerate(updated_data['trading_accounts'], 1):
-                    status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
-                    if lang == "ar":
-                        account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                        if acc.get('initial_balance'):
-                            account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
-                        if acc.get('current_balance'):
-                            account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
-                        if acc.get('withdrawals'):
-                            account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
-                        if acc.get('copy_start_date'):
-                            account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
-                        if acc.get('agent'):
-                            account_text += f"   👤 الوكيل: {acc['agent']}\n"
-                    else:
-                        account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                        if acc.get('initial_balance'):
-                            account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
-                        if acc.get('current_balance'):
-                            account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
-                        if acc.get('withdrawals'):
-                            account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
-                        if acc.get('copy_start_date'):
-                            account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
-                        if acc.get('agent'):
-                            account_text += f"   👤 Agent: {acc['agent']}\n"
-                    updated_message += account_text
-            else:
-                updated_message += f"\n{no_accounts}"
-
-            keyboard = []
-            if WEBAPP_URL:
-                url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-                keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-            if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
-                edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
-                keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-            if WEBAPP_URL:
-                params = {"lang": lang, "edit": "1", "name": updated_data['name'], "email": updated_data['email'], "phone": updated_data['phone']}
-                edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-                keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-            keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            try:
-                await application.bot.edit_message_text(
-                    chat_id=ref["chat_id"],
-                    message_id=ref["message_id"],
-                    text=updated_message,
-                    reply_markup=reply_markup,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True
-                )
-                save_form_ref(telegram_id, ref["chat_id"], ref["message_id"], origin="my_accounts", lang=lang)
-            except Exception as e:
-                logger.exception(f"Failed to edit message after status change: {e}")
 #---------------------------------------------------------
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة الرسائل النصية، بما في ذلك أسباب الرفض"""
@@ -1181,27 +1014,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         if update.message:
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-async def show_main_sections_message(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
-    """عرض الأقسام الرئيسية لرسائل عادية (ليست callback_query)"""
-    if not update.message:
-        return
-    
-    if lang == "ar":
-        sections = [("💹 تداول الفوركس", "forex_main")]
-        title = "الأقسام الرئيسية"
-        back_button = ("🔙 الرجوع للغة", "back_language")
-    else:
-        sections = [("💹 Forex Trading", "forex_main")]
-        title = "Main Sections"
-        back_button = ("🔙 Back to language", "back_language")
 
-    keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
-    keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    labels = [name for name, _ in sections] + [back_button[0]]
-    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
-    
-    await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
         return
