@@ -2148,63 +2148,117 @@ async def webapp_submit(payload: dict = Body(...)):
             display_lang = detected_lang
 
         # Prepare congrats strings based on display_lang
-        if display_lang == "ar":
-            header_title = "🎉 مبروك — اختر وسيطك الآن"
-            brokers_title = ""
-            back_label = "🔙 الرجوع لتداول الفوركس"
-            edit_label = "✏️ تعديل بياناتي"
-            accounts_label = "👤 بياناتي وحساباتي"
-        else:
-            header_title = "🎉 Congrats — Choose your broker now"
-            brokers_title = ""
-            back_label = "🔙 Back to Forex"
-            edit_label = "✏️ Edit my data"
-            accounts_label = "👤 My Data & Accounts"
+        if ref and ref.get("origin") == "open_form_ea":
+            # عرض صفحة طلب الاكسبيرت
+            ea_link = "https://t.me/Nagyfx"
+            if display_lang == "ar":
+                header_title = "🤖 طلب نسخة من الاكسبيرت"
+                message_text = "✅ اضغط على الزر أدناه للانتقال إلى طلب نسخة الاكسبيرت:"
+                button_text = "🤖 طلب نسخة من الاكسبيرت"
+                back_button = "🔙 الرجوع لتداول الفوركس"
+            else:
+                header_title = "🤖 Request EA Copy"
+                message_text = "✅ Click the button below to request EA copy:"
+                button_text = "🤖 Request EA Copy"
+                back_button = "🔙 Back to Forex"
 
-        keyboard = [
-            [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-             InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
-        ]
+            labels = [button_text, back_button]
+            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang == "ar" else 0)
 
-        keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
-        keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        edited = False
-        if telegram_id and ref:
-            try:
-                await application.bot.edit_message_text(
-                    text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
-                    header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
-                    arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
-                    chat_id=ref["chat_id"], 
-                    message_id=ref["message_id"],
-                    reply_markup=reply_markup, 
-                    parse_mode="HTML", 
-                    disable_web_page_preview=True
-                )
-                edited = True
-                clear_form_ref(telegram_id)
-            except Exception:
-                logger.exception("Failed to edit original form message; will send a fallback message.")
-
-        if not edited:
-            if telegram_id:
+            keyboard = [
+                [InlineKeyboardButton(button_text, url=ea_link)],
+                [InlineKeyboardButton(back_button, callback_data="forex_main")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            edited = False
+            if ref:
                 try:
-                    sent = await application.bot.send_message(
-                        chat_id=telegram_id, 
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
-                        header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
-                        arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
+                    await application.bot.edit_message_text(
+                        text=header + f"\n\n{message_text}",
+                        chat_id=ref["chat_id"], 
+                        message_id=ref["message_id"],
                         reply_markup=reply_markup, 
                         parse_mode="HTML", 
                         disable_web_page_preview=True
                     )
-                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
+                    edited = True
+                    clear_form_ref(telegram_id)
                 except Exception:
-                    logger.exception("Failed to send congrats message to user.")
+                    logger.exception("Failed to edit original form message; will send a fallback message.")
+            if not edited:
+                if telegram_id:
+                    try:
+                        sent = await application.bot.send_message(
+                            chat_id=telegram_id, 
+                            text=header + f"\n\n{message_text}", 
+                            reply_markup=reply_markup, 
+                            parse_mode="HTML", 
+                            disable_web_page_preview=True
+                        )
+                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="ea_request", lang=display_lang)
+                    except Exception:
+                        logger.exception("Failed to send EA request message to user.")
+                else:
+                    logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
+        else:
+            # الافتراضي: صفحة الوسطاء
+            if display_lang == "ar":
+                header_title = "🎉 مبروك — اختر وسيطك الآن"
+                brokers_title = ""
+                back_label = "🔙 الرجوع لتداول الفوركس"
+                edit_label = "✏️ تعديل بياناتي"
+                accounts_label = "👤 بياناتي وحساباتي"
             else:
-                logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
+                header_title = "🎉 Congrats — Choose your broker now"
+                brokers_title = ""
+                back_label = "🔙 Back to Forex"
+                edit_label = "✏️ Edit my data"
+                accounts_label = "👤 My Data & Accounts"
+
+            keyboard = [
+                [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+                 InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+            ]
+
+            keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
+            keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            edited = False
+            if ref:
+                try:
+                    await application.bot.edit_message_text(
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
+                        header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
+                        arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
+                        chat_id=ref["chat_id"], 
+                        message_id=ref["message_id"],
+                        reply_markup=reply_markup, 
+                        parse_mode="HTML", 
+                        disable_web_page_preview=True
+                    )
+                    edited = True
+                    clear_form_ref(telegram_id)
+                except Exception:
+                    logger.exception("Failed to edit original form message; will send a fallback message.")
+
+            if not edited:
+                if telegram_id:
+                    try:
+                        sent = await application.bot.send_message(
+                            chat_id=telegram_id, 
+                            text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
+                            header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
+                            arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
+                            reply_markup=reply_markup, 
+                            parse_mode="HTML", 
+                            disable_web_page_preview=True
+                        )
+                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
+                    except Exception:
+                        logger.exception("Failed to send congrats message to user.")
+                else:
+                    logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
 
         
         if result == "created":
@@ -2572,11 +2626,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         try:
             await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="open_form", lang=lang)
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="open_form_copy", lang=lang)
         except Exception:
             try:
                 sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="open_form", lang=lang)
+                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="open_form_copy", lang=lang)
             except Exception:
                 logger.exception("Failed to show webapp button to user.")
         return
@@ -2586,7 +2640,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         existing = get_subscriber_by_telegram_id(user_id)
         
         if not existing:
-            # إذا لم يكن مسجلاً، نقله إلى صفحة التسجيل
+            # إذا لم يكن مسجلاً، عرض نموذج التسجيل مع origin خاص
             context.user_data["registration"] = {"lang": lang}
             if lang == "ar":
                 title = "من فضلك ادخل البيانات"
@@ -2615,24 +2669,29 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="open_form", lang=lang)
+                save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="open_form_ea", lang=lang)
             except Exception:
                 try:
                     sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                    save_form_ref(user_id, sent.chat_id, sent.message_id, origin="open_form", lang=lang)
+                    save_form_ref(user_id, sent.chat_id, sent.message_id, origin="open_form_ea", lang=lang)
                 except Exception:
                     logger.exception("Failed to show webapp button to user.")
         else:
-            # إذا كان مسجلاً، نقله إلى الرابط المطلوب
+            # إذا كان مسجلاً، عرض صفحة طلب الاكسبيرت مع التنسيق الموحد
             ea_link = "https://t.me/Nagyfx"
             if lang == "ar":
+                header_title = "🤖 طلب نسخة من الاكسبيرت"
                 message_text = "✅ اضغط على الزر أدناه للانتقال إلى طلب نسخة الاكسبيرت:"
                 button_text = "🤖 طلب نسخة من الاكسبيرت"
                 back_button = "🔙 الرجوع لتداول الفوركس"
             else:
+                header_title = "🤖 Request EA Copy"
                 message_text = "✅ Click the button below to request EA copy:"
                 button_text = "🤖 Request EA Copy"
                 back_button = "🔙 Back to Forex"
+
+            labels = [button_text, back_button]
+            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
 
             keyboard = [
                 [InlineKeyboardButton(button_text, url=ea_link)],
@@ -2642,7 +2701,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 await q.edit_message_text(
-                    message_text,
+                    header + f"\n\n{message_text}",
                     reply_markup=reply_markup,
                     parse_mode="HTML",
                     disable_web_page_preview=True
@@ -2650,7 +2709,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 await context.bot.send_message(
                     chat_id=q.message.chat_id,
-                    text=message_text,
+                    text=header + f"\n\n{message_text}",
                     reply_markup=reply_markup,
                     parse_mode="HTML",
                     disable_web_page_preview=True
