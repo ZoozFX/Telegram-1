@@ -654,6 +654,19 @@ async def delete_notification_message(update: Update, context: ContextTypes.DEFA
         # إذا فشل الحذف، لا تفعل أي شيء آخر
         return
 
+
+async def handle_notification_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة تأكيد الإشعار - حذف الرسالة فقط"""
+    q = update.callback_query
+    await q.answer()
+    
+    try:
+        # حذف الرسالة مباشرة فقط
+        await q.message.delete()
+    except Exception as e:
+        logger.exception(f"Failed to delete notification message: {e}")
+
+# تحديث دالة notify_user_about_account_status
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None, user_lang: str = None):
     """إرسال إشعار للمستخدم بتغيير حالة حسابه بلغته الحالية"""
     try:
@@ -714,7 +727,7 @@ Please review the submitted data or contact support.
         # إرسال الرسالة مع إضافة زر "حسناً" لحذفها
         keyboard = [
             [InlineKeyboardButton("✅ حسناً" if lang == "ar" else "✅ OK", 
-                                callback_data=f"delete_message")]
+                                callback_data=f"confirm_notification_{account_id}")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -2967,11 +2980,11 @@ async def submit_existing_account(payload: dict = Body(...)):
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
+application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
-application.add_handler(CallbackQueryHandler(delete_notification_message, pattern="^delete_message$"))
 # ===============================
 # Webhook setup
 # ===============================
