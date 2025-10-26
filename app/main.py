@@ -2667,7 +2667,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 disable_web_page_preview=True
             )
-        return
+    return
     
     if q.data in ("👤 بياناتي وحساباتي", "👤 My Data & Accounts"):
         await show_user_accounts(update, context, user_id, lang)
