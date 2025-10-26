@@ -309,7 +309,8 @@ def save_trading_account(
             "current_balance": current_balance,
             "withdrawals": withdrawals,
             "copy_start_date": copy_start_date,
-            "agent": agent
+            "agent": agent,
+            "expected_return": expected_return
         }
         
         subscriber_data = {
@@ -376,6 +377,7 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             "withdrawals": account.withdrawals,
             "copy_start_date": account.copy_start_date,
             "agent": account.agent,
+            "expected_return": account.expected_return,
             "old_data": old_data
         }
         
@@ -476,6 +478,7 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
                         "withdrawals": acc.withdrawals,
                         "copy_start_date": acc.copy_start_date,
                         "agent": acc.agent,
+                        "expected_return": acc.expected_return,
                         "created_at": acc.created_at,
                         "status": acc.status,
                         "rejection_reason": acc.rejection_reason
@@ -1727,8 +1730,6 @@ def webapp_edit_accounts(request: Request):
               currentAccountStatus = acc.status;
               document.getElementById('current_account_id').value = acc.id;
               document.getElementById('current_account_status').value = acc.status;
-              
-              // تعبئة الحقول بالبيانات
               document.getElementById('broker').value = acc.broker_name || '';
               document.getElementById('account').value = acc.account_number || '';
               document.getElementById('password').value = acc.password || '';
@@ -1740,10 +1741,7 @@ def webapp_edit_accounts(request: Request):
               document.getElementById('agent').value = acc.agent || '';
               document.getElementById('expected_return').value = acc.expected_return || '';
               
-              // تمكين النموذج
               enableForm();
-              
-              // تحديث حالة الأزرار بناءً على حالة الحساب
               updateButtonsBasedOnStatus();
               
               statusEl.textContent = '';
@@ -2050,6 +2048,8 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
+                if acc.get('expected_return'):
+                    account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 if acc.get('initial_balance'):
@@ -2062,6 +2062,8 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 Agent: {acc['agent']}\n"
+                if acc.get('expected_return'):
+                    account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
             updated_message += account_text
     else:
         updated_message += f"\n{no_accounts}"
@@ -2352,6 +2354,8 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     account_text += f"   📅 تاريخ بدء النسخ: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
+                if acc.get('expected_return'):
+                    account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 # إضافة الحقول الجديدة إذا كانت موجودة
@@ -2365,6 +2369,8 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 Agent: {acc['agent']}\n"
+                if acc.get('expected_return'):  # أضف هذا السطر
+                    account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
             message += account_text
     else:
         message += f"\n{no_accounts}"
