@@ -87,9 +87,15 @@ FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
 # -------------------------------
 # helpers: emoji removal / display width
 # -------------------------------
-# إضافة هذا في قسم helpers
 NOTIFICATION_MESSAGES: Dict[int, List[Dict[str, Any]]] = {}
+ADMIN_LANGUAGE: Dict[int, str] = {}
+def set_admin_language(admin_id: int, lang: str):
+    """تخزين لغة الأدمن الحالية"""
+    ADMIN_LANGUAGE[admin_id] = lang
 
+def get_admin_language(admin_id: int) -> str:
+    """الحصول على لغة الأدمن الحالية، الافتراضي العربية"""
+    return ADMIN_LANGUAGE.get(admin_id, "ar")
 def save_notification_message(telegram_id: int, message_id: int, account_id: int):
     """حفظ رسالة الإشعار للإشارة إليها لاحقاً"""
     try:
@@ -560,7 +566,7 @@ async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_
             logger.exception("Failed to send brokers message to user (present_brokers_for_user).")
 #------------------------------------------------------------------
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة إجراءات المسؤول"""
+    """معالجة إجراءات المسؤول بلغته الحالية"""
     q = update.callback_query
     await q.answer()
     
@@ -568,30 +574,43 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     user_id = q.from_user.id
-    if user_id != int(ADMIN_TELEGRAM_ID):
+    if str(user_id) != ADMIN_TELEGRAM_ID:
         await q.message.reply_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
         return
+    
+    # الحصول على لغة الأدمن الحالية
+    admin_lang = get_admin_language(user_id)
     
     if q.data.startswith("activate_account_"):
         account_id = int(q.data.split("_")[2])
         success = update_account_status(account_id, "active")
         if success:
-            await q.message.edit_text(f"✅ تم تفعيل الحساب #{account_id}")
+            if admin_lang == "ar":
+                await q.message.edit_text(f"✅ تم تفعيل الحساب #{account_id}")
+            else:
+                await q.message.edit_text(f"✅ Account #{account_id} activated")
             
-            # الحصول على لغة المستخدم الحالية من السياق إذا كان نشطاً
+            # إرسال إشعار للمستخدم بلغته الأصلية
             user_lang = get_user_current_language(account_id)
-            
-            # إرسال إشعار للمستخدم بلغته الحالية
             await notify_user_about_account_status(account_id, "active", user_lang=user_lang)
             
-            await q.message.reply_text(f"✅ لقد قبلت الحساب #{account_id} بنجاح.")
+            if admin_lang == "ar":
+                await q.message.reply_text(f"✅ لقد قبلت الحساب #{account_id} بنجاح.")
+            else:
+                await q.message.reply_text(f"✅ You have accepted account #{account_id} successfully.")
         else:
-            await q.message.edit_text(f"❌ فشل في تفعيل الحساب #{account_id}")
+            if admin_lang == "ar":
+                await q.message.edit_text(f"❌ فشل في تفعيل الحساب #{account_id}")
+            else:
+                await q.message.edit_text(f"❌ Failed to activate account #{account_id}")
     
     elif q.data.startswith("reject_account_"):
         account_id = int(q.data.split("_")[2])
         context.user_data['awaiting_rejection_reason'] = account_id
-        await q.message.reply_text("يرجى تقديم سبب الرفض:")
+        if admin_lang == "ar":
+            await q.message.reply_text("يرجى تقديم سبب الرفض:")
+        else:
+            await q.message.reply_text("Please provide the rejection reason:")
 
 def get_user_current_language(account_id: int) -> str:
     """الحصول على اللغة الحالية للمستخدم من السياق النشط"""
@@ -950,24 +969,46 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.message.from_user.id
     
     # إذا كان المستخدم مسؤولاً ويقدم سبب الرفض
-    if user_id == int(ADMIN_TELEGRAM_ID) and 'awaiting_rejection_reason' in context.user_data:
+    if str(user_id) == ADMIN_TELEGRAM_ID and 'awaiting_rejection_reason' in context.user_data:
         reason = update.message.text.strip()
         account_id = context.user_data.pop('awaiting_rejection_reason')
         success = update_account_status(account_id, "rejected", reason=reason)
+        
+        # الحصول على لغة الأدمن الحالية
+        admin_lang = get_admin_language(user_id)
+        
         if success:
-            await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بسبب: {reason}")
+            if admin_lang == "ar":
+                await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بسبب: {reason}")
+            else:
+                await update.message.reply_text(f"✅ Account #{account_id} rejected due to: {reason}")
             
-            # الحصول على لغة المستخدم الحالية
+            # إرسال إشعار للمستخدم بلغته الأصلية
             user_lang = get_user_current_language(account_id)
-            
-            # إرسال إشعار للمستخدم بلغته الحالية
             await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
         else:
-            await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
+            if admin_lang == "ar":
+                await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
+            else:
+                await update.message.reply_text(f"❌ Failed to reject account #{account_id}")
         return
 
+async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بدء خاص للأدمن مع اللغة المفضلة"""
+    user_id = update.effective_user.id
+    if str(user_id) == ADMIN_TELEGRAM_ID:
+        # إذا كان للأدمن لغة مخزنة، استخدمها مباشرة
+        admin_lang = get_admin_language(user_id)
+        if admin_lang:
+            context.user_data["lang"] = admin_lang
+            await show_main_sections(update, context, admin_lang)
+            return
+    
+    # إذا لم تكن هناك لغة مخزنة، استخدم الدالة العادية
+    await start(update, context)
+
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
-    """إرسال إشعار للمسؤول عند إضافة أو تعديل حساب"""
+    """إرسال إشعار للمسؤول بلغته الحالية"""
     try:
         if not ADMIN_TELEGRAM_ID:
             logger.warning("⚠️ ADMIN_TELEGRAM_ID not set - admin notifications disabled")
@@ -975,17 +1016,33 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
         
         admin_id = int(ADMIN_TELEGRAM_ID)
         
-        if action_type == "new_account":
-            title = "🆕 حساب تداول جديد"
-            action_desc = "تم إضافة حساب تداول جديد"
-        elif action_type == "updated_account":
-            title = "✏️ تعديل على حساب تداول"
-            action_desc = "تم تعديل حساب تداول"
-        else:
-            title = "ℹ️ نشاط على حساب تداول"
-            action_desc = "نشاط على حساب تداول"
+        # الحصول على لغة الأدمن الحالية
+        admin_lang = get_admin_language(admin_id)
         
-        message = f"""
+        if action_type == "new_account":
+            if admin_lang == "ar":
+                title = "🆕 حساب تداول جديد"
+                action_desc = "تم إضافة حساب تداول جديد"
+            else:
+                title = "🆕 New Trading Account"
+                action_desc = "New trading account added"
+        elif action_type == "updated_account":
+            if admin_lang == "ar":
+                title = "✏️ تعديل على حساب تداول"
+                action_desc = "تم تعديل حساب تداول"
+            else:
+                title = "✏️ Trading Account Updated"
+                action_desc = "Trading account updated"
+        else:
+            if admin_lang == "ar":
+                title = "ℹ️ نشاط على حساب تداول"
+                action_desc = "نشاط على حساب تداول"
+            else:
+                title = "ℹ️ Trading Account Activity"
+                action_desc = "Trading account activity"
+        
+        if admin_lang == "ar":
+            message = f"""
 {title}
 ━━━━━━━━━━━━━━━━━━━━
 👤 **المستخدم:** {subscriber_data['name']}
@@ -1005,15 +1062,46 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 
 🆔 **معرف الحساب:** {account_data['id']}
 🕒 **الوقت:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
-        
-        # أزرار للتحكم السريع
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ تفعيل الحساب", callback_data=f"activate_account_{account_data['id']}"),
-                InlineKeyboardButton("❌ رفض الحساب", callback_data=f"reject_account_{account_data['id']}")
+            """
+            
+            # أزرار باللغة العربية
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ تفعيل الحساب", callback_data=f"activate_account_{account_data['id']}"),
+                    InlineKeyboardButton("❌ رفض الحساب", callback_data=f"reject_account_{account_data['id']}")
+                ]
             ]
-        ]
+        else:
+            message = f"""
+{title}
+━━━━━━━━━━━━━━━━━━━━
+👤 **User:** {subscriber_data['name']}
+📧 **Email:** {subscriber_data['email']}
+📞 **Phone:** {subscriber_data['phone']}
+🆔 **Telegram:** @{subscriber_data.get('telegram_username', 'N/A')} ({subscriber_data['telegram_id']})
+
+🏦 **Broker:** {account_data['broker_name']}
+🔢 **Account Number:** {account_data['account_number']}
+🖥️ **Server:** {account_data['server']}
+👤 **Agent:** {account_data.get('agent', 'N/A')}
+
+💰 **Initial Balance:** {account_data.get('initial_balance', 'N/A')}
+💳 **Current Balance:** {account_data.get('current_balance', 'N/A')}  
+💸 **Withdrawals:** {account_data.get('withdrawals', 'N/A')}
+📅 **Start Date:** {account_data.get('copy_start_date', 'N/A')}
+
+🆔 **Account ID:** {account_data['id']}
+🕒 **Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """
+            
+            # أزرار باللغة الإنجليزية
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Activate Account", callback_data=f"activate_account_{account_data['id']}"),
+                    InlineKeyboardButton("❌ Reject Account", callback_data=f"reject_account_{account_data['id']}")
+                ]
+            ]
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await application.bot.send_message(
@@ -1049,6 +1137,17 @@ def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
 # /start + menu / language flows
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id if update.effective_user else None
+    
+    # إذا كان المستخدم هو الأدمن، استخدم لغته المخزنة
+    if user_id and str(user_id) == ADMIN_TELEGRAM_ID:
+        admin_lang = get_admin_language(user_id)
+        if admin_lang:
+            context.user_data["lang"] = admin_lang
+            await show_main_sections(update, context, admin_lang)
+            return
+    
+    # إذا لم يكن أدمن أو ليس لديه لغة مخزنة، اعرض اختيار اللغة
     keyboard = [
         [
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
@@ -1058,6 +1157,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
+    
     if update.callback_query:
         q = update.callback_query
         await q.answer()
@@ -1074,6 +1174,12 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return
     q = update.callback_query
     await q.answer()
+    
+    # تخزين لغة الأدمن إذا كان المستخدم مسؤولاً
+    user_id = q.from_user.id
+    if str(user_id) == ADMIN_TELEGRAM_ID:
+        set_admin_language(user_id, lang)
+    
     if lang == "ar":
         #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
         sections = [("💹 تداول الفوركس", "forex_main")]
@@ -1100,6 +1206,12 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     lang = "ar" if q.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
+    
+    # تخزين لغة الأدمن إذا كان المستخدم مسؤولاً
+    user_id = q.from_user.id
+    if str(user_id) == ADMIN_TELEGRAM_ID:
+        set_admin_language(user_id, lang)
+    
     await show_main_sections(update, context, lang)
 
 # ===============================
@@ -2978,6 +3090,7 @@ async def submit_existing_account(payload: dict = Body(...)):
 # Handlers registration
 # ===============================
 application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("admin", admin_start))  # الأمر الجديد للأدمن
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
