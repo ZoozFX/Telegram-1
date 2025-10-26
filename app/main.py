@@ -2526,7 +2526,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "🤖 طلب نسخة من الاكسبيرت"],
-            "en": ["📊 Copy Trading", "🤖 Request EA Copy"],
+            "en": ["📊 Copy Trading", "🤖 Request EA Version"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -2636,7 +2636,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.exception("Failed to show webapp button to user.")
         return
 
-    if q.data in ("🤖 طلب نسخة من الاكسبيرت", "🤖 Request EA Copy"):
+    if q.data in ("🤖 طلب نسخة من الاكسبيرت", "🤖 Request EA Version"):
         # التحقق مما إذا كان المستخدم مسجلاً
         existing = get_subscriber_by_telegram_id(user_id)
         
@@ -2681,14 +2681,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # إذا كان مسجلاً، عرض صفحة طلب الاكسبيرت مع التنسيق الموحد
             ea_link = "https://t.me/Nagyfx"
             if lang == "ar":
-                header_title = "🤖 طلب نسخة من الاكسبيرت"
-                message_text = "✅ اضغط على الزر أدناه للانتقال إلى طلب نسخة الاكسبيرت:"
+                header_title = "طلب نسخة من الاكسبيرت"
+                message_text = ""
                 button_text = "🤖 طلب نسخة من الاكسبيرت"
                 back_button = "🔙 الرجوع لتداول الفوركس"
             else:
-                header_title = "🤖 Request EA Copy"
-                message_text = "✅ Click the button below to request EA copy:"
-                button_text = "🤖 Request EA Copy"
+                header_title = "Request EA Version"
+                message_text = ""
+                button_text = "🤖 Request EA Version"
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
