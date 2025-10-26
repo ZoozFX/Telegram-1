@@ -1001,8 +1001,13 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         admin_lang = get_admin_language(user_id)
         if admin_lang:
             context.user_data["lang"] = admin_lang
-            await show_main_sections(update, context, admin_lang)
-            return
+            # استخدم الدالة المناسبة لنوع التحديث
+            if update.message:
+                await show_main_sections_message(update, context, admin_lang)
+                return
+            elif update.callback_query:
+                await show_main_sections(update, context, admin_lang)
+                return
     
     # إذا لم تكن هناك لغة مخزنة، استخدم الدالة العادية
     await start(update, context)
@@ -1144,8 +1149,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         admin_lang = get_admin_language(user_id)
         if admin_lang:
             context.user_data["lang"] = admin_lang
-            await show_main_sections(update, context, admin_lang)
-            return
+            # استخدم الدالة المناسبة لنوع التحديث
+            if update.message:
+                await show_main_sections_message(update, context, admin_lang)
+                return
+            elif update.callback_query:
+                await show_main_sections(update, context, admin_lang)
+                return
     
     # إذا لم يكن أدمن أو ليس لديه لغة مخزنة، اعرض اختيار اللغة
     keyboard = [
@@ -1168,7 +1178,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         if update.message:
             await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+async def show_main_sections_message(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
+    """عرض الأقسام الرئيسية لرسائل عادية (ليست callback_query)"""
+    if not update.message:
+        return
+    
+    if lang == "ar":
+        sections = [("💹 تداول الفوركس", "forex_main")]
+        title = "الأقسام الرئيسية"
+        back_button = ("🔙 الرجوع للغة", "back_language")
+    else:
+        sections = [("💹 Forex Trading", "forex_main")]
+        title = "Main Sections"
+        back_button = ("🔙 Back to language", "back_language")
 
+    keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
+    keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    labels = [name for name, _ in sections] + [back_button[0]]
+    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+    
+    await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
         return
