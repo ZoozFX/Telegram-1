@@ -444,7 +444,8 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
                         "withdrawals": acc.withdrawals,
                         "copy_start_date": acc.copy_start_date,
                         "agent": acc.agent,
-                        "created_at": acc.created_at
+                        "created_at": acc.created_at,
+                        "status": acc.status  # ← أضف هذا السطر
                     }
                     for acc in subscriber.trading_accounts
                 ]
@@ -1963,6 +1964,168 @@ async def webapp_submit(payload: dict = Body(...)):
         logger.exception("Error in webapp_submit: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
+
+
+
+
+        
+async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
+    """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس تنسيق صفحة 'تداول الفوركس'"""
+    user_data = get_subscriber_with_accounts(telegram_id)
+    
+    if not user_data:
+        if lang == "ar":
+            text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً."
+        else:
+            text = "⚠️ You haven't registered yet. Please register first."
+        
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_text(text)
+        else:
+            await context.bot.send_message(chat_id=telegram_id, text=text)
+        return
+
+    if lang == "ar":
+        header_title = "👤 بياناتي وحساباتي"
+        add_account_label = "➕ إضافة حساب تداول"
+        edit_accounts_label = "✏️ تعديل حساباتي" if len(user_data['trading_accounts']) > 0 else None
+        edit_data_label = "✏️ تعديل بياناتي"
+        back_label = "🔙 الرجوع لتداول الفوركس"
+        labels = [header_title, add_account_label]
+        if edit_accounts_label:
+            labels.append(edit_accounts_label)
+        labels.extend([edit_data_label, back_label])
+        header = build_header_html(
+            header_title, 
+            labels,
+            header_emoji=HEADER_EMOJI,
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=1
+        )
+        
+        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
+        accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
+        no_accounts = "\nلا توجد حسابات مسجلة بعد."
+        
+    else:
+        header_title = "👤 My Data & Accounts"
+        add_account_label = "➕ Add Trading Account"
+        edit_accounts_label = "✏️ Edit My Accounts" if len(user_data['trading_accounts']) > 0 else None
+        edit_data_label = "✏️ Edit my data"
+        back_label = "🔙 Back to Forex"
+        labels = [header_title, add_account_label]
+        if edit_accounts_label:
+            labels.append(edit_accounts_label)
+        labels.extend([edit_data_label, back_label])
+        header = build_header_html(
+            header_title, 
+            labels,
+            header_emoji=HEADER_EMOJI,
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=0
+        )
+     
+        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
+        accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
+        no_accounts = "\nNo trading accounts registered yet."
+
+    message = f"{header}\n\n{user_info}{accounts_header}\n"
+    
+    if user_data['trading_accounts']:
+        for i, acc in enumerate(user_data['trading_accounts'], 1):
+            status_text = get_account_status_text(acc['status'], lang)
+            
+            if lang == "ar":
+                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
+                # إضافة الحقول الجديدة إذا كانت موجودة
+                if acc.get('initial_balance'):
+                    account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
+                if acc.get('current_balance'):
+                    account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
+                if acc.get('withdrawals'):
+                    account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
+                if acc.get('copy_start_date'):
+                    account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                if acc.get('agent'):
+                    account_text += f"   👤 الوكيل: {acc['agent']}\n"
+            else:
+                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
+                # إضافة الحقول الجديدة إذا كانت موجودة
+                if acc.get('initial_balance'):
+                    account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
+                if acc.get('current_balance'):
+                    account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
+                if acc.get('withdrawals'):
+                    account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
+                if acc.get('copy_start_date'):
+                    account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
+                if acc.get('agent'):
+                    account_text += f"   👤 Agent: {acc['agent']}\n"
+            message += account_text
+    else:
+        message += f"\n{no_accounts}"
+
+    keyboard = []
+    
+    if WEBAPP_URL:
+        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
+        keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
+    
+    if WEBAPP_URL and len(user_data['trading_accounts']) > 0:
+        edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
+        keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
+    
+    if WEBAPP_URL:
+        params = {
+            "lang": lang,
+            "edit": "1",
+            "name": user_data['name'],
+            "email": user_data['email'],
+            "phone": user_data['phone']
+        }
+        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+        keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
+    
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    try:
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_text(
+                message, 
+                reply_markup=reply_markup, 
+                parse_mode="HTML", 
+                disable_web_page_preview=True
+            )
+            
+            save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
+        else:
+            sent = await context.bot.send_message(
+                chat_id=telegram_id,
+                text=message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+            
+            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
+    except Exception as e:
+        logger.exception("Failed to show user accounts: %s", e)
+        
+        # Fallback: حاول إرسال رسالة جديدة
+        try:
+            sent = await context.bot.send_message(
+                chat_id=telegram_id,
+                text=message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+           
+            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
+        except Exception as fallback_error:
+            logger.exception("Failed to send fallback message for user accounts: %s", fallback_error)
 # ===============================
 # menu_handler
 # ===============================
@@ -2491,223 +2654,13 @@ async def submit_existing_account(payload: dict = Body(...)):
         logger.exception("Error saving trading account: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
-@app.post("/webapp/existing-account/submit")
-async def submit_existing_account(payload: dict = Body(...)):
-    try:
-        tg_user = payload.get("tg_user") or {}
-        telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
-        broker = (payload.get("broker") or "").strip()
-        account = (payload.get("account") or "").strip()
-        password = (payload.get("password") or "").strip()
-        server = (payload.get("server") or "").strip()
-        # الحقول الجديدة
-        initial_balance = (payload.get("initial_balance") or "").strip()
-        current_balance = (payload.get("current_balance") or "").strip()
-        withdrawals = (payload.get("withdrawals") or "").strip()
-        copy_start_date = (payload.get("copy_start_date") or "").strip()
-        agent = (payload.get("agent") or "").strip()
-        lang = (payload.get("lang") or "ar").lower()
-
-        if not all([telegram_id, broker, account, password, server]):
-            return JSONResponse(status_code=400, content={"error": "Missing fields."})
-
-        subscriber = get_subscriber_by_telegram_id(telegram_id)
-        if not subscriber:
-            return JSONResponse(status_code=404, content={"error": "User not found. Please complete registration first."})
-
-        success, trading_account = save_trading_account(
-            subscriber_id=subscriber.id,
-            broker_name=broker,
-            account_number=account,
-            password=password,
-            server=server,
-            initial_balance=initial_balance,
-            current_balance=current_balance,
-            withdrawals=withdrawals,
-            copy_start_date=copy_start_date,
-            agent=agent
-        )
-
-        if not success:
-            return JSONResponse(status_code=500, content={"error": "Failed to save trading account."})
-
-        # إرسال رسالة للمستخدم
-        if lang == "ar":
-            user_message = "✅ تم إرسال بيانات حساب التداول بنجاح وجاري مراجعته من قبل الإدارة. سيتم إشعارك عند التفعيل."
-        else:
-            user_message = "✅ Trading account data submitted successfully and is under review by administration. You will be notified when activated."
-
-        try:
-            await application.bot.send_message(
-                chat_id=telegram_id,
-                text=user_message,
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logger.exception("Failed to send user confirmation")
-
-        ref = get_form_ref(telegram_id)
-        
-        if ref:
-            updated_data = get_subscriber_with_accounts(telegram_id)
-            
-            if updated_data:
-                if lang == "ar":
-                    header_title = "👤 بياناتي وحساباتي"
-                    add_account_label = "➕ إضافة حساب تداول"
-                    edit_accounts_label = "✏️ تعديل حساباتي" if len(updated_data['trading_accounts']) > 0 else None
-                    edit_data_label = "✏️ تعديل بياناتي"
-                    back_label = "🔙 الرجوع لتداول الفوركس"
-                    
-                    labels = [header_title, add_account_label]
-                    if edit_accounts_label:
-                        labels.append(edit_accounts_label)
-                    labels.extend([edit_data_label, back_label])
-                    header = build_header_html(
-                        header_title, 
-                        labels,
-                        header_emoji=HEADER_EMOJI,
-                        underline_min=FIXED_UNDERLINE_LENGTH,
-                        arabic_indent=1
-                    )
-                    
-                    user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
-                    accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-                    no_accounts = "\nلا توجد حسابات مسجلة بعد."
-                    
-                else:
-                    header_title = "👤 My Data & Accounts"
-                    add_account_label = "➕ Add Trading Account"
-                    edit_accounts_label = "✏️ Edit My Accounts" if len(updated_data['trading_accounts']) > 0 else None
-                    edit_data_label = "✏️ Edit my data"
-                    back_label = "🔙 Back to Forex"
-                    
-                    labels = [header_title, add_account_label]
-                    if edit_accounts_label:
-                        labels.append(edit_accounts_label)
-                    labels.extend([edit_data_label, back_label])
-                    header = build_header_html(
-                        header_title, 
-                        labels,
-                        header_emoji=HEADER_EMOJI,
-                        underline_min=FIXED_UNDERLINE_LENGTH,
-                        arabic_indent=0
-                    )
-                    
-                    user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
-                    accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-                    no_accounts = "\nNo trading accounts registered yet."
-
-                updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
-                
-                if updated_data['trading_accounts']:
-                    for i, acc in enumerate(updated_data['trading_accounts'], 1):
-                        status_text = get_account_status_text(acc['status'], lang)
-                        
-                        if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                            # إضافة الحقول الجديدة إذا كانت موجودة
-                            if acc.get('initial_balance'):
-                                account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
-                            if acc.get('current_balance'):
-                                account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
-                            if acc.get('withdrawals'):
-                                account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
-                            if acc.get('copy_start_date'):
-                                account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
-                            if acc.get('agent'):
-                                account_text += f"   👤 الوكيل: {acc['agent']}\n"
-                        else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                            # إضافة الحقول الجديدة إذا كانت موجودة
-                            if acc.get('initial_balance'):
-                                account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
-                            if acc.get('current_balance'):
-                                account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
-                            if acc.get('withdrawals'):
-                                account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
-                            if acc.get('copy_start_date'):
-                                account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
-                            if acc.get('agent'):
-                                account_text += f"   👤 Agent: {acc['agent']}\n"
-                        updated_message += account_text
-                else:
-                    updated_message += f"\n{no_accounts}"
-
-                keyboard = []
-                
-                if WEBAPP_URL:
-                    url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-                    keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-                
-                if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
-                    edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
-                    keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-                
-                if WEBAPP_URL:
-                    params = {
-                        "lang": lang,
-                        "edit": "1",
-                        "name": updated_data['name'],
-                        "email": updated_data['email'],
-                        "phone": updated_data['phone']
-                    }
-                    edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-                    keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-                
-                keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-                
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                try:
-                    await application.bot.edit_message_text(
-                        chat_id=ref["chat_id"],
-                        message_id=ref["message_id"],
-                        text=updated_message,
-                        reply_markup=reply_markup,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True
-                    )
-                    
-                    save_form_ref(telegram_id, ref["chat_id"], ref["message_id"], origin="my_accounts", lang=lang)
-                except Exception:
-                    logger.exception("Failed to update user accounts message")
-                    try:
-                        sent = await application.bot.send_message(
-                            chat_id=telegram_id, 
-                            text=updated_message, 
-                            reply_markup=reply_markup, 
-                            parse_mode="HTML", 
-                            disable_web_page_preview=True
-                        )
-                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
-                    except Exception:
-                        logger.exception("Failed to send fallback message")
-            else:
-                logger.error("Failed to get updated user data")
-        else:
-            # إذا لم يكن هناك مرجع، نرسل رسالة تأكيد فقط
-            try:
-                await application.bot.send_message(
-                    chat_id=telegram_id, 
-                    text=user_message, 
-                    parse_mode="HTML", 
-                    disable_web_page_preview=True
-                )
-            except Exception:
-                logger.exception("Failed to send confirmation message")
-
-        return JSONResponse(content={"message": "Saved successfully."})
-    except Exception as e:
-        logger.exception("Error saving trading account: %s", e)
-        return JSONResponse(status_code=500, content={"error": "Server error."})
 # ===============================
 # Handlers registration
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))  # ← أضف هذا السطر
+application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 # ===============================
