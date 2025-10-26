@@ -19,14 +19,17 @@ from telegram.ext import (
 )
 from app.db import Base, engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
+
 ADMIN_TELEGRAM_ID = os.getenv("ADMIN_TELEGRAM_ID")
+
 # -------------------------------
 # logging
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 # -------------------------------
 # DB model
 # -------------------------------
@@ -60,10 +63,11 @@ class TradingAccount(Base):
     created_at = Column(String(50), default=lambda: datetime.now().isoformat())
     # الحقل الجديد: حالة الحساب
     status = Column(String(20), default="under_review")  # under_review, active, rejected
-    rejection_reason = Column(String(255), nullable=True)  # سبب الرفض
+    rejection_reason = Column(Text, nullable=True)  # سبب الرفض
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
 Base.metadata.create_all(bind=engine)
+
 # -------------------------------
 # settings & app
 # -------------------------------
@@ -84,6 +88,9 @@ HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
 FIXED_UNDERLINE_LENGTH = 25
 FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
+# تخزين مؤقت لطلبات الرفض
+PENDING_REJECTIONS: Dict[int, Dict[str, Any]] = {}  # {admin_id: {account_id: int, user_id: int}}
+
 # -------------------------------
 # helpers: emoji removal / display width
 # -------------------------------
@@ -186,6 +193,7 @@ def build_header_html(
         underline_line = "\n" + (underline_char * target_width)
 
     return centered_line + underline_line
+
 # -------------------------------
 # DB helpers
 # -------------------------------
@@ -337,10 +345,6 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             if hasattr(account, key) and value is not None:
                 setattr(account, key, value)
         
-        # إعادة تعيين الحالة إلى under_review عند التعديل
-        account.status = "under_review"
-        account.rejection_reason = None  # مسح السبب إذا كان موجوداً
-        
         db.commit()
         db.refresh(account)
         
@@ -409,6 +413,7 @@ def get_subscriber_by_telegram_id(tg_id: int) -> Optional[Subscriber]:
     except Exception as e:
         logger.exception("DB lookup failed")
         return None
+
 def get_trading_accounts_by_telegram_id(tg_id: int) -> List[TradingAccount]:
     """الحصول على جميع حسابات التداول للمستخدم"""
     try:
@@ -423,6 +428,7 @@ def get_trading_accounts_by_telegram_id(tg_id: int) -> List[TradingAccount]:
     except Exception as e:
         logger.exception("Failed to get trading accounts")
         return []
+
 def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
     """الحصول على بيانات المستخدم مع حسابات التداول في شكل dictionary"""
     try:
@@ -500,73 +506,11 @@ def clear_form_ref(tg_id: int):
 # -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
+
 # -------------------------------
-# small helper to send or edit a "congrats / brokers" message and save ref
+# Account Status Management
 # -------------------------------
-async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_title: str, back_label: str, edit_label: str, lang: str, reply_to_chat_id: Optional[int]=None, reply_to_message_id: Optional[int]=None):
-    accounts_label = "👤 بياناتي وحساباتي" if lang == "ar" else "👤 My Data & Accounts"
-
-    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, accounts_label]  # ⬅️ إزالة already_label
-    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
-    keyboard = [
-        [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-         InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
-    ]
-
-    keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
-
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    edited = False
-    ref = get_form_ref(telegram_id)
-    if ref:
-        try:
-            await application.bot.edit_message_text(text=header + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            edited = True
-            clear_form_ref(telegram_id)
-        except Exception:
-            logger.exception("Failed to edit referenced message in present_brokers_for_user")
-    if not edited:
-        try:
-            target_chat = telegram_id if telegram_id else reply_to_chat_id
-            if target_chat:
-                sent = await application.bot.send_message(chat_id=target_chat, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                try:
-                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
-                except Exception:
-                    logger.exception("Could not save form message reference after sending congrats.")
-        except Exception:
-            logger.exception("Failed to send brokers message to user (present_brokers_for_user).")
-#------------------------------------------------------------------
-async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة إجراءات المسؤول"""
-    q = update.callback_query
-    await q.answer()
-    
-    if not q.data:
-        return
-    
-    user_id = q.from_user.id
-    if user_id != int(ADMIN_TELEGRAM_ID):
-        await q.message.reply_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
-        return
-    
-    if q.data.startswith("activate_account_"):
-        account_id = int(q.data.split("_")[2])
-        success = update_account_status(account_id, "active")
-        if success:
-            await q.message.edit_text(f"✅ تم تفعيل الحساب #{account_id}")
-            # إرسال إشعار للمستخدم
-            await notify_user_about_account_status(account_id, "active")
-        else:
-            await q.message.edit_text(f"❌ فشل في تفعيل الحساب #{account_id}")
-    
-    elif q.data.startswith("reject_account_"):
-        account_id = int(q.data.split("_")[2])
-        context.user_data['awaiting_rejection_reason'] = account_id
-        await q.message.reply_text("يرجى تقديم سبب الرفض:")
-
-def update_account_status(account_id: int, status: str, reason: str = None) -> bool:
+def update_account_status(account_id: int, status: str, rejection_reason: str = None) -> bool:
     """تحديث حالة الحساب"""
     try:
         db = SessionLocal()
@@ -576,11 +520,11 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
             return False
         
         account.status = status
-        if status == "rejected":
-            account.rejection_reason = reason
-        else:
+        if rejection_reason:
+            account.rejection_reason = rejection_reason
+        elif status != "rejected":
             account.rejection_reason = None
-        
+            
         db.commit()
         db.close()
         return True
@@ -588,7 +532,24 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         logger.exception(f"Failed to update account status: {e}")
         return False
 
-async def notify_user_about_account_status(account_id: int, status: str, reason: str = None):
+def get_account_status_text(status: str, lang: str, rejection_reason: str = None) -> str:
+    """الحصول على نص حالة الحساب"""
+    if lang == "ar":
+        status_texts = {
+            "under_review": "⏳ قيد المراجعة",
+            "active": "✅ مفعل",
+            "rejected": f"❌ مرفوض{' - ' + rejection_reason if rejection_reason else ''}"
+        }
+    else:
+        status_texts = {
+            "under_review": "⏳ Under Review", 
+            "active": "✅ Active",
+            "rejected": f"❌ Rejected{' - ' + rejection_reason if rejection_reason else ''}"
+        }
+    
+    return status_texts.get(status, status)
+
+async def notify_user_about_account_status(account_id: int, status: str, rejection_reason: str = None):
     """إرسال إشعار للمستخدم بتغيير حالة حسابه"""
     try:
         db = SessionLocal()
@@ -622,22 +583,22 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 You can now start using the service. Thank you for your trust!
                 """
         else:  # rejected
-            reason_text = f" بسبب: {reason}" if reason else ""
+            reason_text = f"\n📝 السبب: {rejection_reason}" if rejection_reason else ""
             if lang == "ar":
                 message = f"""
-❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
+❌ لم يتم تفعيل حساب التداول الخاص بك
 ━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
-🔢 رقم الحساب: {account.account_number}
+🔢 رقم الحساب: {account.account_number}{reason_text}
 
 يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
                 """
             else:
                 message = f"""
-❌ Your trading account was not activated{reason_text}
+❌ Your trading account was not activated
 ━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
-🔢 Account Number: {account.account_number}
+🔢 Account Number: {account.account_number}{reason_text}
 
 Please review the submitted data or contact support.
                 """
@@ -651,23 +612,110 @@ Please review the submitted data or contact support.
         db.close()
     except Exception as e:
         logger.exception(f"Failed to notify user about account status: {e}")
-#---------------------------------------------------------
-async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الرسائل النصية، بما في ذلك أسباب الرفض"""
+
+# -------------------------------
+# Admin Management
+# -------------------------------
+async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة إجراءات المسؤول"""
+    q = update.callback_query
+    await q.answer()
+    
+    if not q.data:
+        return
+    
+    user_id = q.from_user.id
+    if user_id != int(ADMIN_TELEGRAM_ID):
+        await q.message.reply_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
+        return
+    
+    if q.data.startswith("activate_account_"):
+        account_id = int(q.data.split("_")[2])
+        success = update_account_status(account_id, "active")
+        if success:
+            await q.message.edit_text(f"✅ تم تفعيل الحساب #{account_id}")
+            # إرسال إشعار للمستخدم
+            await notify_user_about_account_status(account_id, "active")
+            
+            # تحديث رسالة المستخدم إذا كانت مفتوحة
+            await update_user_accounts_message(account_id)
+        else:
+            await q.message.edit_text(f"❌ فشل في تفعيل الحساب #{account_id}")
+    
+    elif q.data.startswith("reject_account_"):
+        account_id = int(q.data.split("_")[2])
+        # حفظ طلب الرفض مؤقتاً وطلب السبب
+        PENDING_REJECTIONS[user_id] = {"account_id": account_id, "user_id": user_id}
+        
+        if q.message.text and "السبب:" in q.message.text:
+            # إذا كان هناك سبب مرفق بالفعل
+            await q.message.edit_text(f"❌ تم رفض الحساب #{account_id}")
+        else:
+            # طلب إدخال سبب الرفض
+            await q.message.edit_text(
+                f"❌ تم طلب رفض الحساب #{account_id}\n\n"
+                "📝 الرجاء إرسال سبب الرفض:"
+            )
+    
+    elif q.data.startswith("cancel_rejection_"):
+        account_id = int(q.data.split("_")[2])
+        # إلغاء طلب الرفض
+        PENDING_REJECTIONS.pop(user_id, None)
+        await q.message.edit_text(f"✅ تم إلغاء طلب رفض الحساب #{account_id}")
+
+async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة رسائل المسؤول (لأسباب الرفض)"""
+    if not update.message:
+        return
+        
     user_id = update.message.from_user.id
     if user_id != int(ADMIN_TELEGRAM_ID):
-        return  # تجاهل إذا لم يكن الإداري
+        return
     
-    if 'awaiting_rejection_reason' in context.user_data:
-        reason = update.message.text.strip()
-        account_id = context.user_data.pop('awaiting_rejection_reason')
-        success = update_account_status(account_id, "rejected", reason=reason)
-        if success:
-            await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بسبب: {reason}")
-            # إرسال إشعار للمستخدم
-            await notify_user_about_account_status(account_id, "rejected", reason=reason)
+    # التحقق إذا كان هناك طلب رفض معلق
+    if user_id in PENDING_REJECTIONS:
+        rejection_data = PENDING_REJECTIONS[user_id]
+        account_id = rejection_data["account_id"]
+        rejection_reason = update.message.text.strip()
+        
+        if rejection_reason:
+            success = update_account_status(account_id, "rejected", rejection_reason)
+            if success:
+                await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بالسبب المحدد")
+                # إرسال إشعار للمستخدم
+                await notify_user_about_account_status(account_id, "rejected", rejection_reason)
+                
+                # تحديث رسالة المستخدم إذا كانت مفتوحة
+                await update_user_accounts_message(account_id)
+            else:
+                await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
+            
+            # إزالة طلب الرفض المؤقت
+            PENDING_REJECTIONS.pop(user_id, None)
         else:
-            await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
+            await update.message.reply_text("❌ يرجى إرسال سبب الرفض")
+
+async def update_user_accounts_message(account_id: int):
+    """تحديث رسالة حسابات المستخدم بعد تغيير الحالة"""
+    try:
+        db = SessionLocal()
+        account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
+        if not account:
+            db.close()
+            return
+        
+        subscriber = account.subscriber
+        telegram_id = subscriber.telegram_id
+        lang = subscriber.lang or "ar"
+        
+        # تحديث رسالة المستخدم إذا كانت موجودة
+        ref = get_form_ref(telegram_id)
+        if ref and ref.get("origin") == "my_accounts":
+            await show_user_accounts(None, None, telegram_id, lang, edit_message=True)
+        
+        db.close()
+    except Exception as e:
+        logger.exception(f"Failed to update user accounts message: {e}")
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """إرسال إشعار للمسؤول عند إضافة أو تعديل حساب"""
@@ -688,6 +736,8 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             title = "ℹ️ نشاط على حساب تداول"
             action_desc = "نشاط على حساب تداول"
         
+        status_text = get_account_status_text("under_review", "ar")
+        
         message = f"""
 {title}
 ━━━━━━━━━━━━━━━━━━━━
@@ -699,6 +749,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 🏦 **الوسيط:** {account_data['broker_name']}
 🔢 **رقم الحساب:** {account_data['account_number']}
 🖥️ **السيرفر:** {account_data['server']}
+📊 **الحالة:** {status_text}
 👤 **الوكيل:** {account_data.get('agent', 'N/A')}
 
 💰 **رصيد البداية:** {account_data.get('initial_balance', 'N/A')}
@@ -732,25 +783,44 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
     except Exception as e:
         logger.exception(f"Failed to send admin notification: {e}")
 
-def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
-    """الحصول على نص حالة الحساب"""
-    if lang == "ar":
-        status_texts = {
-            "under_review": "⏳ قيد المراجعة",
-            "active": "✅ مفعل",
-            "rejected": "❌ مرفوض"
-        }
-    else:
-        status_texts = {
-            "under_review": "⏳ Under Review", 
-            "active": "✅ Active",
-            "rejected": "❌ Rejected"
-        }
-    
-    text = status_texts.get(status, status)
-    if status == "rejected" and reason:
-        text += f" بسبب: {reason}" if lang == "ar" else f" due to: {reason}"
-    return text
+# -------------------------------
+# small helper to send or edit a "congrats / brokers" message and save ref
+# -------------------------------
+async def present_brokers_for_user(telegram_id: int, header_title: str, brokers_title: str, back_label: str, edit_label: str, lang: str, reply_to_chat_id: Optional[int]=None, reply_to_message_id: Optional[int]=None):
+    accounts_label = "👤 بياناتي وحساباتي" if lang == "ar" else "👤 My Data & Accounts"
+
+    labels = ["🏦 Oneroyall", "🏦 Tickmill", back_label, accounts_label]
+    header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
+    keyboard = [
+        [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
+         InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+    ]
+
+    keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
+
+    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    edited = False
+    ref = get_form_ref(telegram_id)
+    if ref:
+        try:
+            await application.bot.edit_message_text(text=header + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            edited = True
+            clear_form_ref(telegram_id)
+        except Exception:
+            logger.exception("Failed to edit referenced message in present_brokers_for_user")
+    if not edited:
+        try:
+            target_chat = telegram_id if telegram_id else reply_to_chat_id
+            if target_chat:
+                sent = await application.bot.send_message(chat_id=target_chat, text=header + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                try:
+                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
+                except Exception:
+                    logger.exception("Could not save form message reference after sending congrats.")
+        except Exception:
+            logger.exception("Failed to send brokers message to user (present_brokers_for_user).")
+
 # ===============================
 # /start + menu / language flows
 # ===============================
@@ -781,12 +851,10 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     q = update.callback_query
     await q.answer()
     if lang == "ar":
-        #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
         sections = [("💹 تداول الفوركس", "forex_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
-        #sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main"), ("🤝 YesFX Partnership", "agency_main")]
         sections = [("💹 Forex Trading", "forex_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
@@ -809,10 +877,11 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_sections(update, context, lang)
 
 # ===============================
-# WebApp page (unchanged behavior except small cleanup)
+# WebApp pages (unchanged)
 # ===============================
 @app.get("/webapp")
 def webapp_form(request: Request):
+    # ... (الكود الحالي بدون تغيير)
     lang = (request.query_params.get("lang") or "ar").lower()
     is_ar = lang == "ar"
     edit_mode = request.query_params.get("edit") == "1"
@@ -945,11 +1014,9 @@ def webapp_form(request: Request):
     """
     return HTMLResponse(content=html, status_code=200)
 
-# ===============================
-# New WebApp: existing-account form (for users who already have a broker account)
-# ===============================
 @app.get("/webapp/existing-account")
 def webapp_existing_account(request: Request):
+    # ... (الكود الحالي بدون تغيير)
     lang = (request.query_params.get("lang") or "ar").lower()
     is_ar = lang == "ar"
 
@@ -1116,11 +1183,9 @@ def webapp_existing_account(request: Request):
     """
     return HTMLResponse(content=html, status_code=200)
 
-# ===============================
-# New WebApp: edit-accounts form - FIXED VERSION
-# ===============================
 @app.get("/webapp/edit-accounts")
 def webapp_edit_accounts(request: Request):
+    # ... (الكود الحالي بدون تغيير)
     lang = (request.query_params.get("lang") or "ar").lower()
     is_ar = lang == "ar"
 
@@ -1548,7 +1613,7 @@ async def api_update_trading_account(payload: dict = Body(...)):
         # Remove non-updatable fields
         update_data = {k: v for k, v in payload.items() if k not in ["id", "tg_user", "lang", "created_at"]}
 
-        success, _ = update_trading_account(account_id, **update_data)
+        success = update_trading_account(account_id, **update_data)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update account")
 
@@ -1991,12 +2056,7 @@ async def webapp_submit(payload: dict = Body(...)):
         logger.exception("Error in webapp_submit: %s", e)
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
-
-
-
-
-        
-async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
+async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str, edit_message: bool = False):
     """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس تنسيق صفحة 'تداول الفوركس'"""
     user_data = get_subscriber_with_accounts(telegram_id)
     
@@ -2006,10 +2066,10 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         else:
             text = "⚠️ You haven't registered yet. Please register first."
         
-        if update.callback_query and update.callback_query.message:
+        if update and update.callback_query and update.callback_query.message:
             await update.callback_query.edit_message_text(text)
         else:
-            await context.bot.send_message(chat_id=telegram_id, text=text)
+            await application.bot.send_message(chat_id=telegram_id, text=text)
         return
 
     if lang == "ar":
@@ -2118,7 +2178,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        if update.callback_query and update.callback_query.message:
+        if update and update.callback_query and update.callback_query.message and not edit_message:
             await update.callback_query.edit_message_text(
                 message, 
                 reply_markup=reply_markup, 
@@ -2128,21 +2188,33 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             
             save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
         else:
-            sent = await context.bot.send_message(
-                chat_id=telegram_id,
-                text=message,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True
-            )
-            
-            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
+            # إرسال رسالة جديدة أو تحديث الرسالة الحالية
+            ref = get_form_ref(telegram_id)
+            if ref and ref.get("origin") == "my_accounts" and edit_message:
+                await application.bot.edit_message_text(
+                    chat_id=ref["chat_id"],
+                    message_id=ref["message_id"],
+                    text=message,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+            else:
+                sent = await application.bot.send_message(
+                    chat_id=telegram_id,
+                    text=message,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+               
+                save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
     except Exception as e:
         logger.exception("Failed to show user accounts: %s", e)
         
         # Fallback: حاول إرسال رسالة جديدة
         try:
-            sent = await context.bot.send_message(
+            sent = await application.bot.send_message(
                 chat_id=telegram_id,
                 text=message,
                 reply_markup=reply_markup,
@@ -2153,6 +2225,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
         except Exception as fallback_error:
             logger.exception("Failed to send fallback message for user accounts: %s", fallback_error)
+
 # ===============================
 # menu_handler
 # ===============================
@@ -2252,9 +2325,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sections_data = {
         "forex_main": {
-            #"ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
             "ar": ["📊 نسخ الصفقات"],
-            #"en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
             "en": ["📊 Copy Trading"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
@@ -2385,6 +2456,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(header_box + f"\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
         await context.bot.send_message(chat_id=q.message.chat_id, text=header_box + f"\n\n{details}", disable_web_page_preview=True)
+
 # ===============================
 # web_app_message_handler fallback
 # ===============================
@@ -2507,7 +2579,7 @@ async def submit_existing_account(payload: dict = Body(...)):
         if not subscriber:
             return JSONResponse(status_code=404, content={"error": "User not found. Please complete registration first."})
 
-        success, _ = save_trading_account(
+        success = save_trading_account(
             subscriber_id=subscriber.id,
             broker_name=broker,
             account_number=account,
@@ -2688,10 +2760,11 @@ async def submit_existing_account(payload: dict = Body(...)):
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_|cancel_rejection_)"))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_message))  # إضافة معالج رسائل المسؤول
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
+
 # ===============================
 # Webhook setup
 # ===============================
