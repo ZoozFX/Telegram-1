@@ -2475,8 +2475,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sections_data = {
         "forex_main": {
-            "ar": ["📊 نسخ الصفقات"],
-            "en": ["📊 Copy Trading"],
+            "ar": ["📊 نسخ الصفقات", "🤖 طلب نسخة من الاكسبيرت"],
+        "en": ["📊 Copy Trading", "🤖 Request EA Copy"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -2593,6 +2593,82 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.exception("Failed to show webapp button to user.")
         return
 
+    if q.data in ("🤖 طلب نسخة من الاكسبيرت", "🤖 Request EA Copy"):
+    # التحقق مما إذا كان المستخدم مسجلاً
+    existing = get_subscriber_by_telegram_id(user_id)
+    
+    if not existing:
+        # إذا لم يكن مسجلاً، نقله إلى صفحة التسجيل
+        context.user_data["registration"] = {"lang": lang}
+        if lang == "ar":
+            title = "من فضلك ادخل البيانات"
+            back_label_text = "🔙 الرجوع لتداول الفوركس"
+            open_label = "📝 افتح نموذج التسجيل"
+            header_emoji_for_lang = HEADER_EMOJI
+        else:
+            title = "Please enter your data"
+            back_label_text = "🔙 Back to Forex"
+            open_label = "📝 Open registration form"
+            header_emoji_for_lang = "✨"
+
+        labels = [open_label, back_label_text]
+        header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+
+        keyboard = []
+        if WEBAPP_URL:
+            url_with_lang = f"{WEBAPP_URL}?lang={lang}"
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
+        else:
+            fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
+            keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
+
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="forex_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="open_form", lang=lang)
+        except Exception:
+            try:
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="open_form", lang=lang)
+            except Exception:
+                logger.exception("Failed to show webapp button to user.")
+    else:
+        # إذا كان مسجلاً، نقله إلى الرابط المطلوب
+        ea_link = "https://t.me/Nagyfx"
+        if lang == "ar":
+            message_text = "✅ اضغط على الزر أدناه للانتقال إلى طلب نسخة الاكسبيرت:"
+            button_text = "🤖 طلب نسخة من الاكسبيرت"
+            back_button = "🔙 الرجوع لتداول الفوركس"
+        else:
+            message_text = "✅ Click the button below to request EA copy:"
+            button_text = "🤖 Request EA Copy"
+            back_button = "🔙 Back to Forex"
+
+        keyboard = [
+            [InlineKeyboardButton(button_text, url=ea_link)],
+            [InlineKeyboardButton(back_button, callback_data="forex_main")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            await q.edit_message_text(
+                message_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+        except Exception:
+            await context.bot.send_message(
+                chat_id=q.message.chat_id,
+                text=message_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+        return
+    
     if q.data in ("👤 بياناتي وحساباتي", "👤 My Data & Accounts"):
         await show_user_accounts(update, context, user_id, lang)
         return
