@@ -765,6 +765,8 @@ async def refresh_my_accounts_interface(telegram_id: int, lang: str, chat_id: in
                     account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
+                if acc.get('expected_return'):
+                    account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 if acc.get('initial_balance'):
@@ -777,6 +779,8 @@ async def refresh_my_accounts_interface(telegram_id: int, lang: str, chat_id: in
                     account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 Agent: {acc['agent']}\n"
+                if acc.get('expected_return'):
+                    account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
             updated_message += account_text
     else:
         updated_message += f"\n{no_accounts}"
@@ -947,6 +951,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>🔢 رقم الحساب:</b> {account_data['account_number']}
 <b>🔐 كلمة المرور:</b> {account_data.get('password', 'N/A')}
 <b>🖥️ السيرفر:</b> {account_data['server']}
+<b>📈 العائد المتوقع:</b> {account_data.get('expected_return', 'N/A')}
 <b>👤 الوكيل:</b> {account_data.get('agent', 'N/A')}
 
 <b>💰 رصيد البداية:</b> {account_data.get('initial_balance', 'N/A')}
@@ -977,6 +982,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>🔢 Account Number:</b> {account_data['account_number']}
 <b>🔐 Password:</b> {account_data.get('password', 'N/A')}
 <b>🖥️ Server:</b> {account_data['server']}
+<b>📈 Expected Return:</b> {account_data.get('expected_return', 'N/A')}
 <b>👤 Agent:</b> {account_data.get('agent', 'N/A')}
 
 <b>💰 Initial Balance:</b> {account_data.get('initial_balance', 'N/A')}
