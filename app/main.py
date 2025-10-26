@@ -1148,16 +1148,18 @@ def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
             "active": "✅ مفعل",
             "rejected": "❌ مرفوض"
         }
+        reason_text = f" بسبب: {reason}" if reason else ""
     else:
         status_texts = {
             "under_review": "⏳ Under Review", 
             "active": "✅ Active",
             "rejected": "❌ Rejected"
         }
+        reason_text = f" due to: {reason}" if reason else ""
     
     text = status_texts.get(status, status)
     if status == "rejected" and reason:
-        text += f" بسبب: {reason}" if lang == "ar" else f" due to: {reason}"
+        text += reason_text
     return text
 # ===============================
 # /start + menu / language flows
