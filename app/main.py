@@ -54,16 +54,15 @@ class TradingAccount(Base):
     account_number = Column(String(100), nullable=False)
     password = Column(String(100), nullable=False)
     server = Column(String(100), nullable=False)
-    # الحقول الجديدة
     initial_balance = Column(String(50), nullable=True)
     current_balance = Column(String(50), nullable=True)
     withdrawals = Column(String(50), nullable=True)
     copy_start_date = Column(String(50), nullable=True)
     agent = Column(String(100), nullable=True)
+    expected_return = Column(String(100), nullable=True)
     created_at = Column(String(50), default=lambda: datetime.now().isoformat())
-    # الحقل الجديد: حالة الحساب
-    status = Column(String(20), default="under_review")  # under_review, active, rejected
-    rejection_reason = Column(String(255), nullable=True)  # سبب الرفض
+    status = Column(String(20), default="under_review")
+    rejection_reason = Column(String(255), nullable=True)
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
 Base.metadata.create_all(bind=engine)
@@ -269,7 +268,8 @@ def save_trading_account(
     current_balance: str = None,
     withdrawals: str = None,
     copy_start_date: str = None,
-    agent: str = None
+    agent: str = None,
+    expected_return: str = None
 ) -> Tuple[bool, TradingAccount]:
     """حفظ حساب تداول جديد مرتبط بالمستخدم"""
     try:
@@ -290,7 +290,8 @@ def save_trading_account(
             withdrawals=withdrawals,
             copy_start_date=copy_start_date,
             agent=agent,
-            status="under_review"  # الحالة الافتراضية
+            expected_return=expected_return,
+            status="under_review"
         )
         
         db.add(trading_account)
