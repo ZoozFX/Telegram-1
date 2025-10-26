@@ -584,7 +584,7 @@ async def handle_admin_callbacks(update: Update, context: ContextTypes.DEFAULT_T
         if success:
             # تحديث الرسالة الأصلية
             await q.edit_message_text(f"✅ تم تفعيل الحساب #{account_id}")
-            # إرسال إشعار للمستخدم
+            # تحديث رسالة المستخدم الحالية بدلاً من إرسال رسالة جديدة
             await notify_user_about_account_status(account_id, "active")
         else:
             await q.edit_message_text(f"❌ فشل في تفعيل الحساب #{account_id}")
@@ -614,7 +614,7 @@ async def handle_admin_text_messages(update: Update, context: ContextTypes.DEFAU
         success = update_account_status(account_id, "rejected", reason=reason)
         if success:
             await update.message.reply_text(f"✅ تم رفض الحساب #{account_id}\nالسبب: {reason}")
-            # إرسال إشعار للمستخدم
+            # تحديث رسالة المستخدم الحالية بدلاً من إرسال رسالة جديدة
             await notify_user_about_account_status(account_id, "rejected", reason=reason)
         else:
             await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
@@ -647,7 +647,7 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         return False
 
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None):
-    """إرسال إشعار للمستخدم بتغيير حالة حسابه - الإصدار المحسن"""
+    """تحديث حالة الحساب في رسالة المستخدم الحالية بدلاً من إرسال رسالة جديدة"""
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -660,58 +660,135 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
             db.close()
             return
             
+        telegram_id = subscriber.telegram_id
         lang = subscriber.lang or "ar"
         
-        if status == "active":
-            if lang == "ar":
-                message = f"""
-✅ **تم تفعيل حساب التداول الخاص بك**
-━━━━━━━━━━━━━━━━━━━━
-🏦 **الوسيط:** {account.broker_name}
-🔢 **رقم الحساب:** {account.account_number}
-🖥️ **السيرفر:** {account.server}
+        # البحث عن الرسالة المرجعية للمستخدم
+        ref = get_form_ref(telegram_id)
+        if ref and ref.get("origin") == "my_accounts":
+            # تحديث رسالة "بياناتي وحساباتي" الحالية
+            updated_data = get_subscriber_with_accounts(telegram_id)
+            
+            if updated_data:
+                if lang == "ar":
+                    header_title = "👤 بياناتي وحساباتي"
+                    add_account_label = "➕ إضافة حساب تداول"
+                    edit_accounts_label = "✏️ تعديل حساباتي" if len(updated_data['trading_accounts']) > 0 else None
+                    edit_data_label = "✏️ تعديل بياناتي"
+                    back_label = "🔙 الرجوع لتداول الفوركس"
+                    labels = [header_title, add_account_label]
+                    if edit_accounts_label:
+                        labels.append(edit_accounts_label)
+                    labels.extend([edit_data_label, back_label])
+                    header = build_header_html(
+                        header_title, 
+                        labels,
+                        header_emoji=HEADER_EMOJI,
+                        underline_min=FIXED_UNDERLINE_LENGTH,
+                        arabic_indent=1
+                    )
+                    
+                    user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
+                    accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
+                    no_accounts = "\nلا توجد حسابات مسجلة بعد."
+                    
+                else:
+                    header_title = "👤 My Data & Accounts"
+                    add_account_label = "➕ Add Trading Account"
+                    edit_accounts_label = "✏️ Edit My Accounts" if len(updated_data['trading_accounts']) > 0 else None
+                    edit_data_label = "✏️ Edit my data"
+                    back_label = "🔙 Back to Forex"
+                    labels = [header_title, add_account_label]
+                    if edit_accounts_label:
+                        labels.append(edit_accounts_label)
+                    labels.extend([edit_data_label, back_label])
+                    header = build_header_html(
+                        header_title, 
+                        labels,
+                        header_emoji=HEADER_EMOJI,
+                        underline_min=FIXED_UNDERLINE_LENGTH,
+                        arabic_indent=0
+                    )
+                    
+                    user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
+                    accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
+                    no_accounts = "\nNo trading accounts registered yet."
 
-يمكنك الآن البدء في استخدام الخدمة. شكراً لثقتك بنا!
-                """
-            else:
-                message = f"""
-✅ **Your trading account has been activated**
-━━━━━━━━━━━━━━━━━━━━
-🏦 **Broker:** {account.broker_name}
-🔢 **Account Number:** {account.account_number}
-🖥️ **Server:** {account.server}
+                updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
+                
+                if updated_data['trading_accounts']:
+                    for i, acc in enumerate(updated_data['trading_accounts'], 1):
+                        status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
+                        if lang == "ar":
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
+                            if acc.get('initial_balance'):
+                                account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
+                            if acc.get('current_balance'):
+                                account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
+                            if acc.get('withdrawals'):
+                                account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
+                            if acc.get('copy_start_date'):
+                                account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                            if acc.get('agent'):
+                                account_text += f"   👤 الوكيل: {acc['agent']}\n"
+                        else:
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
+                            if acc.get('initial_balance'):
+                                account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
+                            if acc.get('current_balance'):
+                                account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
+                            if acc.get('withdrawals'):
+                                account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
+                            if acc.get('copy_start_date'):
+                                account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
+                            if acc.get('agent'):
+                                account_text += f"   👤 Agent: {acc['agent']}\n"
+                        updated_message += account_text
+                else:
+                    updated_message += f"\n{no_accounts}"
 
-You can now start using the service. Thank you for your trust!
-                """
-        else:  # rejected
-            reason_text = f"\n📝 **السبب:** {reason}" if reason else ""
-            if lang == "ar":
-                message = f"""
-❌ **لم يتم تفعيل حساب التداول الخاص بك**
-━━━━━━━━━━━━━━━━━━━━
-🏦 **الوسيط:** {account.broker_name}
-🔢 **رقم الحساب:** {account.account_number}{reason_text}
+                keyboard = []
+                
+                if WEBAPP_URL:
+                    url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
+                    keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
+                
+                if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
+                    edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
+                    keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
+                
+                if WEBAPP_URL:
+                    params = {
+                        "lang": lang,
+                        "edit": "1",
+                        "name": updated_data['name'],
+                        "email": updated_data['email'],
+                        "phone": updated_data['phone']
+                    }
+                    edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
+                    keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
+                
+                keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
 
-يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
-                """
-            else:
-                message = f"""
-❌ **Your trading account was not activated**
-━━━━━━━━━━━━━━━━━━━━
-🏦 **Broker:** {account.broker_name}
-🔢 **Account Number:** {account.account_number}{reason_text}
-
-Please review the submitted data or contact support.
-                """
+                try:
+                    await application.bot.edit_message_text(
+                        chat_id=ref["chat_id"],
+                        message_id=ref["message_id"],
+                        text=updated_message,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True
+                    )
+                    
+                    logger.info(f"✅ تم تحديث حالة الحساب #{account_id} في رسالة المستخدم {telegram_id}")
+                    
+                except Exception as e:
+                    logger.exception(f"Failed to update user message for account status: {e}")
         
-        await application.bot.send_message(
-            chat_id=subscriber.telegram_id,
-            text=message,
-            parse_mode="Markdown"
-        )
-        
-        logger.info(f"تم إرسال إشعار للمستخدم {subscriber.telegram_id} حول حالة الحساب #{account_id}")
         db.close()
+        
     except Exception as e:
         logger.exception(f"Failed to notify user about account status: {e}")
 #---------------------------------------------------------
