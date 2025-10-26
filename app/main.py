@@ -556,10 +556,9 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['awaiting_rejection_reason'] = account_id
         # حفظ معرف الرسالة الأصلية للحذف لاحقًا
         context.user_data['admin_notification_message_id'] = q.message.message_id
-        if admin_lang == "ar":
-            await q.message.reply_text("يرجى تقديم سبب الرفض:")
-        else:
-            await q.message.reply_text("Please provide the rejection reason:")
+        prompt_text = "يرجى تقديم سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
+        rejection_prompt = await q.message.reply_text(prompt_text)
+        context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
 
 def get_user_current_language(account_id: int) -> str:
     """الحصول على اللغة الحالية للمستخدم من السياق النشط"""
@@ -835,6 +834,14 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 except Exception as e:
                     logger.exception(f"Failed to delete original admin notification: {e}")
             
+            # حذف رسالة الطلب للسبب
+            rejection_prompt_message_id = context.user_data.pop('rejection_prompt_message_id', None)
+            if rejection_prompt_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=rejection_prompt_message_id)
+                except Exception as e:
+                    logger.exception(f"Failed to delete rejection prompt message: {e}")
+            
             # حذف رسالة السبب نفسها (التي كتبها الأدمن)
             try:
                 await update.message.delete()
@@ -848,6 +855,14 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                     await context.bot.delete_message(chat_id=user_id, message_id=admin_notification_message_id)
                 except Exception as e:
                     logger.exception(f"Failed to delete original admin notification on failure: {e}")
+            
+            rejection_prompt_message_id = context.user_data.pop('rejection_prompt_message_id', None)
+            if rejection_prompt_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=rejection_prompt_message_id)
+                except Exception as e:
+                    logger.exception(f"Failed to delete rejection prompt message on failure: {e}")
+            
             try:
                 await update.message.delete()
             except Exception as e:
@@ -1893,7 +1908,7 @@ async def api_update_trading_account(payload: dict = Body(...)):
                                 account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
                             if acc.get('agent'):
                                 account_text += f"   👤 Agent: {acc['agent']}\n"
-                        updated_message += account_text
+                            updated_message += account_text
                 else:
                     updated_message += f"\n{no_accounts}"
 
@@ -2011,7 +2026,7 @@ async def api_delete_trading_account(payload: dict = Body(...)):
                                 account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
                             if acc.get('agent'):
                                 account_text += f"   👤 Agent: {acc['agent']}\n"
-                        updated_message += account_text
+                            updated_message += account_text
                 else:
                     updated_message += f"\n{no_accounts}"
 
@@ -2143,29 +2158,44 @@ async def webapp_submit(payload: dict = Body(...)):
                         status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
                         if lang == "ar":
                             account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
+                            if acc.get('initial_balance'):
+                                account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
+                            if acc.get('current_balance'):
+                                account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
+                            if acc.get('withdrawals'):
+                                account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
+                            if acc.get('copy_start_date'):
+                                account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                            if acc.get('agent'):
+                                account_text += f"   👤 الوكيل: {acc['agent']}\n"
                         else:
                             account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
+                            if acc.get('initial_balance'):
+                                account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
+                            if acc.get('current_balance'):
+                                account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
+                            if acc.get('withdrawals'):
+                                account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
+                            if acc.get('copy_start_date'):
+                                account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
+                            if acc.get('agent'):
+                                account_text += f"   👤 Agent: {acc['agent']}\n"
                         updated_message += account_text
                 else:
                     updated_message += f"\n{no_accounts}"
 
                 keyboard = []
-                
                 if WEBAPP_URL:
                     url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
                     keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-                
                 if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
                     edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
                     keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-                
                 if WEBAPP_URL:
                     params = {"lang": lang, "edit": "1", "name": updated_data['name'], "email": updated_data['email'], "phone": updated_data['phone']}
                     edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
                     keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-                
                 keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-                
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 try:
@@ -2342,7 +2372,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 if acc.get('withdrawals'):
                     account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
                 if acc.get('copy_start_date'):
-                    account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
+                    account_text += f"   📅 تاريخ بدء النسخ: {acc['copy_start_date']}\n"
                 if acc.get('agent'):
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
             else:
@@ -2805,7 +2835,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                     edit_accounts_label = "✏️ تعديل حساباتي" if len(updated_data['trading_accounts']) > 0 else None
                     edit_data_label = "✏️ تعديل بياناتي"
                     back_label = "🔙 الرجوع لتداول الفوركس"
-                    
                     labels = [header_title, add_account_label]
                     if edit_accounts_label:
                         labels.append(edit_accounts_label)
@@ -2817,7 +2846,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                         underline_min=FIXED_UNDERLINE_LENGTH,
                         arabic_indent=1
                     )
-                    
                     user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
                     accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
                     no_accounts = "\nلا توجد حسابات مسجلة بعد."
@@ -2828,7 +2856,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                     edit_accounts_label = "✏️ Edit My Accounts" if len(updated_data['trading_accounts']) > 0 else None
                     edit_data_label = "✏️ Edit my data"
                     back_label = "🔙 Back to Forex"
-                    
                     labels = [header_title, add_account_label]
                     if edit_accounts_label:
                         labels.append(edit_accounts_label)
@@ -2840,7 +2867,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                         underline_min=FIXED_UNDERLINE_LENGTH,
                         arabic_indent=0
                     )
-                    
                     user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
                     accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
                     no_accounts = "\nNo trading accounts registered yet."
@@ -2852,7 +2878,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                         status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
                         if lang == "ar":
                             account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                            # إضافة الحقول الجديدة إذا كانت موجودة
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
                             if acc.get('current_balance'):
@@ -2865,7 +2890,6 @@ async def submit_existing_account(payload: dict = Body(...)):
                                 account_text += f"   👤 الوكيل: {acc['agent']}\n"
                         else:
                             account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                            # إضافة الحقول الجديدة إذا كانت موجودة
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
                             if acc.get('current_balance'):
