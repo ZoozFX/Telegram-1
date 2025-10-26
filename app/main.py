@@ -60,6 +60,7 @@ class TradingAccount(Base):
     created_at = Column(String(50), default=lambda: datetime.now().isoformat())
     # الحقل الجديد: حالة الحساب
     status = Column(String(20), default="under_review")  # under_review, active, rejected
+    rejection_reason = Column(String(255), nullable=True)  # سبب الرفض
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
 Base.metadata.create_all(bind=engine)
@@ -336,6 +337,10 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             if hasattr(account, key) and value is not None:
                 setattr(account, key, value)
         
+        # إعادة تعيين الحالة إلى under_review عند التعديل
+        account.status = "under_review"
+        account.rejection_reason = None  # مسح السبب إذا كان موجوداً
+        
         db.commit()
         db.refresh(account)
         
@@ -446,7 +451,7 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
                         "agent": acc.agent,
                         "created_at": acc.created_at,
                         "status": acc.status,
-                        "rejection_reason": getattr(acc, 'rejection_reason', None)  # تضمين سبب الرفض
+                        "rejection_reason": acc.rejection_reason
                     }
                     for acc in subscriber.trading_accounts
                 ]
@@ -558,50 +563,11 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     
     elif q.data.startswith("reject_account_"):
         account_id = int(q.data.split("_")[2])
-        # حفظ معرف الحساب في بيانات المستخدم لاستخدامه لاحقاً
-        context.user_data["pending_rejection_account_id"] = account_id
-        await q.message.edit_text(
-            f"❌ طلب رفض الحساب #{account_id}\n\n"
-            "⏳ يرجى إرسال سبب الرفض الآن (سيتم إرساله للمستخدم):"
-        )
+        context.user_data['awaiting_rejection_reason'] = account_id
+        await q.message.reply_text("يرجى تقديم سبب الرفض:")
 
-
-
-async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة سبب الرفض من المسؤول"""
-    if update.message.from_user.id != int(ADMIN_TELEGRAM_ID):
-        return
-    
-    account_id = context.user_data.get("pending_rejection_account_id")
-    if not account_id:
-        return
-    
-    rejection_reason = update.message.text.strip()
-    if not rejection_reason:
-        await update.message.reply_text("⚠️ يرجى إرسال سبب الرفض")
-        return
-    
-    # تحديث حالة الحساب مع سبب الرفض
-    success = update_account_status(account_id, "rejected", rejection_reason)
-    if success:
-        await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} وإرسال السبب للمستخدم")
-        # إرسال إشعار للمستخدم
-        await notify_user_about_account_status(account_id, "rejected", rejection_reason)
-        # مسح البيانات المؤقتة
-        context.user_data.pop("pending_rejection_account_id", None)
-    else:
-        await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
-
-
-
-
-
-
-
-
-
-def update_account_status(account_id: int, status: str, rejection_reason: str = None) -> bool:
-    """تحديث حالة الحساب مع سبب الرفض"""
+def update_account_status(account_id: int, status: str, reason: str = None) -> bool:
+    """تحديث حالة الحساب"""
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -610,12 +576,10 @@ def update_account_status(account_id: int, status: str, rejection_reason: str = 
             return False
         
         account.status = status
-        # حفظ سبب الرفض إذا كان موجوداً
-        if status == "rejected" and rejection_reason:
-            # يمكنك إضافة حقل جديد في الجدول أو استخدام حقل موجود
-            # سأفترض أننا أضفنا حقل rejection_reason في الجدول
-            if hasattr(account, 'rejection_reason'):
-                account.rejection_reason = rejection_reason
+        if status == "rejected":
+            account.rejection_reason = reason
+        else:
+            account.rejection_reason = None
         
         db.commit()
         db.close()
@@ -624,7 +588,7 @@ def update_account_status(account_id: int, status: str, rejection_reason: str = 
         logger.exception(f"Failed to update account status: {e}")
         return False
 
-async def notify_user_about_account_status(account_id: int, status: str, rejection_reason: str = None):
+async def notify_user_about_account_status(account_id: int, status: str, reason: str = None):
     """إرسال إشعار للمستخدم بتغيير حالة حسابه"""
     try:
         db = SessionLocal()
@@ -644,7 +608,6 @@ async def notify_user_about_account_status(account_id: int, status: str, rejecti
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
-📊 **حالة الحساب: مفعل**
 
 يمكنك الآن البدء في استخدام الخدمة. شكراً لثقتك بنا!
                 """
@@ -655,31 +618,26 @@ async def notify_user_about_account_status(account_id: int, status: str, rejecti
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
-📊 **Account Status: Active**
 
 You can now start using the service. Thank you for your trust!
                 """
         else:  # rejected
-            reason_text = f"\n📝 **سبب الرفض:** {rejection_reason}" if rejection_reason else ""
+            reason_text = f" بسبب: {reason}" if reason else ""
             if lang == "ar":
                 message = f"""
-❌ لم يتم تفعيل حساب التداول الخاص بك
+❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
 ━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
-🖥️ السيرفر: {account.server}
-📊 **حالة الحساب: مرفوض**{reason_text}
 
 يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
                 """
             else:
                 message = f"""
-❌ Your trading account was not activated
+❌ Your trading account was not activated{reason_text}
 ━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
-🖥️ Server: {account.server}
-📊 **Account Status: Rejected**{reason_text}
 
 Please review the submitted data or contact support.
                 """
@@ -694,6 +652,23 @@ Please review the submitted data or contact support.
     except Exception as e:
         logger.exception(f"Failed to notify user about account status: {e}")
 #---------------------------------------------------------
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الرسائل النصية، بما في ذلك أسباب الرفض"""
+    user_id = update.message.from_user.id
+    if user_id != int(ADMIN_TELEGRAM_ID):
+        return  # تجاهل إذا لم يكن الإداري
+    
+    if 'awaiting_rejection_reason' in context.user_data:
+        reason = update.message.text.strip()
+        account_id = context.user_data.pop('awaiting_rejection_reason')
+        success = update_account_status(account_id, "rejected", reason=reason)
+        if success:
+            await update.message.reply_text(f"✅ تم رفض الحساب #{account_id} بسبب: {reason}")
+            # إرسال إشعار للمستخدم
+            await notify_user_about_account_status(account_id, "rejected", reason=reason)
+        else:
+            await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
+
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """إرسال إشعار للمسؤول عند إضافة أو تعديل حساب"""
     try:
@@ -757,7 +732,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
     except Exception as e:
         logger.exception(f"Failed to send admin notification: {e}")
 
-def get_account_status_text(status: str, lang: str) -> str:
+def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
     """الحصول على نص حالة الحساب"""
     if lang == "ar":
         status_texts = {
@@ -772,7 +747,10 @@ def get_account_status_text(status: str, lang: str) -> str:
             "rejected": "❌ Rejected"
         }
     
-    return status_texts.get(status, status)
+    text = status_texts.get(status, status)
+    if status == "rejected" and reason:
+        text += f" بسبب: {reason}" if lang == "ar" else f" due to: {reason}"
+    return text
 # ===============================
 # /start + menu / language flows
 # ===============================
@@ -1138,9 +1116,6 @@ def webapp_existing_account(request: Request):
     """
     return HTMLResponse(content=html, status_code=200)
 
-# ===============================
-# New WebApp: edit-accounts form
-# ===============================
 # ===============================
 # New WebApp: edit-accounts form - FIXED VERSION
 # ===============================
@@ -1573,7 +1548,7 @@ async def api_update_trading_account(payload: dict = Body(...)):
         # Remove non-updatable fields
         update_data = {k: v for k, v in payload.items() if k not in ["id", "tg_user", "lang", "created_at"]}
 
-        success = update_trading_account(account_id, **update_data)
+        success, _ = update_trading_account(account_id, **update_data)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update account")
 
@@ -1615,8 +1590,9 @@ async def api_update_trading_account(payload: dict = Body(...)):
                 
                 if updated_data['trading_accounts']:
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
+                        status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
                         if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
                             if acc.get('current_balance'):
@@ -1628,7 +1604,7 @@ async def api_update_trading_account(payload: dict = Body(...)):
                             if acc.get('agent'):
                                 account_text += f"   👤 الوكيل: {acc['agent']}\n"
                         else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
                             if acc.get('current_balance'):
@@ -1732,8 +1708,9 @@ async def api_delete_trading_account(payload: dict = Body(...)):
                 
                 if updated_data['trading_accounts']:
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
+                        status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
                         if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
                             if acc.get('current_balance'):
@@ -1745,7 +1722,7 @@ async def api_delete_trading_account(payload: dict = Body(...)):
                             if acc.get('agent'):
                                 account_text += f"   👤 الوكيل: {acc['agent']}\n"
                         else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
                             if acc.get('current_balance'):
@@ -1887,10 +1864,11 @@ async def webapp_submit(payload: dict = Body(...)):
                 
                 if updated_data['trading_accounts']:
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
+                        status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
                         if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
                         else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                         updated_message += account_text
                 else:
                     updated_message += f"\n{no_accounts}"
@@ -2082,13 +2060,10 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
-            status_text = get_account_status_text(acc['status'], lang)
+            status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
             
             if lang == "ar":
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                # إذا كان الحساب مرفوضاً وعنده سبب رفض، عرض السبب
-                if acc['status'] == 'rejected' and acc.get('rejection_reason'):
-                    account_text += f"   📝 <b>سبب الرفض:</b> {acc['rejection_reason']}\n"
                 # إضافة الحقول الجديدة إذا كانت موجودة
                 if acc.get('initial_balance'):
                     account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
@@ -2102,9 +2077,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                # إذا كان الحساب مرفوضاً وعنده سبب رفض، عرض السبب
-                if acc['status'] == 'rejected' and acc.get('rejection_reason'):
-                    account_text += f"   📝 <b>Rejection Reason:</b> {acc['rejection_reason']}\n"
                 # إضافة الحقول الجديدة إذا كانت موجودة
                 if acc.get('initial_balance'):
                     account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
@@ -2535,7 +2507,7 @@ async def submit_existing_account(payload: dict = Body(...)):
         if not subscriber:
             return JSONResponse(status_code=404, content={"error": "User not found. Please complete registration first."})
 
-        success = save_trading_account(
+        success, _ = save_trading_account(
             subscriber_id=subscriber.id,
             broker_name=broker,
             account_number=account,
@@ -2607,8 +2579,9 @@ async def submit_existing_account(payload: dict = Body(...)):
                 
                 if updated_data['trading_accounts']:
                     for i, acc in enumerate(updated_data['trading_accounts'], 1):
+                        status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
                         if lang == "ar":
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
                             # إضافة الحقول الجديدة إذا كانت موجودة
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
@@ -2621,7 +2594,7 @@ async def submit_existing_account(payload: dict = Body(...)):
                             if acc.get('agent'):
                                 account_text += f"   👤 الوكيل: {acc['agent']}\n"
                         else:
-                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n"
+                            account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                             # إضافة الحقول الجديدة إذا كانت موجودة
                             if acc.get('initial_balance'):
                                 account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
@@ -2716,9 +2689,9 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
-application.add_handler(MessageHandler(filters.TEXT & filters.User(int(ADMIN_TELEGRAM_ID)) & ~filters.COMMAND, handle_rejection_reason))
 # ===============================
 # Webhook setup
 # ===============================
