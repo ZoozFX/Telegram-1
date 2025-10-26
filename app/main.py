@@ -565,9 +565,61 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         account_id = int(q.data.split("_")[2])
         context.user_data['awaiting_rejection_reason'] = account_id
         await q.message.reply_text("يرجى تقديم سبب الرفض:")
+async def handle_admin_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة إجراءات المسؤول - الإصدار المصحح"""
+    q = update.callback_query
+    await q.answer()
+    
+    if not q.data:
+        return
+    
+    user_id = q.from_user.id
+    if str(user_id) != ADMIN_TELEGRAM_ID:
+        await q.message.reply_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
+        return
+    
+    if q.data.startswith("activate_account_"):
+        account_id = int(q.data.split("_")[2])
+        success = update_account_status(account_id, "active")
+        if success:
+            # تحديث الرسالة الأصلية
+            await q.edit_message_text(f"✅ تم تفعيل الحساب #{account_id}")
+            # إرسال إشعار للمستخدم
+            await notify_user_about_account_status(account_id, "active")
+        else:
+            await q.edit_message_text(f"❌ فشل في تفعيل الحساب #{account_id}")
+    
+    elif q.data.startswith("reject_account_"):
+        account_id = int(q.data.split("_")[2])
+        # حفظ معرف الحساب في context لاستخدامه في الرسالة التالية
+        context.user_data['awaiting_rejection_reason'] = account_id
+        await q.edit_message_text(
+            f"⏳ يرجى إرسال سبب الرفض للحساب #{account_id}:\n"
+            f"(اكتب الرسالة الآن وسيتم إرسالها للمستخدم)"
+        )
 
+async def handle_admin_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة رسائل المسؤول النصية (أسباب الرفض)"""
+    user_id = update.message.from_user.id
+    if str(user_id) != ADMIN_TELEGRAM_ID:
+        return
+    
+    if 'awaiting_rejection_reason' in context.user_data:
+        reason = update.message.text.strip()
+        if not reason:
+            await update.message.reply_text("⚠️ يرجى إدخال سبب الرفض")
+            return
+            
+        account_id = context.user_data.pop('awaiting_rejection_reason')
+        success = update_account_status(account_id, "rejected", reason=reason)
+        if success:
+            await update.message.reply_text(f"✅ تم رفض الحساب #{account_id}\nالسبب: {reason}")
+            # إرسال إشعار للمستخدم
+            await notify_user_about_account_status(account_id, "rejected", reason=reason)
+        else:
+            await update.message.reply_text(f"❌ فشل في رفض الحساب #{account_id}")
 def update_account_status(account_id: int, status: str, reason: str = None) -> bool:
-    """تحديث حالة الحساب"""
+    """تحديث حالة الحساب - الإصدار المحسن"""
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -582,6 +634,12 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
             account.rejection_reason = None
         
         db.commit()
+        
+        # تسجيل العملية
+        logger.info(f"تم تحديث حالة الحساب #{account_id} إلى: {status}")
+        if reason:
+            logger.info(f"سبب الرفض: {reason}")
+            
         db.close()
         return True
     except Exception as e:
@@ -589,7 +647,7 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         return False
 
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None):
-    """إرسال إشعار للمستخدم بتغيير حالة حسابه"""
+    """إرسال إشعار للمستخدم بتغيير حالة حسابه - الإصدار المحسن"""
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -598,46 +656,50 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
             return
         
         subscriber = account.subscriber
+        if not subscriber or not subscriber.telegram_id:
+            db.close()
+            return
+            
         lang = subscriber.lang or "ar"
         
         if status == "active":
             if lang == "ar":
                 message = f"""
-✅ تم تفعيل حساب التداول الخاص بك
+✅ **تم تفعيل حساب التداول الخاص بك**
 ━━━━━━━━━━━━━━━━━━━━
-🏦 الوسيط: {account.broker_name}
-🔢 رقم الحساب: {account.account_number}
-🖥️ السيرفر: {account.server}
+🏦 **الوسيط:** {account.broker_name}
+🔢 **رقم الحساب:** {account.account_number}
+🖥️ **السيرفر:** {account.server}
 
 يمكنك الآن البدء في استخدام الخدمة. شكراً لثقتك بنا!
                 """
             else:
                 message = f"""
-✅ Your trading account has been activated
+✅ **Your trading account has been activated**
 ━━━━━━━━━━━━━━━━━━━━
-🏦 Broker: {account.broker_name}
-🔢 Account Number: {account.account_number}
-🖥️ Server: {account.server}
+🏦 **Broker:** {account.broker_name}
+🔢 **Account Number:** {account.account_number}
+🖥️ **Server:** {account.server}
 
 You can now start using the service. Thank you for your trust!
                 """
         else:  # rejected
-            reason_text = f" بسبب: {reason}" if reason else ""
+            reason_text = f"\n📝 **السبب:** {reason}" if reason else ""
             if lang == "ar":
                 message = f"""
-❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
+❌ **لم يتم تفعيل حساب التداول الخاص بك**
 ━━━━━━━━━━━━━━━━━━━━
-🏦 الوسيط: {account.broker_name}
-🔢 رقم الحساب: {account.account_number}
+🏦 **الوسيط:** {account.broker_name}
+🔢 **رقم الحساب:** {account.account_number}{reason_text}
 
 يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
                 """
             else:
                 message = f"""
-❌ Your trading account was not activated{reason_text}
+❌ **Your trading account was not activated**
 ━━━━━━━━━━━━━━━━━━━━
-🏦 Broker: {account.broker_name}
-🔢 Account Number: {account.account_number}
+🏦 **Broker:** {account.broker_name}
+🔢 **Account Number:** {account.account_number}{reason_text}
 
 Please review the submitted data or contact support.
                 """
@@ -648,6 +710,7 @@ Please review the submitted data or contact support.
             parse_mode="Markdown"
         )
         
+        logger.info(f"تم إرسال إشعار للمستخدم {subscriber.telegram_id} حول حالة الحساب #{account_id}")
         db.close()
     except Exception as e:
         logger.exception(f"Failed to notify user about account status: {e}")
@@ -2687,11 +2750,10 @@ async def submit_existing_account(payload: dict = Body(...)):
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
+application.add_handler(CallbackQueryHandler(handle_admin_callbacks, pattern="^(activate_account_|reject_account_)"))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_text_messages))
 application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 # ===============================
 # Webhook setup
 # ===============================
