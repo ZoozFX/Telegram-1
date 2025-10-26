@@ -1254,6 +1254,7 @@ def webapp_existing_account(request: Request):
         "withdrawals": "المسحوبات" if is_ar else "Withdrawals",
         "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
         "agent": "الوكيل" if is_ar else "Agent",
+        "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
         "submit": "تسجيل" if is_ar else "Submit",
         "close": "إغلاق" if is_ar else "Close",
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
@@ -1263,6 +1264,25 @@ def webapp_existing_account(request: Request):
 
     # إنشاء خيارات الوكلاء ديناميكياً
     agents_options = "".join([f'<option value="{agent}">{agent}</option>' for agent in AGENTS_LIST])
+    
+    # خيارات العائد المتوقع
+    expected_return_options = ""
+    if is_ar:
+        expected_return_options = """
+            <option value="">اختر العائد المتوقع</option>
+            <option value="من ١٠ : ١٥ %">من ١٠ : ١٥ %</option>
+            <option value="من ٢٠ : ٣٠ %">من ٢٠ : ٣٠ %</option>
+            <option value="من ٣٠ : ٤٥ %">من ٣٠ : ٤٥ %</option>
+            <option value="من ٤٠ : ٦٠ %">من ٤٠ : ٦٠ %</option>
+        """
+    else:
+        expected_return_options = """
+            <option value="">Select Expected Return</option>
+            <option value="10% - 15%">10% - 15%</option>
+            <option value="20% - 30%">20% - 30%</option>
+            <option value="30% - 45%">30% - 45%</option>
+            <option value="40% - 60%">40% - 60%</option>
+        """
 
     html = f"""
     <!doctype html>
@@ -1337,6 +1357,11 @@ def webapp_existing_account(request: Request):
           {agents_options}
         </select>
 
+        <label>{labels['expected_return']}</label>
+        <select id="expected_return">
+          {expected_return_options}
+        </select>
+
         <div style="margin-top:12px;text-align:{text_align}">
           <button class="btn btn-primary" id="submit">{labels['submit']}</button>
           <button class="btn btn-ghost" id="close">{labels['close']}</button>
@@ -1360,6 +1385,7 @@ def webapp_existing_account(request: Request):
           const withdrawals = document.getElementById('withdrawals').value.trim();
           const copy_start_date = document.getElementById('copy_start_date').value.trim();
           const agent = document.getElementById('agent').value.trim();
+          const expected_return = document.getElementById('expected_return').value.trim();
 
           if(!broker || !account || !password || !server){{
             statusEl.textContent = '{ "يرجى ملئ جميع الحقول الأساسية" if is_ar else "Please fill all required fields" }';
@@ -1377,6 +1403,7 @@ def webapp_existing_account(request: Request):
             withdrawals,
             copy_start_date,
             agent,
+            expected_return,
             tg_user: initUser,
             lang:"{lang}"
           }};
@@ -1426,6 +1453,7 @@ def webapp_edit_accounts(request: Request):
         "withdrawals": "المسحوبات" if is_ar else "Withdrawals",
         "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
         "agent": "الوكيل" if is_ar else "Agent",
+        "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
         "save": "حفظ التغييرات" if is_ar else "Save Changes",
         "delete": "حذف الحساب" if is_ar else "Delete Account",
         "close": "إغلاق" if is_ar else "Close",
@@ -1439,6 +1467,25 @@ def webapp_edit_accounts(request: Request):
 
     # إنشاء خيارات الوكلاء ديناميكياً
     agents_options = "".join([f'<option value="{agent}">{agent}</option>' for agent in AGENTS_LIST])
+    
+    # خيارات العائد المتوقع
+    expected_return_options = ""
+    if is_ar:
+        expected_return_options = """
+            <option value="">اختر العائد المتوقع</option>
+            <option value="من ١٠ : ١٥ %">من ١٠ : ١٥ %</option>
+            <option value="من ٢٠ : ٣٠ %">من ٢٠ : ٣٠ %</option>
+            <option value="من ٣٠ : ٤٥ %">من ٣٠ : ٤٥ %</option>
+            <option value="من ٤٠ : ٦٠ %">من ٤٠ : ٦٠ %</option>
+        """
+    else:
+        expected_return_options = """
+            <option value="">Select Expected Return</option>
+            <option value="10% - 15%">10% - 15%</option>
+            <option value="20% - 30%">20% - 30%</option>
+            <option value="30% - 45%">30% - 45%</option>
+            <option value="40% - 60%">40% - 60%</option>
+        """
 
     html = f"""
     <!doctype html>
@@ -1529,6 +1576,11 @@ def webapp_edit_accounts(request: Request):
           {agents_options}
         </select>
 
+        <label>{labels['expected_return']}</label>
+        <select id="expected_return">
+          {expected_return_options}
+        </select>
+
         <div style="margin-top:12px;text-align:{text_align}">
           <button class="btn btn-primary" id="save">{labels['save']}</button>
           <button class="btn btn-danger" id="delete">{labels['delete']}</button>
@@ -1590,6 +1642,7 @@ def webapp_edit_accounts(request: Request):
           document.getElementById('withdrawals').disabled = true;
           document.getElementById('copy_start_date').disabled = true;
           document.getElementById('agent').disabled = true;
+          document.getElementById('expected_return').disabled = true;
           document.getElementById('save').disabled = true;
           document.getElementById('delete').disabled = true;
         }}
@@ -1605,6 +1658,7 @@ def webapp_edit_accounts(request: Request):
           document.getElementById('withdrawals').disabled = false;
           document.getElementById('copy_start_date').disabled = false;
           document.getElementById('agent').disabled = false;
+          document.getElementById('expected_return').disabled = false;
           document.getElementById('save').disabled = false;
           document.getElementById('delete').disabled = false;
         }}
@@ -1644,6 +1698,7 @@ def webapp_edit_accounts(request: Request):
           document.getElementById('withdrawals').value = '';
           document.getElementById('copy_start_date').value = '';
           document.getElementById('agent').value = '';
+          document.getElementById('expected_return').value = '';
           document.getElementById('current_account_id').value = '';
           document.getElementById('current_account_status').value = '';
           currentAccountId = null;
@@ -1682,6 +1737,7 @@ def webapp_edit_accounts(request: Request):
               document.getElementById('withdrawals').value = acc.withdrawals || '';
               document.getElementById('copy_start_date').value = acc.copy_start_date || '';
               document.getElementById('agent').value = acc.agent || '';
+              document.getElementById('expected_return').value = acc.expected_return || '';
               
               // تمكين النموذج
               enableForm();
@@ -1730,6 +1786,7 @@ def webapp_edit_accounts(request: Request):
             withdrawals: document.getElementById('withdrawals').value.trim(),
             copy_start_date: document.getElementById('copy_start_date').value.trim(),
             agent: document.getElementById('agent').value.trim(),
+            expected_return: document.getElementById('expected_return').value.trim(),
             tg_user: tg.initDataUnsafe.user,
             lang: "{lang}"
           }};
@@ -2663,6 +2720,7 @@ async def submit_existing_account(payload: dict = Body(...)):
         withdrawals = (payload.get("withdrawals") or "").strip()
         copy_start_date = (payload.get("copy_start_date") or "").strip()
         agent = (payload.get("agent") or "").strip()
+        expected_return = (payload.get("expected_return") or "").strip()  # الحقل الجديد
         lang = (payload.get("lang") or "ar").lower()
 
         if not all([telegram_id, broker, account, password, server]):
@@ -2682,7 +2740,8 @@ async def submit_existing_account(payload: dict = Body(...)):
             current_balance=current_balance,
             withdrawals=withdrawals,
             copy_start_date=copy_start_date,
-            agent=agent
+            agent=agent,
+            expected_return=expected_return  # إضافة الحقل الجديد
         )
 
         if not success:
