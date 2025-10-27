@@ -668,7 +668,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 أنت الآن تتمتع بخدمة نسخ الصفقات. شكراً لثقتك بنا!
                 """
             else:
-                title = "Congratulations 🎉 Account Activated"
+                title = "Congratulations"
                 labels = ["✅ OK"]
                 header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=0)
                 message = f"""
