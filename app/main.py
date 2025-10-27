@@ -2170,13 +2170,13 @@ async def webapp_submit(payload: dict = Body(...)):
         else:
             
             if display_lang == "ar":
-                header_title = "🎉 مبروك — اختر وسيطك الآن"
+                header_title = "حسناً — اختر وسيطك الآن"
                 brokers_title = ""
                 back_label = "🔙 الرجوع لتداول الفوركس"
                 edit_label = "✏️ تعديل بياناتي"
                 accounts_label = "👤 بياناتي وحساباتي"
             else:
-                header_title = "🎉 Congrats — Choose your broker now"
+                header_title = "Ok — Choose your broker now"
                 brokers_title = ""
                 back_label = "🔙 Back to Forex"
                 edit_label = "✏️ Edit my data"
