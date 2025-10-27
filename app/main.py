@@ -207,7 +207,7 @@ def build_header_html(
     if is_arabic:
         target_width = 29  # 40 للغة العربية
     else:
-        target_width = 25  # 25 للغة الإنجليزية
+        target_width = 29  # 25 للغة الإنجليزية
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -674,7 +674,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=0)
                 message = f"""
 {header}
-Your trading account has been activated
+Your trading account has been activated ✅
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
