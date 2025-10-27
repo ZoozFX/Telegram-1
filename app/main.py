@@ -178,8 +178,8 @@ def build_header_html(
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
-    RLM = "\u200F"  # إضافة علامة اليمين إلى اليسار
-
+    RLM = "\u200F"
+    LLM = "\u200E"
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
@@ -219,7 +219,7 @@ def build_header_html(
         if is_arabic:
             underline_line = "\n" + RLM + (underline_char * target_width)
         else:
-            underline_line = "\n" + (underline_char * target_width)
+            underline_line = "\n" + LLM + (underline_char * target_width)
 
     return centered_line + underline_line
 # -------------------------------
