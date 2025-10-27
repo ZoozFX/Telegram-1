@@ -632,7 +632,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 message = f"""
 مبارك 🎉 
 تم تفعيل حساب التداول الخاص بك ✅ 
-━━━━━━━━━━━━━━━━━━━━
+\u200F━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
