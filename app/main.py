@@ -156,7 +156,7 @@ def build_header_html(
     title: str,
     keyboard_labels: List[str],
     header_emoji: str = HEADER_EMOJI,
-    underline_min: int = 20,
+    underline_min: int = 25,
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
@@ -165,12 +165,12 @@ def build_header_html(
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
-    RLM = "\u200F"  # إضافة علامة اليمين إلى اليسار
+    RLM = "\u200F"
 
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 20
+    MIN_TITLE_WIDTH = 25
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -196,7 +196,7 @@ def build_header_html(
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
-        # إضافة RLM قبل الخط في حالة اللغة العربية
+       
         if is_arabic:
             underline_line = "\n" + RLM + (underline_char * target_width)
         else:
