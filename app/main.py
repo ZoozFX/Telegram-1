@@ -1218,7 +1218,7 @@ def webapp_existing_account(request: Request):
         labels['agent'],
         labels['expected_return']
     ]
-    
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
     header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
@@ -1436,7 +1436,7 @@ def webapp_edit_accounts(request: Request):
         labels['save'],
         labels['delete']
     ]
-    
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
     header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
