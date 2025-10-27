@@ -2240,7 +2240,7 @@ async def webapp_submit(payload: dict = Body(...)):
         
         if ref and ref.get("origin") == "open_form_ea":
             
-            ea_link = "https://t.me/Omarkin9"
+            ea_link = "https://t.me/Nagyfx"
             if display_lang == "ar":
                 title = "طلب نسخة من الاكسبيرت"
                 message_text = ""
@@ -2919,7 +2919,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.exception("Failed to show webapp button to user.")
         else:
             
-            ea_link = "https://t.me/Omarkin9"
+            ea_link = "https://t.me/Nagyfx"
             if lang == "ar":
                 header_title = "طلب نسخة من الاكسبيرت"
                 message_text = ""
@@ -3030,7 +3030,7 @@ We're here to help you with {service_title}!
         header = build_header_html(service_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
         
         keyboard = [
-            [InlineKeyboardButton(support_label, url="https://t.me/Omarkin9")],
+            [InlineKeyboardButton(support_label, url="https://t.me/Nagyfx")],
             [InlineKeyboardButton(back_label, callback_data=back_callback)]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3072,7 +3072,7 @@ We're here to help you with {service_title}!
         back_label = "🔙 Back"
     
     keyboard = [
-        [InlineKeyboardButton(support_label, url="https://t.me/Omarkin9")],
+        [InlineKeyboardButton(support_label, url="https://t.me/Nagyfx")],
         [InlineKeyboardButton(back_label, callback_data="back_main")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
