@@ -149,6 +149,19 @@ def display_width(text: str) -> int:
 def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
+def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
+    """دالة مساعدة لبناء عناوين الويب أب"""
+    if labels is None:
+        labels = []
+    
+    return build_header_html(
+        title,
+        labels,
+        header_emoji=HEADER_EMOJI,
+        underline_min=FIXED_UNDERLINE_LENGTH,
+        arabic_indent=1 if lang == "ar" else 0
+    )
+
 # -------------------------------
 # consistent header builder
 # -------------------------------
@@ -1193,6 +1206,22 @@ def webapp_existing_account(request: Request):
             <option value="40% - 60%">40% - 60%</option>
         """
 
+    # بناء الهيدر باستخدام الدالة المساعدة
+    form_labels = [
+        labels['broker'],
+        labels['account'],
+        labels['password'], 
+        labels['server'],
+        labels['initial_balance'],
+        labels['current_balance'],
+        labels['withdrawals'],
+        labels['copy_start_date'],
+        labels['agent'],
+        labels['expected_return']
+    ]
+    
+    header_html = build_webapp_header(page_title, lang, form_labels)
+
     html = f"""
     <!doctype html>
     <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
@@ -1212,11 +1241,14 @@ def webapp_existing_account(request: Request):
         .form-row{{display:flex;gap:10px;margin-top:10px;}}
         .form-row > div{{flex:1;}}
         .risk-warning{{font-size:12px;color:#ff6b35;margin-top:4px;text-align:{text_align};font-weight:500;}}
+        .header-container{{text-align:{text_align}; margin-bottom:20px;}}
       </style>
     </head>
     <body>
       <div class="card">
-        <h2 style="text-align:{text_align}">{page_title}</h2>
+        <div class="header-container">
+          {header_html}
+        </div>
         
         <label>{labels['broker']}</label>
         <select id="broker">
@@ -1395,6 +1427,19 @@ def webapp_edit_accounts(request: Request):
             <option value="40% - 60%">40% - 60%</option>
         """
 
+    # بناء الهيدر باستخدام الدالة المساعدة
+    form_labels = [
+        labels['select_account'],
+        labels['broker'],
+        labels['account'],
+        labels['password'],
+        labels['server'],
+        labels['save'],
+        labels['delete']
+    ]
+    
+    header_html = build_webapp_header(page_title, lang, form_labels)
+
     html = f"""
     <!doctype html>
     <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
@@ -1419,11 +1464,14 @@ def webapp_edit_accounts(request: Request):
         .status-message{{padding:10px;margin:10px 0;border-radius:6px;text-align:{text_align}}}
         .status-warning{{background:#fff3cd;border:1px solid #ffeaa7;color:#856404}}
         .risk-warning{{font-size:12px;color:#ff6b35;margin-top:4px;text-align:{text_align};font-weight:500;}}
+        .header-container{{text-align:{text_align}; margin-bottom:20px;}}
       </style>
     </head>
     <body>
       <div class="card">
-        <h2 style="text-align:{text_align}">{page_title}</h2>
+        <div class="header-container">
+          {header_html}
+        </div>
         
         <label>{labels['select_account']}</label>
         <select id="account_select">
@@ -2275,19 +2323,24 @@ async def webapp_submit(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
-    
     user_data = get_subscriber_with_accounts(telegram_id)
     
     if not user_data:
-        if lang == "ar":
-            text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً."
-        else:
-            text = "⚠️ You haven't registered yet. Please register first."
+        # استخدام build_header_html للرسائل البسيطة
+        header = build_header_html(
+            "⚠️" + (" تنبيه" if lang == "ar" else " Alert"),
+            [],
+            header_emoji="⚠️",
+            underline_min=FIXED_UNDERLINE_LENGTH,
+            arabic_indent=1 if lang == "ar" else 0
+        )
+        
+        text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً." if lang == "ar" else "⚠️ You haven't registered yet. Please register first."
         
         if update.callback_query and update.callback_query.message:
-            await update.callback_query.edit_message_text(text)
+            await update.callback_query.edit_message_text(header + f"\n\n{text}")
         else:
-            await context.bot.send_message(chat_id=telegram_id, text=text)
+            await context.bot.send_message(chat_id=telegram_id, text=header + f"\n\n{text}")
         return
 
     if lang == "ar":
@@ -2539,10 +2592,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
         except Exception as fallback_error:
             logger.exception("Failed to send fallback message for user accounts: %s", fallback_error)
-
-# ===============================
-# menu_handler
-# ===============================
 # ===============================
 # menu_handler
 # ===============================
