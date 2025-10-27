@@ -95,11 +95,11 @@ NOTIFICATION_MESSAGES: Dict[int, List[Dict[str, Any]]] = {}
 ADMIN_LANGUAGE: Dict[int, str] = {}
 
 def set_admin_language(admin_id: int, lang: str):
-    """تخزين لغة الأدمن الحالية"""
+    
     ADMIN_LANGUAGE[admin_id] = lang
 
 def get_admin_language(admin_id: int) -> str:
-    """الحصول على لغة الأدمن الحالية، الافتراضي العربية"""
+    
     return ADMIN_LANGUAGE.get(admin_id, "ar")
             
 def remove_emoji(text: str) -> str:
@@ -150,7 +150,7 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 # -------------------------------
-# consistent header builder (all titles use the same system)
+# consistent header builder
 # -------------------------------
 def build_header_html(
     title: str,
@@ -161,10 +161,7 @@ def build_header_html(
     underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
-    """
-    Unified centered header with perfectly aligned underline of fixed length (20).
-    Works for both Arabic (RTL) and English (LTR) titles in Telegram.
-    """
+    
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
@@ -206,10 +203,7 @@ def build_header_html(
 # DB helpers
 # -------------------------------
 def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegram_id: int = None, telegram_username: str = None) -> Tuple[str, Subscriber]:
-    """
-    حفظ أو تحديث بيانات المستخدم الأساسية
-    يُرجع الحالة وكائن المستخدم
-    """
+    
     try:
         db = SessionLocal()
         subscriber = None
@@ -271,7 +265,7 @@ def save_trading_account(
     agent: str = None,
     expected_return: str = None
 ) -> Tuple[bool, TradingAccount]:
-    """حفظ حساب تداول جديد مرتبط بالمستخدم"""
+    
     try:
         db = SessionLocal()
         subscriber = db.query(Subscriber).filter(Subscriber.id == subscriber_id).first()
@@ -298,7 +292,6 @@ def save_trading_account(
         db.commit()
         db.refresh(trading_account)
         
-        # إعداد بيانات للإشعار
         account_data = {
             "id": trading_account.id,
             "broker_name": broker_name,
@@ -324,7 +317,6 @@ def save_trading_account(
         
         db.close()
         
-        # إرسال إشعار للمسؤول
         import asyncio
         try:
             asyncio.create_task(send_admin_notification("new_account", account_data, subscriber_data))
@@ -338,7 +330,7 @@ def save_trading_account(
         return False, None
 
 def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAccount]:
-    """تحديث بيانات حساب تداول موجود"""
+    
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -405,7 +397,7 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
         return False, None
 
 def delete_trading_account(account_id: int) -> bool:
-    """حذف حساب تداول"""
+    
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -427,7 +419,7 @@ def delete_trading_account(account_id: int) -> bool:
         return False
 
 def get_subscriber_by_telegram_id(tg_id: int) -> Optional[Subscriber]:
-    """الحصول على بيانات المستخدم مع جميع حسابات التداول المرتبطة"""
+    
     try:
         db = SessionLocal()
         subscriber = db.query(Subscriber).filter(Subscriber.telegram_id == tg_id).first()
@@ -438,7 +430,7 @@ def get_subscriber_by_telegram_id(tg_id: int) -> Optional[Subscriber]:
         return None
 
 def get_trading_accounts_by_telegram_id(tg_id: int) -> List[TradingAccount]:
-    """الحصول على جميع حسابات التداول للمستخدم"""
+    
     try:
         db = SessionLocal()
         subscriber = db.query(Subscriber).filter(Subscriber.telegram_id == tg_id).first()
@@ -453,7 +445,7 @@ def get_trading_accounts_by_telegram_id(tg_id: int) -> List[TradingAccount]:
         return []
 
 def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
-    """الحصول على بيانات المستخدم مع حسابات التداول في شكل dictionary"""
+    
     try:
         db = SessionLocal()
         subscriber = db.query(Subscriber).filter(Subscriber.telegram_id == tg_id).first()
@@ -522,7 +514,7 @@ PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 # Admin and notification functions
 # -------------------------------
 def get_user_current_language(account_id: int) -> str:
-    """الحصول على اللغة الحالية للمستخدم من السياق النشط"""
+    
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -533,7 +525,6 @@ def get_user_current_language(account_id: int) -> str:
         subscriber = account.subscriber
         telegram_id = subscriber.telegram_id
         
-        # البحث في FORM_MESSAGES للعثور على اللغة الحالية
         form_ref = get_form_ref(telegram_id)
         if form_ref and form_ref.get("lang"):
             db.close()
@@ -546,7 +537,7 @@ def get_user_current_language(account_id: int) -> str:
         return "ar"
 
 def update_account_status(account_id: int, status: str, reason: str = None) -> bool:
-    """تحديث حالة الحساب"""
+    
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -568,7 +559,7 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         return False
 
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة إجراءات المسؤول بلغته الحالية"""
+    
     q = update.callback_query
     await q.answer()
     
@@ -580,24 +571,23 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await q.message.reply_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
         return
     
-    # الحصول على لغة الأدمن الحالية
     admin_lang = get_admin_language(user_id)
     
     if q.data.startswith("activate_account_"):
         account_id = int(q.data.split("_")[2])
         success = update_account_status(account_id, "active")
         if success:
-            # إرسال إشعار للمستخدم بلغته الأصلية
+           
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "active", user_lang=user_lang)
             
-            # حذف الرسالة الأصلية للأدمن
+            
             try:
                 await q.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete admin message: {e}")
         else:
-            # في حال الفشل، يمكن حذف أو تجاهل، لكن للأمان: حذف أيضًا
+            
             try:
                 await q.message.delete()
             except Exception as e:
@@ -606,25 +596,25 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     elif q.data.startswith("reject_account_"):
         account_id = int(q.data.split("_")[2])
         context.user_data['awaiting_rejection_reason'] = account_id
-        # حفظ معرف الرسالة الأصلية للحذف لاحقًا
+        
         context.user_data['admin_notification_message_id'] = q.message.message_id
         prompt_text = "يرجى تقديم سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
         rejection_prompt = await q.message.reply_text(prompt_text)
         context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
 
 async def handle_notification_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة تأكيد الإشعار - حذف الرسالة فقط"""
+   
     q = update.callback_query
     await q.answer()
     
     try:
-        # حذف الرسالة مباشرة فقط
+        
         await q.message.delete()
     except Exception as e:
         logger.exception(f"Failed to delete notification message: {e}")
 
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None, user_lang: str = None):
-    """إرسال إشعار للمستخدم بتغيير حالة حسابه بلغته الحالية"""
+    
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -635,7 +625,6 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
         subscriber = account.subscriber
         telegram_id = subscriber.telegram_id
         
-        # استخدام اللغة الحالية من السياق أو من قاعدة البيانات كبديل
         lang = user_lang or subscriber.lang or "ar"
         
         if status == "active":
@@ -659,8 +648,8 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 
 You can now start using the service. Thank you for your trust!
                 """
-        else:  # rejected
-            # استخدام النص المناسب للغة
+        else:
+            
             if lang == "ar":
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
@@ -681,8 +670,6 @@ You can now start using the service. Thank you for your trust!
 
 Please review the submitted data or contact support.
                 """
-        
-        # إرسال الرسالة مع إضافة زر "حسناً" لحذفها
         keyboard = [
             [InlineKeyboardButton("✅ حسناً" if lang == "ar" else "✅ OK", 
                                 callback_data=f"confirm_notification_{account_id}")]
@@ -705,7 +692,7 @@ Please review the submitted data or contact support.
         logger.exception(f"Failed to notify user about account status: {e}")
 
 async def update_user_interface_after_status_change(telegram_id: int, lang: str):
-    """تحديث واجهة المستخدم بعد تغيير حالة الحساب"""
+    
     ref = get_form_ref(telegram_id)
     if ref and ref.get("origin") == "my_accounts":
         updated_data = get_subscriber_with_accounts(telegram_id)
@@ -713,32 +700,26 @@ async def update_user_interface_after_status_change(telegram_id: int, lang: str)
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الرسائل النصية، بما في ذلك أسباب الرفض"""
+    
     user_id = update.message.from_user.id
     
-    # إذا كان المستخدم مسؤولاً ويقدم سبب الرفض
     if str(user_id) == ADMIN_TELEGRAM_ID and 'awaiting_rejection_reason' in context.user_data:
         reason = update.message.text.strip()
         account_id = context.user_data.pop('awaiting_rejection_reason')
         success = update_account_status(account_id, "rejected", reason=reason)
-        
-        # الحصول على لغة الأدمن الحالية (غير مستخدمة هنا لأننا لا نرسل رسائل إضافية)
         admin_lang = get_admin_language(user_id)
         
         if success:
-            # إرسال إشعار للمستخدم بلغته الأصلية
+            
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
-            
-            # حذف الرسالة الأصلية للأدمن (الإشعار)
             admin_notification_message_id = context.user_data.pop('admin_notification_message_id', None)
             if admin_notification_message_id:
                 try:
                     await context.bot.delete_message(chat_id=user_id, message_id=admin_notification_message_id)
                 except Exception as e:
                     logger.exception(f"Failed to delete original admin notification: {e}")
-            
-            # حذف رسالة الطلب للسبب
+    
             rejection_prompt_message_id = context.user_data.pop('rejection_prompt_message_id', None)
             if rejection_prompt_message_id:
                 try:
@@ -746,13 +727,12 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 except Exception as e:
                     logger.exception(f"Failed to delete rejection prompt message: {e}")
             
-            # حذف رسالة السبب نفسها (التي كتبها الأدمن)
             try:
                 await update.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete rejection reason message: {e}")
         else:
-            # في حال الفشل، حذف الرسائل أيضًا
+            
             admin_notification_message_id = context.user_data.pop('admin_notification_message_id', None)
             if admin_notification_message_id:
                 try:
@@ -774,10 +754,10 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بدء خاص للأدمن مع إظهار اختيار اللغة دائماً"""
+    
     user_id = update.effective_user.id
     if str(user_id) == ADMIN_TELEGRAM_ID:
-        # دائماً اعرض اختيار اللغة للأدمن (حتى إذا كانت لديه لغة مخزنة)
+        
         keyboard = [
             [
                 InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
@@ -799,11 +779,10 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if update.message:
                 await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
-        # إذا لم يكن أدمن، استخدم الدالة العادية
         await start(update, context)
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
-    """إرسال إشعار للمسؤول بلغته الحالية"""
+    
     try:
         logger.info(f"🔔 Starting admin notification for {action_type}")
         
@@ -812,8 +791,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             return
         
         admin_id = int(ADMIN_TELEGRAM_ID)
-        
-        # الحصول على لغة الأدمن الحالية
         admin_lang = get_admin_language(admin_id)
         
         if action_type == "new_account":
@@ -862,7 +839,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>🌐 معرف الحساب:</b> {account_data['id']}
             """
             
-            # أزرار باللغة العربية
             keyboard = [
                 [
                     InlineKeyboardButton("✅ تفعيل الحساب", callback_data=f"activate_account_{account_data['id']}"),
@@ -893,7 +869,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>🌐 Account ID:</b> {account_data['id']}
             """
             
-            # أزرار باللغة الإنجليزية
             keyboard = [
                 [
                     InlineKeyboardButton("✅ Activate Account", callback_data=f"activate_account_{account_data['id']}"),
@@ -909,7 +884,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             chat_id=admin_id,
             text=message,
             reply_markup=reply_markup,
-            parse_mode="HTML"  # ⬅️ تغيير من Markdown إلى HTML
+            parse_mode="HTML"
         )
         
         logger.info("✅ Admin notification sent successfully")
@@ -918,7 +893,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
         logger.exception(f"❌ Failed to send admin notification: {e}")
 
 def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
-    """الحصول على نص حالة الحساب"""
+    
     if lang == "ar":
         status_texts = {
             "under_review": "⏳ قيد المراجعة",
@@ -943,10 +918,9 @@ def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
 # /start + menu / language flows
 # ===============================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """الدالة الرئيسية لبدء البوت"""
+   
     user_id = update.effective_user.id if update.effective_user else None
     
-    # دائماً اعرض اختيار اللغة أولاً (لجميع المستخدمين بما فيهم الأدمن)
     keyboard = [
         [
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
@@ -974,7 +948,6 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     q = update.callback_query
     await q.answer()
     
-    # تخزين لغة الأدمن إذا كان المستخدم مسؤولاً
     user_id = q.from_user.id
     if str(user_id) == ADMIN_TELEGRAM_ID:
         set_admin_language(user_id, lang)
@@ -1003,8 +976,6 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     lang = "ar" if q.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
-    
-    # تخزين لغة الأدمن إذا كان المستخدم مسؤولاً
     user_id = q.from_user.id
     if str(user_id) == ADMIN_TELEGRAM_ID:
         set_admin_language(user_id, lang)
@@ -1171,11 +1142,7 @@ def webapp_existing_account(request: Request):
     }
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
-
-    # إنشاء خيارات الوكلاء ديناميكياً
     agents_options = "".join([f'<option value="{agent}">{agent}</option>' for agent in AGENTS_LIST])
-    
-    # خيارات العائد المتوقع
     expected_return_options = ""
     if is_ar:
         expected_return_options = """
@@ -1374,11 +1341,7 @@ def webapp_edit_accounts(request: Request):
     }
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
-
-    # إنشاء خيارات الوكلاء ديناميكياً
     agents_options = "".join([f'<option value="{agent}">{agent}</option>' for agent in AGENTS_LIST])
-    
-    # خيارات العائد المتوقع
     expected_return_options = ""
     if is_ar:
         expected_return_options = """
@@ -1851,19 +1814,16 @@ async def api_update_trading_account(payload: dict = Body(...)):
         if not telegram_id or not account_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
 
-        # Validate ownership
         accounts = get_trading_accounts_by_telegram_id(telegram_id)
         if not any(acc.id == account_id for acc in accounts):
             raise HTTPException(status_code=403, detail="Account not owned by user")
 
-        # Remove non-updatable fields
         update_data = {k: v for k, v in payload.items() if k not in ["id", "tg_user", "lang", "created_at"]}
 
         success, _ = update_trading_account(account_id, **update_data)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update account")
 
-        # Update the message in Telegram
         ref = get_form_ref(telegram_id)
         if ref and ref.get("origin") == "my_accounts":
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
@@ -1883,7 +1843,6 @@ async def api_delete_trading_account(payload: dict = Body(...)):
         if not telegram_id or not account_id:
             raise HTTPException(status_code=400, detail="Missing required fields")
 
-        # Validate ownership
         accounts = get_trading_accounts_by_telegram_id(telegram_id)
         if not any(acc.id == account_id for acc in accounts):
             raise HTTPException(status_code=403, detail="Account not owned by user")
@@ -1892,7 +1851,6 @@ async def api_delete_trading_account(payload: dict = Body(...)):
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete account")
 
-        # Update the message in Telegram
         ref = get_form_ref(telegram_id)
         if ref and ref.get("origin") == "my_accounts":
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
@@ -1903,7 +1861,7 @@ async def api_delete_trading_account(payload: dict = Body(...)):
         raise HTTPException(status_code=500, detail="Server error")
 
 async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: int, message_id: int):
-    """تحديث واجهة بيانات المستخدم وحساباته"""
+    
     updated_data = get_subscriber_with_accounts(telegram_id)
     if not updated_data:
         return
@@ -1939,7 +1897,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
 
     updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
     
-    today = datetime.now()  # استخدام التاريخ الحالي الفعلي
+    today = datetime.now()
     
     if updated_data['trading_accounts']:
         for i, acc in enumerate(updated_data['trading_accounts'], 1):
@@ -1959,7 +1917,6 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                 if acc.get('expected_return'):
                     account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
                 
-                # حساب العائد المحقق دائماً
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
                         initial = float(acc['initial_balance'])
@@ -1967,21 +1924,20 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
                         
-                        # معالجة تنسيق التاريخ
                         if 'T' in start_date_str:
                             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                         else:
                             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                         
-                        # حساب الفترة الزمنية بشكل ذكي
+                        
                         delta = today - start_date
                         total_days = delta.days
                         
-                        # حساب الأشهر والأيام
+                        
                         months = total_days // 30
                         remaining_days = total_days % 30
                         
-                        # بناء نص الفترة الزمنية
+                       
                         period_text = ""
                         if months > 0:
                             period_text += f"{months} شهر"
@@ -1990,13 +1946,13 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                         else:
                             period_text += f"{total_days} يوم"
                         
-                        # حساب العائد المئوي
+                        
                         if initial > 0:
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
                             
-                            # إضافة خانة العائد المحقق دائماً
+                            
                             account_text += f"   📈 <b>العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}\n"
                             
                     except (ValueError, TypeError) as e:
@@ -2019,7 +1975,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                 if acc.get('expected_return'):
                     account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
                 
-                # حساب العائد المحقق دائماً
+                
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
                         initial = float(acc['initial_balance'])
@@ -2027,21 +1983,21 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
                         
-                        # معالجة تنسيق التاريخ
+                        
                         if 'T' in start_date_str:
                             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                         else:
                             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                         
-                        # حساب الفترة الزمنية بشكل ذكي
+                       
                         delta = today - start_date
                         total_days = delta.days
                         
-                        # حساب الأشهر والأيام
+                        
                         months = total_days // 30
                         remaining_days = total_days % 30
                         
-                        # بناء نص الفترة الزمنية
+                        
                         period_text = ""
                         if months > 0:
                             period_text += f"{months} month"
@@ -2056,13 +2012,13 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                             if total_days > 1:
                                 period_text += "s"
                         
-                        # حساب العائد المئوي
+                       
                         if initial > 0:
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
                             
-                            # إضافة خانة العائد المحقق دائماً
+                            
                             account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
                             
                     except (ValueError, TypeError) as e:
@@ -2113,7 +2069,7 @@ async def webapp_submit(payload: dict = Body(...)):
         tg_user = payload.get("tg_user") or {}
         page_lang = (payload.get("lang") or "").lower() or None
 
-        # validation
+       
         if not name or len(name) < 2:
             return JSONResponse(status_code=400, content={"error": "Name too short or missing."})
         if not EMAIL_RE.match(email):
@@ -2121,7 +2077,7 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # determine language
+       
         detected_lang = None
         if page_lang in ("ar", "en"):
             detected_lang = page_lang
@@ -2156,10 +2112,10 @@ async def webapp_submit(payload: dict = Body(...)):
         else:
             display_lang = detected_lang
 
-        # Prepare congrats strings based on display_lang
+        
         if ref and ref.get("origin") == "open_form_ea":
-            # عرض صفحة طلب الاكسبيرت
-            ea_link = "https://t.me/Nagyfx"
+            
+            ea_link = "https://t.me/Omarkin9"
             if display_lang == "ar":
                 header_title = "طلب نسخة من الاكسبيرت"
                 message_text = ""
@@ -2210,7 +2166,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 else:
                     logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
         else:
-            # الافتراضي: صفحة الوسطاء
+            
             if display_lang == "ar":
                 header_title = "🎉 مبروك — اختر وسيطك الآن"
                 brokers_title = ""
@@ -2282,7 +2238,7 @@ async def webapp_submit(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
-    """عرض بيانات المستخدم مع جميع حسابات التداول - بنفس تنسيق صفحة 'تداول الفوركس'"""
+    
     user_data = get_subscriber_with_accounts(telegram_id)
     
     if not user_data:
@@ -2343,7 +2299,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     message = f"{header}\n\n{user_info}{accounts_header}\n"
     
-    today = datetime.now()  # استخدام التاريخ الحالي الفعلي
+    today = datetime.now()  
     
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
@@ -2351,7 +2307,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             
             if lang == "ar":
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                # إضافة الحقول الجديدة إذا كانت موجودة
+                
                 if acc.get('initial_balance'):
                     account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
                 if acc.get('current_balance'):
@@ -2365,7 +2321,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 if acc.get('expected_return'):
                     account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
                 
-                # حساب العائد المحقق دائماً إذا كانت البيانات متوفرة
+               
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
                         initial = float(acc['initial_balance'])
@@ -2373,21 +2329,21 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
                         
-                        # معالجة تنسيق التاريخ
+                        
                         if 'T' in start_date_str:
                             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                         else:
                             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                         
-                        # حساب الفترة الزمنية بشكل ذكي
+                       
                         delta = today - start_date
                         total_days = delta.days
                         
-                        # حساب الأشهر والأيام
+                        
                         months = total_days // 30
                         remaining_days = total_days % 30
                         
-                        # بناء نص الفترة الزمنية
+                        
                         period_text = ""
                         if months > 0:
                             period_text += f"{months} شهر"
@@ -2396,25 +2352,25 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         else:
                             period_text += f"{total_days} يوم"
                         
-                        # حساب العائد المئوي
+                        
                         if initial > 0:
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
                             
-                            # إضافة خانة العائد المحقق دائماً
+                            
                             account_text += f"   📈 <b>العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}\n"
                             
                     except (ValueError, TypeError) as e:
-                        # في حالة وجود خطأ في الحساب، نعرض رسالة بديلة
+                        
                         account_text += f"   📈 <b>العائد المحقق:</b> جاري الحساب\n"
                 else:
-                    # إذا كانت البيانات غير مكتملة، نعرض رسالة توضيحية
+                    
                     account_text += f"   📈 <b>العائد المحقق:</b> يتطلب بيانات كاملة\n"
                     
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                # إضافة الحقول الجديدة إذا كانت موجودة
+                
                 if acc.get('initial_balance'):
                     account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
                 if acc.get('current_balance'):
@@ -2428,7 +2384,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 if acc.get('expected_return'):
                     account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
                 
-                # حساب العائد المحقق دائماً إذا كانت البيانات متوفرة
+                
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
                         initial = float(acc['initial_balance'])
@@ -2436,21 +2392,21 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
                         
-                        # معالجة تنسيق التاريخ
+                       
                         if 'T' in start_date_str:
                             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                         else:
                             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                         
-                        # حساب الفترة الزمنية بشكل ذكي
+                       
                         delta = today - start_date
                         total_days = delta.days
                         
-                        # حساب الأشهر والأيام
+                        
                         months = total_days // 30
                         remaining_days = total_days % 30
                         
-                        # بناء نص الفترة الزمنية
+                        
                         period_text = ""
                         if months > 0:
                             period_text += f"{months} month"
@@ -2465,20 +2421,20 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                             if total_days > 1:
                                 period_text += "s"
                         
-                        # حساب العائد المئوي
+                        
                         if initial > 0:
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
                             
-                            # إضافة خانة العائد المحقق دائماً
+                           
                             account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
                             
                     except (ValueError, TypeError) as e:
-                        # في حالة وجود خطأ في الحساب، نعرض رسالة بديلة
+                       
                         account_text += f"   📈 <b>Achieved Return:</b> Calculating...\n"
                 else:
-                    # إذا كانت البيانات غير مكتملة، نعرض رسالة توضيحية
+                   
                     account_text += f"   📈 <b>Achieved Return:</b> Requires complete data\n"
                     
             message += account_text
@@ -2533,7 +2489,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     except Exception as e:
         logger.exception("Failed to show user accounts: %s", e)
         
-        # Fallback: حاول إرسال رسالة جديدة
+       
         try:
             sent = await context.bot.send_message(
                 chat_id=telegram_id,
@@ -2753,11 +2709,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if q.data in ("🤖 طلب نسخة من الاكسبيرت", "🤖 Request EA Version"):
-        # التحقق مما إذا كان المستخدم مسجلاً
+        
         existing = get_subscriber_by_telegram_id(user_id)
         
         if not existing:
-            # إذا لم يكن مسجلاً، عرض نموذج التسجيل مع origin خاص
+            
             context.user_data["registration"] = {"lang": lang}
             if lang == "ar":
                 title = "من فضلك ادخل البيانات"
@@ -2794,8 +2750,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     logger.exception("Failed to show webapp button to user.")
         else:
-            # إذا كان مسجلاً، عرض صفحة طلب الاكسبيرت مع التنسيق الموحد
-            ea_link = "https://t.me/Nagyfx"
+            
+            ea_link = "https://t.me/Omarkin9"
             if lang == "ar":
                 header_title = "طلب نسخة من الاكسبيرت"
                 message_text = ""
@@ -2954,13 +2910,12 @@ async def submit_existing_account(payload: dict = Body(...)):
         account = (payload.get("account") or "").strip()
         password = (payload.get("password") or "").strip()
         server = (payload.get("server") or "").strip()
-        # الحقول الجديدة
         initial_balance = (payload.get("initial_balance") or "").strip()
         current_balance = (payload.get("current_balance") or "").strip()
         withdrawals = (payload.get("withdrawals") or "").strip()
         copy_start_date = (payload.get("copy_start_date") or "").strip()
         agent = (payload.get("agent") or "").strip()
-        expected_return = (payload.get("expected_return") or "").strip()  # الحقل الجديد
+        expected_return = (payload.get("expected_return") or "").strip()
         lang = (payload.get("lang") or "ar").lower()
 
         if not all([telegram_id, broker, account, password, server]):
@@ -2981,7 +2936,7 @@ async def submit_existing_account(payload: dict = Body(...)):
             withdrawals=withdrawals,
             copy_start_date=copy_start_date,
             agent=agent,
-            expected_return=expected_return  # إضافة الحقل الجديد
+            expected_return=expected_return
         )
 
         if not success:
@@ -3016,7 +2971,7 @@ async def submit_existing_account(payload: dict = Body(...)):
 # Handlers registration
 # ===============================
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("admin", admin_start))  # الأمر الجديد للأدمن
+application.add_handler(CommandHandler("admin", admin_start))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
