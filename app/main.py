@@ -1023,14 +1023,12 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(user_id) == ADMIN_TELEGRAM_ID:
         set_admin_language(user_id, lang)
 
-    # NEW: Check if user is registered before showing main sections
     subscriber = get_subscriber_by_telegram_id(user_id)
     if subscriber:
         # User is registered, show main sections
         await show_main_sections(update, context, lang)
     else:
         # User not registered, show registration form immediately
-        # Similar to the code in menu_handler for showing form
         if lang == "ar":
             title = "من فضلك ادخل البيانات"
             back_label_text = "🔙 الرجوع للغة"
@@ -1053,7 +1051,8 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
             keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
 
-        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="lang_select")])  # Back to language selection if needed
+        # تغيير callback_data إلى "lang_select" بدلاً من "back_language"
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="lang_select")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
@@ -2673,7 +2672,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     
     lang = context.user_data.get("lang", "ar")
-
+    
+    if q.data == "lang_select":
+        await start(update, context)
+        return
+        
     if q.data == "my_accounts":
         await show_user_accounts(update, context, user_id, lang)
         return
