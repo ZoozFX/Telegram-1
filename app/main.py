@@ -686,9 +686,9 @@ Thank you for your trust!
         else:
             # حالة الرفض
             if lang == "ar":
-                title = "❌ لم يتم تفعيل الحساب"
+                title = "لم يتم تفعيل الحساب"
                 labels = ["✅ حسناً"]
-                header = build_header_html(title, labels, header_emoji="❌", underline_min=25, arabic_indent=1)
+                header = build_header_html(title, labels, header_emoji="❗️", underline_min=25, arabic_indent=1)
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
@@ -697,21 +697,21 @@ Thank you for your trust!
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 
-يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
+يرجى مراجعة البيانات المقدمة أو التواصل مع <a href="https://t.me/Omarkin9">الدعم</a>.
                 """
             else:
-                title = "❌ Account Not Activated"
+                title = "Account Not Activated"
                 labels = ["✅ OK"]
-                header = build_header_html(title, labels, header_emoji="❌", underline_min=25, arabic_indent=0)
+                header = build_header_html(title, labels, header_emoji="❗️", underline_min=25, arabic_indent=0)
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ Your trading account was not activated{reason_text}
+Your trading account was not activated ❌{reason_text}
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 
-Please review the submitted data or contact support.
+Please review the submitted data or contact <a href="https://t.me/Omarkin9">support</a>.
                 """
 
         keyboard = [
