@@ -1152,7 +1152,8 @@ def webapp_existing_account(request: Request):
         "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
         "submit": "تسجيل" if is_ar else "Submit",
         "close": "إغلاق" if is_ar else "Close",
-        "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server"
+        "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
+        "risk_warning": "⚠️ تنبيه: كلما ارتفع العائد المتوقع زادت المخاطر" if is_ar else "⚠️ Warning: Higher expected returns come with higher risks"
     }
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
@@ -1193,6 +1194,7 @@ def webapp_existing_account(request: Request):
         .small{{font-size:13px;color:#666;text-align:{text_align}}}
         .form-row{{display:flex;gap:10px;margin-top:10px;}}
         .form-row > div{{flex:1;}}
+        .risk-warning{{font-size:12px;color:#ff6b35;margin-top:4px;text-align:{text_align};font-weight:500;}}
       </style>
     </head>
     <body>
@@ -1252,6 +1254,7 @@ def webapp_existing_account(request: Request):
         <select id="expected_return">
           {expected_return_options}
         </select>
+        <div class="risk-warning">{labels['risk_warning']}</div>
 
         <div style="margin-top:12px;text-align:{text_align}">
           <button class="btn btn-primary" id="submit">{labels['submit']}</button>
