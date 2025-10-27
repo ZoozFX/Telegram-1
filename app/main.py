@@ -654,7 +654,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
         
         if status == "active":
             if lang == "ar":
-                title = "مبارك 🎉 تم تفعيل الحساب"
+                title = "مبارك"
                 labels = ["✅ حسناً"]
                 header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=1)
                 message = f"""
@@ -665,7 +665,8 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
 
-أنت الآن تتمتع بخدمة نسخ الصفقات. شكراً لثقتك بنا!
+أنت الآن تتمتع بخدمة نسخ الصفقات.
+شكراً لثقتك بنا!
                 """
             else:
                 title = "Congratulations"
@@ -679,7 +680,8 @@ Your trading account has been activated
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
 
-You are now enjoying copy trading services. Thank you for your trust!
+You are now enjoying copy trading services.
+Thank you for your trust!
                 """
         else:
             # حالة الرفض
