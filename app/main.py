@@ -630,7 +630,8 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
         if status == "active":
             if lang == "ar":
                 message = f"""
-مبارك🎉 تم تفعيل حساب التداول الخاص بك ✅
+مبارك 🎉 
+تم تفعيل حساب التداول الخاص بك ✅ 
 ━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
@@ -640,7 +641,8 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 """
             else:
                 message = f"""
-Congratulations🎉 your trading account has been activated ✅
+Congratulations 🎉
+your trading account has been activated ✅
 ━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
