@@ -2039,6 +2039,8 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
 
     updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
     
+    today = datetime.now()  # استخدام التاريخ الحالي الفعلي
+    
     if updated_data['trading_accounts']:
         for i, acc in enumerate(updated_data['trading_accounts'], 1):
             status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
@@ -2056,6 +2058,52 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
                 if acc.get('expected_return'):
                     account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
+                
+                # حساب العائد المحقق دائماً
+                if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
+                    try:
+                        initial = float(acc['initial_balance'])
+                        current = float(acc['current_balance'])
+                        withdrawals = float(acc['withdrawals'])
+                        start_date_str = acc['copy_start_date']
+                        
+                        # معالجة تنسيق التاريخ
+                        if 'T' in start_date_str:
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                        else:
+                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        # حساب الفترة الزمنية بشكل ذكي
+                        delta = today - start_date
+                        total_days = delta.days
+                        
+                        # حساب الأشهر والأيام
+                        months = total_days // 30
+                        remaining_days = total_days % 30
+                        
+                        # بناء نص الفترة الزمنية
+                        period_text = ""
+                        if months > 0:
+                            period_text += f"{months} شهر"
+                            if remaining_days > 0:
+                                period_text += f" و{remaining_days} يوم"
+                        else:
+                            period_text += f"{total_days} يوم"
+                        
+                        # حساب العائد المئوي
+                        if initial > 0:
+                            total_value = current + withdrawals
+                            profit_amount = total_value - initial
+                            profit_percentage = (profit_amount / initial) * 100
+                            
+                            # إضافة خانة العائد المحقق دائماً
+                            account_text += f"   📈 <b>العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}\n"
+                            
+                    except (ValueError, TypeError) as e:
+                        account_text += f"   📈 <b>العائد المحقق:</b> جاري الحساب\n"
+                else:
+                    account_text += f"   📈 <b>العائد المحقق:</b> يتطلب بيانات كاملة\n"
+                    
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 if acc.get('initial_balance'):
@@ -2070,6 +2118,58 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   👤 Agent: {acc['agent']}\n"
                 if acc.get('expected_return'):
                     account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
+                
+                # حساب العائد المحقق دائماً
+                if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
+                    try:
+                        initial = float(acc['initial_balance'])
+                        current = float(acc['current_balance'])
+                        withdrawals = float(acc['withdrawals'])
+                        start_date_str = acc['copy_start_date']
+                        
+                        # معالجة تنسيق التاريخ
+                        if 'T' in start_date_str:
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                        else:
+                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        # حساب الفترة الزمنية بشكل ذكي
+                        delta = today - start_date
+                        total_days = delta.days
+                        
+                        # حساب الأشهر والأيام
+                        months = total_days // 30
+                        remaining_days = total_days % 30
+                        
+                        # بناء نص الفترة الزمنية
+                        period_text = ""
+                        if months > 0:
+                            period_text += f"{months} month"
+                            if months > 1:
+                                period_text += "s"
+                            if remaining_days > 0:
+                                period_text += f" and {remaining_days} day"
+                                if remaining_days > 1:
+                                    period_text += "s"
+                        else:
+                            period_text += f"{total_days} day"
+                            if total_days > 1:
+                                period_text += "s"
+                        
+                        # حساب العائد المئوي
+                        if initial > 0:
+                            total_value = current + withdrawals
+                            profit_amount = total_value - initial
+                            profit_percentage = (profit_amount / initial) * 100
+                            
+                            # إضافة خانة العائد المحقق دائماً
+                            account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
+                            
+                    except (ValueError, TypeError) as e:
+                        account_text += f"   📈 <b>Achieved Return:</b> Calculating...\n"
+                else:
+                    account_text += f"   📈 <b>Achieved Return:</b> Requires complete data\n"
+                    
             updated_message += account_text
     else:
         updated_message += f"\n{no_accounts}"
@@ -2343,7 +2443,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     message = f"{header}\n\n{user_info}{accounts_header}\n"
     
-    today = datetime(2025, 10, 27)  # التاريخ الحالي المحدد
+    today = datetime.now()  # استخدام التاريخ الحالي الفعلي
     
     if user_data['trading_accounts']:
         for i, acc in enumerate(user_data['trading_accounts'], 1):
@@ -2365,25 +2465,53 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 if acc.get('expected_return'):
                     account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
                 
-                # حساب الربح إذا كانت البيانات متوفرة
+                # حساب العائد المحقق دائماً إذا كانت البيانات متوفرة
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
                         initial = float(acc['initial_balance'])
                         current = float(acc['current_balance'])
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
-                        start_date = datetime.fromisoformat(start_date_str) if ':' in start_date_str else datetime.strptime(start_date_str, '%Y-%m-%d')
                         
+                        # معالجة تنسيق التاريخ
+                        if 'T' in start_date_str:
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                        else:
+                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        # حساب الفترة الزمنية بشكل ذكي
                         delta = today - start_date
-                        months = (today.year - start_date.year) * 12 + (today.month - start_date.month)
-                        if today.day < start_date.day:
-                            months -= 1
+                        total_days = delta.days
                         
+                        # حساب الأشهر والأيام
+                        months = total_days // 30
+                        remaining_days = total_days % 30
+                        
+                        # بناء نص الفترة الزمنية
+                        period_text = ""
+                        if months > 0:
+                            period_text += f"{months} شهر"
+                            if remaining_days > 0:
+                                period_text += f" و{remaining_days} يوم"
+                        else:
+                            period_text += f"{total_days} يوم"
+                        
+                        # حساب العائد المئوي
                         if initial > 0:
-                            profit_percentage = ((current + withdrawals - initial) / initial) * 100
-                            account_text += f"   📊 تم تحقيق عائد قدره {profit_percentage:.0f}% خلال {months} شهور\n"
-                    except ValueError:
-                        pass  # تجاهل إذا فشل التحويل
+                            total_value = current + withdrawals
+                            profit_amount = total_value - initial
+                            profit_percentage = (profit_amount / initial) * 100
+                            
+                            # إضافة خانة العائد المحقق دائماً
+                            account_text += f"   📈 <b>العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}\n"
+                            
+                    except (ValueError, TypeError) as e:
+                        # في حالة وجود خطأ في الحساب، نعرض رسالة بديلة
+                        account_text += f"   📈 <b>العائد المحقق:</b> جاري الحساب\n"
+                else:
+                    # إذا كانت البيانات غير مكتملة، نعرض رسالة توضيحية
+                    account_text += f"   📈 <b>العائد المحقق:</b> يتطلب بيانات كاملة\n"
+                    
             else:
                 account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 # إضافة الحقول الجديدة إذا كانت موجودة
@@ -2400,25 +2528,59 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 if acc.get('expected_return'):
                     account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
                 
-                # حساب الربح إذا كانت البيانات متوفرة
+                # حساب العائد المحقق دائماً إذا كانت البيانات متوفرة
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
                         initial = float(acc['initial_balance'])
                         current = float(acc['current_balance'])
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
-                        start_date = datetime.fromisoformat(start_date_str) if ':' in start_date_str else datetime.strptime(start_date_str, '%Y-%m-%d')
                         
+                        # معالجة تنسيق التاريخ
+                        if 'T' in start_date_str:
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                        else:
+                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        # حساب الفترة الزمنية بشكل ذكي
                         delta = today - start_date
-                        months = (today.year - start_date.year) * 12 + (today.month - start_date.month)
-                        if today.day < start_date.day:
-                            months -= 1
+                        total_days = delta.days
                         
+                        # حساب الأشهر والأيام
+                        months = total_days // 30
+                        remaining_days = total_days % 30
+                        
+                        # بناء نص الفترة الزمنية
+                        period_text = ""
+                        if months > 0:
+                            period_text += f"{months} month"
+                            if months > 1:
+                                period_text += "s"
+                            if remaining_days > 0:
+                                period_text += f" and {remaining_days} day"
+                                if remaining_days > 1:
+                                    period_text += "s"
+                        else:
+                            period_text += f"{total_days} day"
+                            if total_days > 1:
+                                period_text += "s"
+                        
+                        # حساب العائد المئوي
                         if initial > 0:
-                            profit_percentage = ((current + withdrawals - initial) / initial) * 100
-                            account_text += f"   📊 Achieved return of {profit_percentage:.0f}% over {months} months\n"
-                    except ValueError:
-                        pass  # تجاهل إذا فشل التحويل
+                            total_value = current + withdrawals
+                            profit_amount = total_value - initial
+                            profit_percentage = (profit_amount / initial) * 100
+                            
+                            # إضافة خانة العائد المحقق دائماً
+                            account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
+                            
+                    except (ValueError, TypeError) as e:
+                        # في حالة وجود خطأ في الحساب، نعرض رسالة بديلة
+                        account_text += f"   📈 <b>Achieved Return:</b> Calculating...\n"
+                else:
+                    # إذا كانت البيانات غير مكتملة، نعرض رسالة توضيحية
+                    account_text += f"   📈 <b>Achieved Return:</b> Requires complete data\n"
+                    
             message += account_text
     else:
         message += f"\n{no_accounts}"
