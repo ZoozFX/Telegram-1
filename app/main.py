@@ -1022,8 +1022,49 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     if str(user_id) == ADMIN_TELEGRAM_ID:
         set_admin_language(user_id, lang)
-    
-    await show_main_sections(update, context, lang)
+
+    # NEW: Check if user is registered before showing main sections
+    subscriber = get_subscriber_by_telegram_id(user_id)
+    if subscriber:
+        # User is registered, show main sections
+        await show_main_sections(update, context, lang)
+    else:
+        # User not registered, show registration form immediately
+        # Similar to the code in menu_handler for showing form
+        if lang == "ar":
+            title = "من فضلك ادخل البيانات"
+            back_label_text = "🔙 الرجوع للغة"
+            open_label = "📝 افتح نموذج التسجيل"
+            header_emoji_for_lang = HEADER_EMOJI
+        else:
+            title = "Please enter your data"
+            back_label_text = "🔙 Back to language"
+            open_label = "📝 Open registration form"
+            header_emoji_for_lang = "✨"
+
+        labels = [open_label, back_label_text]
+        header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang == "ar" else 0)
+
+        keyboard = []
+        if WEBAPP_URL:
+            url_with_lang = f"{WEBAPP_URL}?lang={lang}"
+            keyboard.append([InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))])
+        else:
+            fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
+            keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
+
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="lang_select")])  # Back to language selection if needed
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="initial_registration", lang=lang)
+        except Exception:
+            try:
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="initial_registration", lang=lang)
+            except Exception:
+                logger.exception("Failed to show initial registration form.")
 
 # ===============================
 # WebApp pages
@@ -2309,7 +2350,37 @@ async def webapp_submit(payload: dict = Body(...)):
                 else:
                     logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
 
-        
+        # NEW: If this is initial registration, show main sections after registration
+        if ref and ref.get("origin") == "initial_registration":
+            # Simulate showing main sections by sending a new message
+            if telegram_id:
+                try:
+                    if display_lang == "ar":
+                        sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
+                        title = "الأقسام الرئيسية"
+                        back_button = ("🔙 الرجوع للغة", "back_language")
+                    else:
+                        sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
+                        title = "Main Sections"
+                        back_button = ("🔙 Back to language", "back_language")
+
+                    keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
+                    keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    labels = [name for name, _ in sections] + [back_button[0]]
+                    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
+                    
+                    await application.bot.send_message(
+                        chat_id=telegram_id,
+                        text=header,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True
+                    )
+                    clear_form_ref(telegram_id)  # Clear ref after showing main sections
+                except Exception as e:
+                    logger.exception(f"Failed to show main sections after initial registration: {e}")
+
         if result == "created":
             return JSONResponse(content={"message": "Saved successfully."})
         elif result == "updated":
@@ -2709,7 +2780,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         labels = options + [back_label]
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
-        keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
+        keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         try:
