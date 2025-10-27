@@ -1917,7 +1917,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         for i, acc in enumerate(updated_data['trading_accounts'], 1):
             status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
             if lang == "ar":
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
+                account_text = f"\n\u200F{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   \u200F🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
                 if acc.get('initial_balance'):
                     account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
                 if acc.get('current_balance'):
@@ -2320,7 +2320,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
             
             if lang == "ar":
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
+                account_text = f"\n\u200F{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   \u200F🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
                 
                 if acc.get('initial_balance'):
                     account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
