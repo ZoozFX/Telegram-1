@@ -2290,19 +2290,62 @@ async def webapp_submit(payload: dict = Body(...)):
                         logger.exception("Failed to send EA request message to user.")
                 else:
                     logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
+        elif ref and ref.get("origin") == "initial_registration":
+            # NEW: For initial registration, only show main sections, no "اختر وسيطك الآن"
+            # Simulate showing main sections by editing or sending a new message
+            if telegram_id:
+                try:
+                    if display_lang == "ar":
+                        sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
+                        title = "الأقسام الرئيسية"
+                        back_button = ("🔙 الرجوع للغة", "back_language")
+                    else:
+                        sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
+                        title = "Main Sections"
+                        back_button = ("🔙 Back to language", "back_language")
+
+                    keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
+                    keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    labels = [name for name, _ in sections] + [back_button[0]]
+                    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
+                    
+                    edited = False
+                    if ref:
+                        try:
+                            await application.bot.edit_message_text(
+                                text=header,
+                                chat_id=ref["chat_id"], 
+                                message_id=ref["message_id"],
+                                reply_markup=reply_markup, 
+                                parse_mode="HTML", 
+                                disable_web_page_preview=True
+                            )
+                            edited = True
+                            clear_form_ref(telegram_id)
+                        except Exception:
+                            logger.exception("Failed to edit form message for initial registration")
+                    if not edited:
+                        await application.bot.send_message(
+                            chat_id=telegram_id,
+                            text=header,
+                            reply_markup=reply_markup,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True
+                        )
+                except Exception as e:
+                    logger.exception(f"Failed to show main sections after initial registration: {e}")
         else:
-            
+            # Regular flow for non-initial registrations: Show brokers
             if display_lang == "ar":
                 header_title = "اختر وسيطك الآن"
                 brokers_title = ""
                 back_label = "🔙 الرجوع لتداول الفوركس"
-                edit_label = "✏️ تعديل بياناتي"
                 accounts_label = "👤 بياناتي وحساباتي"
             else:
                 header_title = "Choose your broker now"
                 brokers_title = ""
                 back_label = "🔙 Back to Forex"
-                edit_label = "✏️ Edit my data"
                 accounts_label = "👤 My Data & Accounts"
 
             keyboard = [
@@ -2349,37 +2392,6 @@ async def webapp_submit(payload: dict = Body(...)):
                         logger.exception("Failed to send congrats message to user.")
                 else:
                     logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
-
-        # NEW: If this is initial registration, show main sections after registration
-        if ref and ref.get("origin") == "initial_registration":
-            # Simulate showing main sections by sending a new message
-            if telegram_id:
-                try:
-                    if display_lang == "ar":
-                        sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
-                        title = "الأقسام الرئيسية"
-                        back_button = ("🔙 الرجوع للغة", "back_language")
-                    else:
-                        sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
-                        title = "Main Sections"
-                        back_button = ("🔙 Back to language", "back_language")
-
-                    keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
-                    keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    labels = [name for name, _ in sections] + [back_button[0]]
-                    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
-                    
-                    await application.bot.send_message(
-                        chat_id=telegram_id,
-                        text=header,
-                        reply_markup=reply_markup,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True
-                    )
-                    clear_form_ref(telegram_id)  # Clear ref after showing main sections
-                except Exception as e:
-                    logger.exception(f"Failed to show main sections after initial registration: {e}")
 
         if result == "created":
             return JSONResponse(content={"message": "Saved successfully."})
