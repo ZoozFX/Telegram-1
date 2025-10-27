@@ -2508,6 +2508,9 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
 # ===============================
 # menu_handler
 # ===============================
+# ===============================
+# menu_handler
+# ===============================
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.callback_query:
         return
@@ -2599,9 +2602,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sections_data = {
         "forex_main": {
-           #"ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
             "ar": ["📊 نسخ الصفقات", "🤖 طلب نسخة من الاكسبيرت"],
-           #"en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
             "en": ["📊 Copy Trading", "🤖 Request EA Version"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
@@ -2797,15 +2798,143 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_user_accounts(update, context, user_id, lang)
         return
 
-    placeholder = "تم اختيار الخدمة" if lang == "ar" else "Service selected"
-    details = "سيتم إضافة التفاصيل قريبًا..." if lang == "ar" else "Details will be added soon..."
+    # =============================================
+    # NEW: Handle all service buttons with proper formatting
+    # =============================================
+    
+    # Service mapping for proper titles
+    service_titles = {
+        # Programming Services
+        "📈 برمجة المؤشرات": {"ar": "برمجة المؤشرات", "en": "Indicators Programming"},
+        "📈 Indicators": {"ar": "برمجة المؤشرات", "en": "Indicators Programming"},
+        "🤖 برمجة الاكسبيرتات": {"ar": "برمجة الاكسبيرتات", "en": "Expert Advisors Programming"},
+        "🤖 Expert Advisors": {"ar": "برمجة الاكسبيرتات", "en": "Expert Advisors Programming"},
+        "💬 بوتات التليجرام": {"ar": "بوتات التليجرام", "en": "Telegram Bots"},
+        "💬 Telegram Bots": {"ar": "بوتات التليجرام", "en": "Telegram Bots"},
+        "🌐 مواقع الويب": {"ar": "مواقع الويب", "en": "Web Development"},
+        "🌐 Web Development": {"ar": "مواقع الويب", "en": "Web Development"},
+        
+        # Agency Services
+        "📄 طلب وكالة YesFX": {"ar": "طلب وكالة YesFX", "en": "YesFX Partnership Request"},
+        "📄 Request YesFX Partnership": {"ar": "طلب وكالة YesFX", "en": "YesFX Partnership Request"},
+        
+        # Other services that might be added
+        "💬 قناة التوصيات": {"ar": "قناة التوصيات", "en": "Signals Channel"},
+        "💬 Signals Channel": {"ar": "قناة التوصيات", "en": "Signals Channel"},
+        "📰 الأخبار الاقتصادية": {"ar": "الأخبار الاقتصادية", "en": "Economic News"},
+        "📰 Economic News": {"ar": "الأخبار الاقتصادية", "en": "Economic News"}
+    }
+    
+    # Check if this is a service button
+    if q.data in service_titles:
+        service_title = service_titles[q.data][lang]
+        
+        if lang == "ar":
+            support_label = "💬 التواصل مع الدعم"
+            back_label = "🔙 الرجوع"
+            description = f"""
+✨ <b>خدمة {service_title}</b> ✨
+━━━━━━━━━━━━━━━━━━━━
+
+نحن هنا لمساعدتك في {service_title}!
+
+<b>📞 للاستفسار أو الطلب:</b>
+• اضغط على زر التواصل مع الدعم
+• سيتم ربطك مباشرة مع فريق الدعم
+• قدم متطلباتك وسنساعدك فوراً
+
+<b>⏰ أوقات الدعم:</b>
+• كل أيام الأسبوع
+• من 9 صباحاً حتى 6 مساءً
+            """
+        else:
+            support_label = "💬 Contact Support"
+            back_label = "🔙 Back"
+            description = f"""
+✨ <b>{service_title} Service</b> ✨
+━━━━━━━━━━━━━━━━━━━━
+
+We're here to help you with {service_title}!
+
+<b>📞 For inquiries or orders:</b>
+• Click the Contact Support button
+• You'll be connected directly with our support team
+• Provide your requirements and we'll assist you immediately
+
+<b>⏰ Support Hours:</b>
+• Every day of the week
+• From 9 AM to 6 PM
+            """
+        
+        # Determine which section to go back to based on the service type
+        back_callback = "dev_main" if q.data in ["📈 برمجة المؤشرات", "📈 Indicators", "🤖 برمجة الاكسبيرتات", "🤖 Expert Advisors", "💬 بوتات التليجرام", "💬 Telegram Bots", "🌐 مواقع الويب", "🌐 Web Development"] else "agency_main"
+        
+        labels = [service_title, support_label, back_label]
+        header = build_header_html(service_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+        
+        keyboard = [
+            [InlineKeyboardButton(support_label, url="https://t.me/Omarkin9")],
+            [InlineKeyboardButton(back_label, callback_data=back_callback)]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        try:
+            await q.edit_message_text(
+                header + f"\n\n{description}",
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+        except Exception:
+            await context.bot.send_message(
+                chat_id=q.message.chat_id,
+                text=header + f"\n\n{description}",
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+        return
+
+    # Fallback for any unhandled callback
+    if lang == "ar":
+        placeholder = "تم اختيار الخدمة"
+        details = "سيتم إضافة التفاصيل قريبًا..."
+    else:
+        placeholder = "Service selected"
+        details = "Details will be added soon..."
     
     labels_for_header = [q.data]
     header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
+    
+    # Add support and back buttons even for fallback
+    if lang == "ar":
+        support_label = "💬 التواصل مع الدعم"
+        back_label = "🔙 الرجوع"
+    else:
+        support_label = "💬 Contact Support"
+        back_label = "🔙 Back"
+    
+    keyboard = [
+        [InlineKeyboardButton(support_label, url="https://t.me/Omarkin9")],
+        [InlineKeyboardButton(back_label, callback_data="back_main")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     try:
-        await q.edit_message_text(header_box + f"\n\n{details}", parse_mode="HTML", disable_web_page_preview=True)
+        await q.edit_message_text(
+            header_box + f"\n\n{details}",
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
     except Exception:
-        await context.bot.send_message(chat_id=q.message.chat_id, text=header_box + f"\n\n{details}", disable_web_page_preview=True)
+        await context.bot.send_message(
+            chat_id=q.message.chat_id,
+            text=header_box + f"\n\n{details}",
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
 
 # ===============================
 # web_app_message_handler fallback
