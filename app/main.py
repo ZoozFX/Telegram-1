@@ -1023,12 +1023,14 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(user_id) == ADMIN_TELEGRAM_ID:
         set_admin_language(user_id, lang)
 
+    # NEW: Check if user is registered before showing main sections
     subscriber = get_subscriber_by_telegram_id(user_id)
     if subscriber:
         # User is registered, show main sections
         await show_main_sections(update, context, lang)
     else:
         # User not registered, show registration form immediately
+        # Similar to the code in menu_handler for showing form
         if lang == "ar":
             title = "من فضلك ادخل البيانات"
             back_label_text = "🔙 الرجوع للغة"
@@ -1051,8 +1053,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
             keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
 
-        # تغيير callback_data إلى "lang_select" بدلاً من "back_language"
-        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="lang_select")])
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="back_language")])  # Back to language selection if needed
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
@@ -2136,7 +2137,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                             if total_days > 1:
                                 period_text += "s"
                         
-                       
+                        
                         if initial > 0:
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
@@ -2672,11 +2673,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     
     lang = context.user_data.get("lang", "ar")
-    
-    if q.data == "lang_select":
-        await start(update, context)
-        return
-        
+
     if q.data == "my_accounts":
         await show_user_accounts(update, context, user_id, lang)
         return
@@ -2783,7 +2780,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         labels = options + [back_label]
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
-        keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in options]
+        keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         try:
