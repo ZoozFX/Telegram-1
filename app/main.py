@@ -630,23 +630,23 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
         if status == "active":
             if lang == "ar":
                 message = f"""
-🎉 مبارك، تم تفعيل حساب التداول الخاص بك ✅
+مبارك🎉 تم تفعيل حساب التداول الخاص بك ✅
 ━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
 
-أنت الآن تتمتع بخدمات النسخ. شكراً لثقتك بنا!
+أنت الآن تتمتع بخدمة نسخ الصفقات. شكراً لثقتك بنا!
                 """
             else:
                 message = f"""
-🎉 Congratulations, your trading account has been activated ✅
+Congratulations🎉 your trading account has been activated ✅
 ━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
 
-You are now enjoying copy services. Thank you for your trust!
+You are now enjoying copy trading services. Thank you for your trust!
                 """
         else:
             
@@ -2848,9 +2848,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             support_label = "💬 Contact Support"
             back_label = "🔙 Back"
             description = f"""
-✨ <b>{service_title} Service</b> ✨
-━━━━━━━━━━━━━━━━━━━━
-
 We're here to help you with {service_title}!
 
 <b>📞 For inquiries or orders:</b>
