@@ -857,10 +857,13 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 title = "ℹ️ Trading Account Activity"
                 action_desc = "Trading account activity"
         
+        # استخدام build_header_html للتناسق في التنسيق
+        labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
+        header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=25, arabic_indent=1 if admin_lang == "ar" else 0)
+        
         if admin_lang == "ar":
             message = f"""
-{title}
-━━━━━━━━━━━━━━━━━━━━
+{header}
 <b>👤 المستخدم:</b> {subscriber_data['name']}
 <b>📧 البريد:</b> {subscriber_data['email']}
 <b>📞 الهاتف:</b> {subscriber_data['phone']}
@@ -889,8 +892,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             ]
         else:
             message = f"""
-{title}
-━━━━━━━━━━━━━━━━━━━━
+{header}
 <b>👤 User:</b> {subscriber_data['name']}
 <b>📧 Email:</b> {subscriber_data['email']}
 <b>📞 Phone:</b> {subscriber_data['phone']}
@@ -2202,18 +2204,18 @@ async def webapp_submit(payload: dict = Body(...)):
             
             ea_link = "https://t.me/Omarkin9"
             if display_lang == "ar":
-                header_title = "طلب نسخة من الاكسبيرت"
+                title = "طلب نسخة من الاكسبيرت"
                 message_text = ""
                 button_text = "🤖 طلب نسخة من الاكسبيرت"
                 back_button = "🔙 الرجوع لتداول الفوركس"
             else:
-                header_title = "Request EA Version"
+                title = "Request EA Version"
                 message_text = ""
                 button_text = "🤖 Request EA Version"
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
-            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang == "ar" else 0)
+            header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang == "ar" else 0)
 
             keyboard = [
                 [InlineKeyboardButton(button_text, url=ea_link)],
