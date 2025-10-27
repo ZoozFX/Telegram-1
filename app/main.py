@@ -85,9 +85,7 @@ app = FastAPI()
 
 HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
-FIXED_UNDERLINE_LENGTH = 25
 FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
-
 # -------------------------------
 # helpers: emoji removal / display width
 # -------------------------------
@@ -158,10 +156,8 @@ def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
         title,
         labels,
         header_emoji=HEADER_EMOJI,
-        underline_min=FIXED_UNDERLINE_LENGTH,
         arabic_indent=1 if lang == "ar" else 0
     )
-
 # -------------------------------
 # consistent header builder
 # -------------------------------
@@ -169,7 +165,6 @@ def build_header_html(
     title: str,
     keyboard_labels: List[str],
     header_emoji: str = HEADER_EMOJI,
-    underline_min: int = 20,
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
@@ -656,7 +651,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
             if lang == "ar":
                 title = "مبارك"
                 labels = ["✅ حسناً"]
-                header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=1)
+                header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=1)
                 message = f"""
 {header}
 ✅ تم تفعيل حساب التداول الخاص بك
@@ -671,7 +666,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
             else:
                 title = "Congratulations"
                 labels = ["✅ OK"]
-                header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=0)
+                header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
                 message = f"""
 {header}
 Your trading account has been activated ✅
@@ -688,7 +683,7 @@ Thank you for your trust!
             if lang == "ar":
                 title = "لم يتم تفعيل الحساب"
                 labels = ["✅ حسناً"]
-                header = build_header_html(title, labels, header_emoji="❗️", underline_min=25, arabic_indent=1)
+                header = build_header_html(title, labels, header_emoji="❗️",  arabic_indent=1)
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
@@ -702,7 +697,7 @@ Thank you for your trust!
             else:
                 title = "Account Not Activated"
                 labels = ["✅ OK"]
-                header = build_header_html(title, labels, header_emoji="❗️", underline_min=25, arabic_indent=0)
+                header = build_header_html(title, labels, header_emoji="❗️", arabic_indent=0)
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
@@ -859,9 +854,9 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 title = "ℹ️ Trading Account Activity"
                 action_desc = "Trading account activity"
         
-        # استخدام build_header_html للتناسق في التنسيق
+        
         labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
-        header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=25, arabic_indent=1 if admin_lang == "ar" else 0)
+        header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
         
         if admin_lang == "ar":
             message = f"""
@@ -1013,7 +1008,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = [name for name, _ in sections] + [back_button[0]]
-    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
     try:
         await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
@@ -1965,7 +1960,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         if edit_accounts_label:
             labels.append(edit_accounts_label)
         labels.extend([edit_data_label, back_label])
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1)
+        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1)
         user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
         no_accounts = "\nلا توجد حسابات مسجلة بعد."
@@ -1979,7 +1974,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         if edit_accounts_label:
             labels.append(edit_accounts_label)
         labels.extend([edit_data_label, back_label])
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=0)
+        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=0)
         user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
         no_accounts = "\nNo trading accounts registered yet."
@@ -2217,7 +2212,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
-            header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang == "ar" else 0)
+            header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
 
             keyboard = [
                 [InlineKeyboardButton(button_text, url=ea_link)],
@@ -2283,7 +2278,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 try:
                     await application.bot.edit_message_text(
                         text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
-                        header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
+                        header_emoji=HEADER_EMOJI,
                         arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                         chat_id=ref["chat_id"], 
                         message_id=ref["message_id"],
@@ -2302,7 +2297,7 @@ async def webapp_submit(payload: dict = Body(...)):
                         sent = await application.bot.send_message(
                             chat_id=telegram_id, 
                             text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
-                            header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, 
+                            header_emoji=HEADER_EMOJI,
                             arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                             reply_markup=reply_markup, 
                             parse_mode="HTML", 
@@ -2330,12 +2325,11 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
     user_data = get_subscriber_with_accounts(telegram_id)
     
     if not user_data:
-        # استخدام build_header_html للرسائل البسيطة
+        
         header = build_header_html(
             "⚠️" + (" تنبيه" if lang == "ar" else " Alert"),
             [],
             header_emoji="⚠️",
-            underline_min=FIXED_UNDERLINE_LENGTH,
             arabic_indent=1 if lang == "ar" else 0
         )
         
@@ -2361,7 +2355,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             header_title, 
             labels,
             header_emoji=HEADER_EMOJI,
-            underline_min=FIXED_UNDERLINE_LENGTH,
             arabic_indent=1
         )
         
@@ -2383,7 +2376,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             header_title, 
             labels,
             header_emoji=HEADER_EMOJI,
-            underline_min=FIXED_UNDERLINE_LENGTH,
             arabic_indent=0
         )
      
@@ -2716,7 +2708,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
-        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
+        box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
         keyboard = [[InlineKeyboardButton(name, callback_data=name)] for name in options]
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2754,11 +2746,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             try:
-                await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
             except Exception:
                 try:
-                    sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                    sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
                 except Exception:
                     logger.exception("Failed to show congrats screen for already-registered user.")
@@ -2777,7 +2769,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             header_emoji_for_lang = "✨"
 
         labels = [open_label, back_label_text]
-        header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+        header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang == "ar" else 0)
 
         keyboard = []
         if WEBAPP_URL:
@@ -2820,7 +2812,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 header_emoji_for_lang = "✨"
 
             labels = [open_label, back_label_text]
-            header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, underline_enabled=True, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+            header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang == "ar" else 0)
 
             keyboard = []
             if WEBAPP_URL:
@@ -2857,7 +2849,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
-            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
 
             keyboard = [
                 [InlineKeyboardButton(button_text, url=ea_link)],
@@ -2952,7 +2944,7 @@ We're here to help you with {service_title}!
         back_callback = "dev_main" if q.data in ["📈 برمجة المؤشرات", "📈 Indicators", "🤖 برمجة الاكسبيرتات", "🤖 Expert Advisors", "💬 بوتات التليجرام", "💬 Telegram Bots", "🌐 مواقع الويب", "🌐 Web Development"] else "agency_main"
         
         labels = [service_title, support_label, back_label]
-        header = build_header_html(service_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang == "ar" else 0)
+        header = build_header_html(service_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
         
         keyboard = [
             [InlineKeyboardButton(support_label, url="https://t.me/Omarkin9")],
@@ -2986,7 +2978,7 @@ We're here to help you with {service_title}!
         details = "Details will be added soon..."
     
     labels_for_header = [q.data]
-    header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0)
+    header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", arabic_indent=1 if lang=="ar" else 0)
     
     # Add support and back buttons even for fallback
     if lang == "ar":
@@ -3098,13 +3090,13 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         ref = get_form_ref(user_id) if user_id else None
         if ref:
             try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
                 clear_form_ref(user_id)
             except Exception:
                 logger.exception("Failed to edit form message in fallback path")
         if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
             try:
                 if user_id:
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
