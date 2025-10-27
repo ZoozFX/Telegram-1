@@ -632,7 +632,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 message = f"""
 مبارك 🎉 
 تم تفعيل حساب التداول الخاص بك ✅ 
-\u200F━━━━━━━━━━━━━━━━━━━━
+\u200F━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
@@ -643,7 +643,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 message = f"""
 Congratulations 🎉
 your trading account has been activated ✅
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
@@ -656,7 +656,7 @@ You are now enjoying copy trading services. Thank you for your trust!
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 ❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
-━━━━━━━━━━━━━━━━━━━━
+\u200F━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 
@@ -666,7 +666,7 @@ You are now enjoying copy trading services. Thank you for your trust!
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 ❌ Your trading account was not activated{reason_text}
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 
