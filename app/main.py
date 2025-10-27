@@ -156,7 +156,7 @@ def build_header_html(
     title: str,
     keyboard_labels: List[str],
     header_emoji: str = HEADER_EMOJI,
-    underline_min: int = 25,
+    underline_min: int = 20,
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
@@ -165,44 +165,7 @@ def build_header_html(
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
-    RLM = "\u200F"
-
-    def _strip_directionals(s: str) -> str:
-        return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
-
-    MIN_TITLE_WIDTH = 25
-    clean_title = remove_emoji(title)
-    title_len = display_width(clean_title)
-    if title_len < MIN_TITLE_WIDTH:
-        extra_spaces = MIN_TITLE_WIDTH - title_len
-        left_pad = extra_spaces // 2
-        right_pad = extra_spaces - left_pad
-        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
-
-    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
-
-    if is_arabic:
-        indent = NBSP * arabic_indent
-        visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
-    else:
-        visible_title = f"{header_emoji} {title} {header_emoji}"
-
-    measure_title = _strip_directionals(visible_title)
-    title_width = display_width(measure_title)
-    target_width = FIXED_UNDERLINE_LENGTH
-    space_needed = max(0, target_width - title_width)
-    pad_left = space_needed // 2
-    pad_right = space_needed - pad_left
-    centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
-    underline_line = ""
-    if underline_enabled:
-       
-        if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * target_width)
-        else:
-            underline_line = "\n" + (underline_char * target_width)
-
-    return centered_line + underline_line
+    RLM = "\u200F"  # إضافة علامة اليمين إلى اليسار
 
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
@@ -226,17 +189,26 @@ def build_header_html(
 
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
-    target_width = FIXED_UNDERLINE_LENGTH
+    
+    # تحديد طول الخط بناءً على اللغة
+    if is_arabic:
+        target_width = 40  # 40 للغة العربية
+    else:
+        target_width = 25  # 25 للغة الإنجليزية
+    
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
-        underline_line = "\n" + (underline_char * target_width)
+        # إضافة RLM قبل الخط في حالة اللغة العربية
+        if is_arabic:
+            underline_line = "\n" + RLM + (underline_char * target_width)
+        else:
+            underline_line = "\n" + (underline_char * target_width)
 
     return centered_line + underline_line
-
 # -------------------------------
 # DB helpers
 # -------------------------------
