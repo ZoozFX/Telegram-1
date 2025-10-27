@@ -624,7 +624,9 @@ async def handle_notification_confirmation(update: Update, context: ContextTypes
         logger.exception(f"Failed to delete notification message: {e}")
 
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None, user_lang: str = None):
-    
+    """
+    إشعار المستخدم بتغيير حالة حسابه
+    """
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -639,10 +641,13 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
         
         if status == "active":
             if lang == "ar":
+                title = "مبارك 🎉 تم تفعيل الحساب"
+                labels = ["✅ حسناً"]
+                header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=1)
                 message = f"""
-مبارك 🎉 
-تم تفعيل حساب التداول الخاص بك ✅ 
-\u200F━━━━━━━━━━━━━━━━━━━━━━━━━
+{header}
+✅ تم تفعيل حساب التداول الخاص بك
+
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
@@ -650,10 +655,13 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
 أنت الآن تتمتع بخدمة نسخ الصفقات. شكراً لثقتك بنا!
                 """
             else:
+                title = "Congratulations 🎉 Account Activated"
+                labels = ["✅ OK"]
+                header = build_header_html(title, labels, header_emoji="🎉", underline_min=25, arabic_indent=0)
                 message = f"""
-Congratulations 🎉
-your trading account has been activated ✅
-━━━━━━━━━━━━━━━━━━━━━━━━━
+{header}
+Your trading account has been activated
+
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
@@ -661,27 +669,36 @@ your trading account has been activated ✅
 You are now enjoying copy trading services. Thank you for your trust!
                 """
         else:
-            
+            # حالة الرفض
             if lang == "ar":
+                title = "❌ لم يتم تفعيل الحساب"
+                labels = ["✅ حسناً"]
+                header = build_header_html(title, labels, header_emoji="❌", underline_min=25, arabic_indent=1)
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
+{header}
 ❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
-\u200F━━━━━━━━━━━━━━━━━━━━━━━━━
+
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 
 يرجى مراجعة البيانات المقدمة أو التواصل مع الدعم.
                 """
             else:
+                title = "❌ Account Not Activated"
+                labels = ["✅ OK"]
+                header = build_header_html(title, labels, header_emoji="❌", underline_min=25, arabic_indent=0)
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
+{header}
 ❌ Your trading account was not activated{reason_text}
-━━━━━━━━━━━━━━━━━━━━━━━━━
+
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 
 Please review the submitted data or contact support.
                 """
+
         keyboard = [
             [InlineKeyboardButton("✅ حسناً" if lang == "ar" else "✅ OK", 
                                 callback_data=f"confirm_notification_{account_id}")]
@@ -692,12 +709,12 @@ Please review the submitted data or contact support.
             chat_id=telegram_id,
             text=message,
             reply_markup=reply_markup,
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         
         db.close()
 
-        
+        # تحديث واجهة المستخدم بعد تغيير الحالة
         await update_user_interface_after_status_change(telegram_id, lang)
         
     except Exception as e:
@@ -1162,10 +1179,10 @@ def webapp_existing_account(request: Request):
     if is_ar:
         expected_return_options = """
             <option value="">اختر العائد المتوقع</option>
-            <option value="من 10 : 15 %">من 10 : 15 %</option>
-            <option value="من 20 : 30 %">من 20 : 30 %</option>
-            <option value="من 30 : 45 %">من 30 : 45 %</option>
-            <option value="من 40 : 60 %">من 40 : 60 %</option>
+            <option value="10% - 15%">10% - 15%</option>
+            <option value="20% - 30%">20% - 30%</option>
+            <option value="30% - 45%">30% - 45%</option>
+            <option value="40% - 60%">40% - 60%</option>
         """
     else:
         expected_return_options = """
@@ -1354,7 +1371,8 @@ def webapp_edit_accounts(request: Request):
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
         "no_accounts": "لا توجد حسابات" if is_ar else "No accounts found",
         "account_under_review": "⚠️ الحساب قيد المراجعة - لا يمكن التعديل" if is_ar else "⚠️ Account under review - cannot edit",
-        "account_under_review_delete": "⚠️ الحساب قيد المراجعة - لا يمكن الحذف" if is_ar else "⚠️ Account under review - cannot delete"
+        "account_under_review_delete": "⚠️ الحساب قيد المراجعة - لا يمكن الحذف" if is_ar else "⚠️ Account under review - cannot delete",
+        "risk_warning": "⚠️ تنبيه: كلما ارتفع العائد المتوقع زادت المخاطر" if is_ar else "⚠️ Warning: Higher expected returns come with higher risks"
     }
     dir_attr = "rtl" if is_ar else "ltr"
     text_align = "right" if is_ar else "left"
@@ -1400,6 +1418,7 @@ def webapp_edit_accounts(request: Request):
         .hidden{{display:none;}}
         .status-message{{padding:10px;margin:10px 0;border-radius:6px;text-align:{text_align}}}
         .status-warning{{background:#fff3cd;border:1px solid #ffeaa7;color:#856404}}
+        .risk-warning{{font-size:12px;color:#ff6b35;margin-top:4px;text-align:{text_align};font-weight:500;}}
       </style>
     </head>
     <body>
@@ -1470,6 +1489,7 @@ def webapp_edit_accounts(request: Request):
         <select id="expected_return">
           {expected_return_options}
         </select>
+        <div class="risk-warning">{labels['risk_warning']}</div>
 
         <div style="margin-top:12px;text-align:{text_align}">
           <button class="btn btn-primary" id="save">{labels['save']}</button>
