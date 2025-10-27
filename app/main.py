@@ -953,11 +953,13 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         set_admin_language(user_id, lang)
     
     if lang == "ar":
-        sections = [("💹 تداول الفوركس", "forex_main")]
+       #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
+        sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
     else:
-        sections = [("💹 Forex Trading", "forex_main")]
+       #sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main"), ("🤝 YesFX Partnership", "agency_main")]
+        sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
 
@@ -2597,7 +2599,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sections_data = {
         "forex_main": {
+           #"ar": ["📊 نسخ الصفقات", "💬 قناة التوصيات", "📰 الأخبار الاقتصادية"],
             "ar": ["📊 نسخ الصفقات", "🤖 طلب نسخة من الاكسبيرت"],
+           #"en": ["📊 Copy Trading", "💬 Signals Channel", "📰 Economic News"],
             "en": ["📊 Copy Trading", "🤖 Request EA Version"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
