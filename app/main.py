@@ -698,7 +698,7 @@ Please review the submitted data or contact support.
         
         db.close()
 
-        # تحديث واجهة المستخدم إذا كان نشطاً حالياً
+        
         await update_user_interface_after_status_change(telegram_id, lang)
         
     except Exception as e:
@@ -710,107 +710,7 @@ async def update_user_interface_after_status_change(telegram_id: int, lang: str)
     if ref and ref.get("origin") == "my_accounts":
         updated_data = get_subscriber_with_accounts(telegram_id)
         if updated_data:
-            # استخدام اللغة المحددة من الدالة الأم
-            await refresh_my_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
-
-async def refresh_my_accounts_interface(telegram_id: int, lang: str, chat_id: int, message_id: int):
-    """تحديث واجهة 'بياناتي وحساباتي'"""
-    updated_data = get_subscriber_with_accounts(telegram_id)
-    if not updated_data:
-        return
-
-    if lang == "ar":
-        header_title = "👤 بياناتي وحساباتي"
-        add_account_label = "➕ إضافة حساب تداول"
-        edit_accounts_label = "✏️ تعديل حساباتي" if len(updated_data['trading_accounts']) > 0 else None
-        edit_data_label = "✏️ تعديل بياناتي"
-        back_label = "🔙 الرجوع لتداول الفوركس"
-        labels = [header_title, add_account_label]
-        if edit_accounts_label:
-            labels.append(edit_accounts_label)
-        labels.extend([edit_data_label, back_label])
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=1)
-        user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
-        accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-        no_accounts = "\nلا توجد حسابات مسجلة بعد."
-    else:
-        header_title = "👤 My Data & Accounts"
-        add_account_label = "➕ Add Trading Account"
-        edit_accounts_label = "✏️ Edit My Accounts" if len(updated_data['trading_accounts']) > 0 else None
-        edit_data_label = "✏️ Edit my data"
-        back_label = "🔙 Back to Forex"
-        labels = [header_title, add_account_label]
-        if edit_accounts_label:
-            labels.append(edit_accounts_label)
-        labels.extend([edit_data_label, back_label])
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, underline_min=FIXED_UNDERLINE_LENGTH, arabic_indent=0)
-        user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
-        accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-        no_accounts = "\nNo trading accounts registered yet."
-
-    updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
-    
-    if updated_data['trading_accounts']:
-        for i, acc in enumerate(updated_data['trading_accounts'], 1):
-            status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
-            if lang == "ar":
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                if acc.get('initial_balance'):
-                    account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
-                if acc.get('current_balance'):
-                    account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
-                if acc.get('withdrawals'):
-                    account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
-                if acc.get('copy_start_date'):
-                    account_text += f"   📅 تاريخ البدء: {acc['copy_start_date']}\n"
-                if acc.get('agent'):
-                    account_text += f"   👤 الوكيل: {acc['agent']}\n"
-                if acc.get('expected_return'):
-                    account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
-            else:
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                if acc.get('initial_balance'):
-                    account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
-                if acc.get('current_balance'):
-                    account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
-                if acc.get('withdrawals'):
-                    account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
-                if acc.get('copy_start_date'):
-                    account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
-                if acc.get('agent'):
-                    account_text += f"   👤 Agent: {acc['agent']}\n"
-                if acc.get('expected_return'):
-                    account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
-            updated_message += account_text
-    else:
-        updated_message += f"\n{no_accounts}"
-
-    keyboard = []
-    if WEBAPP_URL:
-        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-        keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-    if WEBAPP_URL and len(updated_data['trading_accounts']) > 0:
-        edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
-        keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-    if WEBAPP_URL:
-        params = {"lang": lang, "edit": "1", "name": updated_data['name'], "email": updated_data['email'], "phone": updated_data['phone']}
-        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-        keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    try:
-        await application.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=updated_message,
-            reply_markup=reply_markup,
-            parse_mode="HTML",
-            disable_web_page_preview=True
-        )
-        save_form_ref(telegram_id, chat_id, message_id, origin="my_accounts", lang=lang)
-    except Exception as e:
-        logger.exception(f"Failed to refresh user interface: {e}")
+            await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة الرسائل النصية، بما في ذلك أسباب الرفض"""
@@ -1280,10 +1180,10 @@ def webapp_existing_account(request: Request):
     if is_ar:
         expected_return_options = """
             <option value="">اختر العائد المتوقع</option>
-            <option value="من ١٠ : ١٥ %">من ١٠ : ١٥ %</option>
-            <option value="من ٢٠ : ٣٠ %">من ٢٠ : ٣٠ %</option>
-            <option value="من ٣٠ : ٤٥ %">من ٣٠ : ٤٥ %</option>
-            <option value="من ٤٠ : ٦٠ %">من ٤٠ : ٦٠ %</option>
+            <option value="من 10 : 15 %">من 10 : 15 %</option>
+            <option value="من 20 : 30 %">من 20 : 30 %</option>
+            <option value="من 30 : 45 %">من 30 : 45 %</option>
+            <option value="من 40 : 60 %">من 40 : 60 %</option>
         """
     else:
         expected_return_options = """
@@ -1483,10 +1383,10 @@ def webapp_edit_accounts(request: Request):
     if is_ar:
         expected_return_options = """
             <option value="">اختر العائد المتوقع</option>
-            <option value="من ١٠ : ١٥ %">من ١٠ : ١٥ %</option>
-            <option value="من ٢٠ : ٣٠ %">من ٢٠ : ٣٠ %</option>
-            <option value="من ٣٠ : ٤٥ %">من ٣٠ : ٤٥ %</option>
-            <option value="من ٤٠ : ٦٠ %">من ٤٠ : ٦٠ %</option>
+            <option value="من 10 : 15 %">من 10 : 15 %</option>
+            <option value="من 20 : 30 %">من 20 : 30 %</option>
+            <option value="من 30 : 45 %">من 30 : 45 %</option>
+            <option value="من 40 : 60 %">من 40 : 60 %</option>
         """
     else:
         expected_return_options = """
