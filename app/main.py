@@ -3719,22 +3719,29 @@ async def submit_existing_account(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "Server error."})
 
 # ===============================
-# Handlers registration
+# Handlers registration - CORRECTED ORDER
 # ===============================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("admin", admin_start))
-application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
-application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
-application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
-application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
-application.add_handler(CommandHandler("admin", admin_start))
+
+# Admin handlers - MUST COME BEFORE GENERAL menu_handler
 application.add_handler(CallbackQueryHandler(handle_admin_broadcast, pattern="^admin_broadcast_"))
 application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_confirm_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
+application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
+
+# Language and notification handlers
+application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
+application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
+
+# GENERAL menu_handler - SHOULD COME LAST
+application.add_handler(CallbackQueryHandler(menu_handler))
+
+# Message handlers
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
 # ===============================
 # Webhook setup
