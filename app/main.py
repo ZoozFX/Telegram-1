@@ -654,7 +654,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=1)
                 message = f"""
 {header}
-تم ربط الحساب بخدمة النسخ ✅️
+✅ تم ربط الحساب بخدمة النسخ
 
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
@@ -669,7 +669,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
                 message = f"""
 {header}
-Your account is linked to the copy service ✅️
+✅ Your account is linked to the copy service️
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
@@ -687,7 +687,7 @@ Thanks for choosing YesFX!
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ لم يتم تفعيل حساب التداول الخاص بك{reason_text}
+❌ لم يتم تفعيل حسابك{reason_text}
 
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
@@ -702,7 +702,7 @@ Thanks for choosing YesFX!
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-Your trading account was not activated ❌{reason_text}
+Your account was not activated ❌{reason_text}
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
