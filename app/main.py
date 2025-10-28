@@ -462,14 +462,6 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await start(update, context)
 
-# أضف هذه ال handlers في قسم تسجيل ال handlers
-application.add_handler(CommandHandler("admin", admin_start))
-application.add_handler(CallbackQueryHandler(handle_admin_broadcast, pattern="^admin_broadcast_"))
-application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_confirm_broadcast$"))
-application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
-application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
-
 def remove_emoji(text: str) -> str:
     out = []
     for ch in text:
@@ -3766,7 +3758,12 @@ application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
-
+application.add_handler(CommandHandler("admin", admin_start))
+application.add_handler(CallbackQueryHandler(handle_admin_broadcast, pattern="^admin_broadcast_"))
+application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_confirm_broadcast$"))
+application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
+application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
 # ===============================
 # Webhook setup
 # ===============================
