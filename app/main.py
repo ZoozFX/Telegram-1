@@ -178,39 +178,46 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 20
+    # تحديد العرض الثابت للخط
+    TARGET_WIDTH = 25
+    
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
-    if title_len < MIN_TITLE_WIDTH:
-        extra_spaces = MIN_TITLE_WIDTH - title_len
+    
+    # إضافة المسافات لجعل العنوان في المنتصف
+    if title_len < TARGET_WIDTH:
+        extra_spaces = TARGET_WIDTH - title_len
         left_pad = extra_spaces // 2
         right_pad = extra_spaces - left_pad
         title = f"{' ' * left_pad}{title}{' ' * right_pad}"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
+    # بناء العنوان مع الإيموجي على الجانبين
     if is_arabic:
         indent = NBSP * arabic_indent
         visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
         visible_title = f"{header_emoji} {title} {header_emoji}"
 
+    # حساب العرض النهائي مع الإيموجي
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-    target_width = 25  # Changed to 25 as per request
-    
-    space_needed = max(0, target_width - title_width)
+    # إضافة مسافات إضافية إذا لزم الأمر للتأكد من المحاذاة
+    space_needed = max(0, TARGET_WIDTH + 4 - title_width)  # +4 لمراعاة الإيموجي والمسافات
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
+    
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
+    
     underline_line = ""
     if underline_enabled:
-        
+        # بناء الخط بطول 25 حرف
         if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * target_width)
+            underline_line = "\n" + RLM + (underline_char * TARGET_WIDTH)
         else:
-            underline_line = "\n" + RLM + (underline_char * target_width)
+            underline_line = "\n" + RLM + (underline_char * TARGET_WIDTH)
 
     return centered_line + underline_line
 # -------------------------------
@@ -1257,7 +1264,7 @@ def webapp_existing_account(request: Request):
         labels['agent'],
         labels['expected_return']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=True,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
     #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
@@ -1475,7 +1482,7 @@ def webapp_edit_accounts(request: Request):
         labels['save'],
         labels['delete']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=True,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
     #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
