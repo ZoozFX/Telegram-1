@@ -168,54 +168,55 @@ def build_header_html(
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
-    line_width: int = None,  # ⬅️ معامل جديد للتحكم في طول الخط
 ) -> str:
-    """دالة مساعدة لبناء عناوين مع خط سفلي متوسط"""
     
     NBSP = "\u00A0"
     RLE = "\u202B"
     PDF = "\u202C"
     RLM = "\u200F"
     LLM = "\u200E"
-    
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
+    MIN_TITLE_WIDTH = 20
+    clean_title = remove_emoji(title)
+    title_len = display_width(clean_title)
+    if title_len < MIN_TITLE_WIDTH:
+        extra_spaces = MIN_TITLE_WIDTH - title_len
+        left_pad = extra_spaces // 2
+        right_pad = extra_spaces - left_pad
+        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
+
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # إنشاء العنوان المرئي مع الإيموجيات
     if is_arabic:
         indent = NBSP * arabic_indent
         visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
         visible_title = f"{header_emoji} {title} {header_emoji}"
 
-    # 🎯 **الحساب الصحيح للعرض بعد إضافة الإيموجيات**
     measure_title = _strip_directionals(visible_title)
-    final_title_width = display_width(measure_title)  # العرض النهائي بعد الإيموجيات
+    title_width = display_width(measure_title)
     
-    # 🎯 **تحديد طول الخط - توسيط دائماً**
-    if line_width is not None:
-        target_width = line_width  # استخدام الطول المحدد
+    # تحديد طول الخط بناءً على اللغة
+    if is_arabic:
+        target_width = 25  # 40 للغة العربية
     else:
-        # الطول الافتراضي بناءً على اللغة
-        target_width = 40 if is_arabic else 30
+        target_width = 25  # 25 للغة الإنجليزية
     
-    # 🎯 **توسيط العنوان دائماً (سواء كان قصيراً أو طويلاً)**
-    total_padding = max(0, target_width - final_title_width)
-    left_padding = total_padding // 2
-    right_padding = total_padding - left_padding
-    
-    # العنوان الموسط
-    centered_title = f"{NBSP * left_padding}<b>{visible_title}</b>{NBSP * right_padding}"
-    
-    # 🎯 **الخط السفلي المتوسط - استخدام نفس العرض المستخدم في العنوان**
+    space_needed = max(0, target_width - title_width)
+    pad_left = space_needed // 2
+    pad_right = space_needed - pad_left
+    centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
-        # استخدام نفس التباعد ونفس العرض المستخدم في العنوان
-        underline_line = f"\n{NBSP * left_padding}{underline_char * final_title_width}{NBSP * right_padding}"
+        # إضافة RLM قبل الخط في حالة اللغة العربية
+        if is_arabic:
+            underline_line = "\n" + RLM + (underline_char * target_width)
+        else:
+            underline_line = "\n" + RLM + (underline_char * target_width)
 
-    return centered_title + underline_line
+    return centered_line + underline_line
 # -------------------------------
 # DB helpers
 # -------------------------------
