@@ -178,46 +178,43 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    # تحديد العرض الثابت للخط
-    TARGET_WIDTH = 25
-    
+    MIN_TITLE_WIDTH = 20
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
-    
-    # إضافة المسافات لجعل العنوان في المنتصف
-    if title_len < TARGET_WIDTH:
-        extra_spaces = TARGET_WIDTH - title_len
+    if title_len < MIN_TITLE_WIDTH:
+        extra_spaces = MIN_TITLE_WIDTH - title_len
         left_pad = extra_spaces // 2
         right_pad = extra_spaces - left_pad
         title = f"{' ' * left_pad}{title}{' ' * right_pad}"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # بناء العنوان مع الإيموجي على الجانبين
     if is_arabic:
         indent = NBSP * arabic_indent
         visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
         visible_title = f"{header_emoji} {title} {header_emoji}"
 
-    # حساب العرض النهائي مع الإيموجي
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-    # إضافة مسافات إضافية إذا لزم الأمر للتأكد من المحاذاة
-    space_needed = max(0, TARGET_WIDTH + 4 - title_width)  # +4 لمراعاة الإيموجي والمسافات
+    # تحديد طول الخط بناءً على اللغة
+    if is_arabic:
+        target_width = 27
+    else:
+        target_width = 27
+    
+    space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
-    
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
-    
     underline_line = ""
     if underline_enabled:
-        # بناء الخط بطول 25 حرف
+        # إضافة RLM قبل الخط في حالة اللغة العربية
         if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * TARGET_WIDTH)
+            underline_line = "\n" + RLM + (underline_char * target_width)
         else:
-            underline_line = "\n" + LLM + (underline_char * TARGET_WIDTH)
+            underline_line = "\n" + RLM + (underline_char * target_width)
 
     return centered_line + underline_line
 # -------------------------------
