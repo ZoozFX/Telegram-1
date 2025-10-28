@@ -158,6 +158,27 @@ def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
         header_emoji=HEADER_EMOJI,
         arabic_indent=1 if lang == "ar" else 0
     )
+
+def get_agent_username(agent_name: str) -> str:
+    """
+    تحويل اسم الوكيل إلى اليوزر المقابل له بناءً على البيئة
+    """
+    if not agent_name:
+        return "@Omarkin9"
+    
+    agents_list = os.getenv("AGENTS_LIST", "").split(",")
+    agents_link = os.getenv("AGENTS_LINK", "").split(",")
+    
+    agents_list = [agent.strip() for agent in agents_list if agent.strip()]
+    agents_link = [link.strip() for link in agents_link if link.strip()]
+    
+    if len(agents_list) == len(agents_link):
+        for i, agent in enumerate(agents_list):
+            if agent == agent_name and i < len(agents_link):
+                return agents_link[i]
+    
+    return "@Omarkin9"
+
 # -------------------------------
 # consistent header builder
 # -------------------------------
@@ -649,7 +670,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
         
         if status == "active":
             if lang == "ar":
-                title = "مبارك"
+                title = "مــــــبــــــــــــارك"
                 labels = ["✅ حسناً"]
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=1)
                 message = f"""
@@ -679,7 +700,9 @@ Wishing you success.
 Thanks for choosing YesFX!
                 """
         else:
-            # حالة الرفض
+            
+            agent_username = get_agent_username(account.agent)
+            
             if lang == "ar":
                 title = "لم يتم تفعيل الحساب"
                 labels = ["✅ حسناً"]
@@ -693,7 +716,7 @@ Thanks for choosing YesFX!
 🔢 رقم الحساب: {account.account_number}
 
 يرجى مراجعة البيانات المقدمة
-أو التواصل مع @Omarkin9.
+أو التواصل مع {agent_username}.
                 """
             else:
                 title = "Account Not Activated"
@@ -708,7 +731,7 @@ Your account was not activated ❌{reason_text}
 🔢 Account Number: {account.account_number}
 
 Please review the submitted data
-or contact @Omarkin9.
+or contact {agent_username}.
                 """
 
         keyboard = [
@@ -726,7 +749,6 @@ or contact @Omarkin9.
         
         db.close()
 
-        # تحديث واجهة المستخدم بعد تغيير الحالة
         await update_user_interface_after_status_change(telegram_id, lang)
         
     except Exception as e:
