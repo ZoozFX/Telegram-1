@@ -2663,7 +2663,6 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
                         
-                        
                         if 'T' in start_date_str:
                             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                         else:
@@ -3739,10 +3738,9 @@ application.add_handler(CallbackQueryHandler(handle_notification_confirmation, p
 application.add_handler(CallbackQueryHandler(menu_handler))
 
 # Message handlers
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u,c: None))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
 # ===============================
 # Webhook setup
 # ===============================
