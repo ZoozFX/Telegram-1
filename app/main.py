@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 
-ADMIN_TELEGRAM_ID = os.getenv("ADMIN_TELEGRAM_ID")
+ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
 # -------------------------------
 # logging
@@ -638,7 +638,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     user_id = q.from_user.id
-    if str(user_id) != ADMIN_TELEGRAM_ID:
+    if user_id not in ADMIN_TELEGRAM_IDS:
         await q.message.reply_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
         return
     
@@ -798,7 +798,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     
     user_id = update.message.from_user.id
     
-    if str(user_id) == ADMIN_TELEGRAM_ID and 'awaiting_rejection_reason' in context.user_data:
+    if user_id in ADMIN_TELEGRAM_IDS and 'awaiting_rejection_reason' in context.user_data:
         reason = update.message.text.strip()
         account_id = context.user_data.pop('awaiting_rejection_reason')
         success = update_account_status(account_id, "rejected", reason=reason)
@@ -851,7 +851,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = update.effective_user.id
-    if str(user_id) == ADMIN_TELEGRAM_ID:
+    if user_id in ADMIN_TELEGRAM_IDS:
         
         keyboard = [
             [
@@ -877,45 +877,51 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
-    
+    """
+    إرسال إشعار لجميع المسؤولين
+    """
     try:
         logger.info(f"🔔 Starting admin notification for {action_type}")
         
-        if not ADMIN_TELEGRAM_ID:
-            logger.warning("⚠️ ADMIN_TELEGRAM_ID not set - admin notifications disabled")
+        if not ADMIN_TELEGRAM_IDS:
+            logger.warning("⚠️ ADMIN_TELEGRAM_IDS not set - admin notifications disabled")
             return
         
-        admin_id = int(ADMIN_TELEGRAM_ID)
-        admin_lang = get_admin_language(admin_id)
-        
-        if action_type == "new_account":
-            if admin_lang == "ar":
-                title = "🆕 حساب تداول جديد"
-                action_desc = "تم إضافة حساب تداول جديد"
-            else:
-                title = "🆕 New Trading Account"
-                action_desc = "New trading account added"
-        elif action_type == "updated_account":
-            if admin_lang == "ar":
-                title = "✏️ تعديل على حساب تداول"
-                action_desc = "تم تعديل حساب تداول"
-            else:
-                title = "✏️ Trading Account Updated"
-                action_desc = "Trading account updated"
-        else:
-            if admin_lang == "ar":
-                title = "ℹ️ نشاط على حساب تداول"
-                action_desc = "نشاط على حساب تداول"
-            else:
-                title = "ℹ️ Trading Account Activity"
-                action_desc = "Trading account activity"
-        
-        
-        labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
-        header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
-        
-        if admin_lang == "ar":
-            message = f"""
+        # إرسال الإشعار لكل أدمن في القائمة
+        for admin_id in ADMIN_TELEGRAM_IDS:
+            try:
+                logger.info(f"📤 Sending notification to admin {admin_id}")
+                
+                admin_lang = get_admin_language(admin_id)
+                
+                if action_type == "new_account":
+                    if admin_lang == "ar":
+                        title = "🆕 حساب تداول جديد"
+                        action_desc = "تم إضافة حساب تداول جديد"
+                    else:
+                        title = "🆕 New Trading Account"
+                        action_desc = "New trading account added"
+                elif action_type == "updated_account":
+                    if admin_lang == "ar":
+                        title = "✏️ تعديل على حساب تداول"
+                        action_desc = "تم تعديل حساب تداول"
+                    else:
+                        title = "✏️ Trading Account Updated"
+                        action_desc = "Trading account updated"
+                else:
+                    if admin_lang == "ar":
+                        title = "ℹ️ نشاط على حساب تداول"
+                        action_desc = "نشاط على حساب تداول"
+                    else:
+                        title = "ℹ️ Trading Account Activity"
+                        action_desc = "Trading account activity"
+                
+                # بناء واجهة الرسالة
+                labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
+                header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+                
+                if admin_lang == "ar":
+                    message = f"""
 {header}
 <b>👤 المستخدم:</b> {subscriber_data['name']}
 <b>📧 البريد:</b> {subscriber_data['email']}
@@ -935,16 +941,16 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>📅 تاريخ البدء:</b> {account_data.get('copy_start_date', 'N/A')}
 
 <b>🌐 معرف الحساب:</b> {account_data['id']}
-            """
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("✅ تفعيل الحساب", callback_data=f"activate_account_{account_data['id']}"),
-                    InlineKeyboardButton("❌ رفض الحساب", callback_data=f"reject_account_{account_data['id']}")
-                ]
-            ]
-        else:
-            message = f"""
+                    """
+                    
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("✅ تفعيل الحساب", callback_data=f"activate_account_{account_data['id']}"),
+                            InlineKeyboardButton("❌ رفض الحساب", callback_data=f"reject_account_{account_data['id']}")
+                        ]
+                    ]
+                else:
+                    message = f"""
 {header}
 <b>👤 User:</b> {subscriber_data['name']}
 <b>📧 Email:</b> {subscriber_data['email']}
@@ -964,30 +970,35 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>📅 Start Date:</b> {account_data.get('copy_start_date', 'N/A')}
 
 <b>🌐 Account ID:</b> {account_data['id']}
-            """
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("✅ Activate Account", callback_data=f"activate_account_{account_data['id']}"),
-                    InlineKeyboardButton("❌ Reject Account", callback_data=f"reject_account_{account_data['id']}")
-                ]
-            ]
+                    """
+                    
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("✅ Activate Account", callback_data=f"activate_account_{account_data['id']}"),
+                            InlineKeyboardButton("❌ Reject Account", callback_data=f"reject_account_{account_data['id']}")
+                        ]
+                    ]
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                # إرسال الرسالة للمسؤول
+                await application.bot.send_message(
+                    chat_id=admin_id,
+                    text=message,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML"
+                )
+                
+                logger.info(f"✅ Admin notification sent successfully to {admin_id}")
+                
+            except Exception as e:
+                logger.exception(f"❌ Failed to send admin notification to {admin_id}: {e}")
+                
         
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        logger.info(f"📤 Sending message to admin {admin_id}")
-        
-        await application.bot.send_message(
-            chat_id=admin_id,
-            text=message,
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
-        
-        logger.info("✅ Admin notification sent successfully")
+        logger.info("✅ All admin notifications processed")
         
     except Exception as e:
-        logger.exception(f"❌ Failed to send admin notification: {e}")
+        logger.exception(f"❌ Failed to send admin notifications: {e}")
 
 def get_account_status_text(status: str, lang: str, reason: str = None) -> str:
     
@@ -1046,7 +1057,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await q.answer()
     
     user_id = q.from_user.id
-    if str(user_id) == ADMIN_TELEGRAM_ID:
+    if user_id in ADMIN_TELEGRAM_IDS:
         set_admin_language(user_id, lang)
     
     if lang == "ar":
@@ -1076,7 +1087,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = "ar" if q.data == "lang_ar" else "en"
     context.user_data["lang"] = lang
     user_id = q.from_user.id
-    if str(user_id) == ADMIN_TELEGRAM_ID:
+    if user_id in ADMIN_TELEGRAM_IDS:
         set_admin_language(user_id, lang)
 
     # NEW: Check if user is registered before showing main sections
