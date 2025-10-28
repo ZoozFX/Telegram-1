@@ -166,7 +166,7 @@ def build_header_html(
     keyboard_labels: List[str],
     header_emoji: str = HEADER_EMOJI,
     underline_enabled: bool = True,
-    underline_char: str = "ـــــــ",
+    underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
     
@@ -198,11 +198,10 @@ def build_header_html(
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-    # تحديد طول الخط بناءً على اللغة
     if is_arabic:
-        target_width = 14
+        target_width = 30
     else:
-        target_width = 14
+        target_width = 30
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -210,7 +209,7 @@ def build_header_html(
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
-        # إضافة RLM قبل الخط في حالة اللغة العربية
+        
         if is_arabic:
             underline_line = "\n" + RLM + (underline_char * target_width)
         else:
