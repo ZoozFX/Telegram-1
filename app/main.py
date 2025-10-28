@@ -100,10 +100,8 @@ def get_admin_language(admin_id: int) -> str:
     
     return ADMIN_LANGUAGE.get(admin_id, "ar")
 
-# أضف هذه الدوال في قسم الـ Admin functions
-
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض لوحة التحكم الإدارية"""
+    
     user_id = update.effective_user.id
     if user_id not in ADMIN_TELEGRAM_IDS:
         await update.message.reply_text("❌ غير مصرح لك بالوصول إلى هذه الصفحة")
@@ -112,19 +110,19 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
-        title = "لوحة التحكم الإدارية"
+        title = "خيارات إرسال الرسائل"
         buttons = [
-            "📢 إرسال رسالة لكل المشتركين",
-            "👥 إرسال رسالة للمسجلين ببيانات",
-            "✅ إرسال رسالة لأصحاب الحسابات المقبولة",
+            "📢 للمشتركين",
+            "👥 للمسجلين",
+            "✅ لأصحاب الحسابات المقبولة",
             "🔙 الرجوع"
         ]
     else:
-        title = "Admin Control Panel"
+        title = "Message sending options"
         buttons = [
-            "📢 Send to All Subscribers",
-            "👥 Send to Registered Users", 
-            "✅ Send to Approved Accounts",
+            "📢 To Subscribers",
+            "👥 To Registrants", 
+            "✅ To Approved Accounts",
             "🔙 Back"
         ]
     
@@ -135,11 +133,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 إرسال رسالة لكل المشتركين" or btn == "📢 Send to All Subscribers":
+            if btn == "📢 للمشتركين" or btn == "📢 To Subscribers":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_all"))
-            elif btn == "👥 إرسال رسالة للمسجلين ببيانات" or btn == "👥 Send to Registered Users":
+            elif btn == "👥 للمسجلين" or btn == "👥 To Registrants":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_registered"))
-            elif btn == "✅ إرسال رسالة لأصحاب الحسابات المقبولة" or btn == "✅ Send to Approved Accounts":
+            elif btn == "✅ لأصحاب الحسابات المقبولة" or btn == "✅ To Approved Accounts":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_approved"))
         keyboard.append(keyboard_row)
     
@@ -252,7 +250,6 @@ async def process_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_
     message_text = update.message.text
     admin_lang = get_admin_language(user_id)
     
-    # جلب المستخدمين المستهدفين بناءً على النوع
     if broadcast_type == "admin_broadcast_all":
         target_users = get_all_subscribers()
         target_name = "جميع المشتركين" if admin_lang == "ar" else "All Subscribers"
@@ -265,7 +262,6 @@ async def process_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_
     else:
         return
     
-    # إرسال رسالة تأكيد
     if admin_lang == "ar":
         confirm_text = f"""
 📊 تفاصيل البث:
@@ -321,7 +317,6 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_name = context.user_data['target_name']
     admin_lang = get_admin_language(user_id)
     
-    # إرسال رسالة بدء البث
     if admin_lang == "ar":
         progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم...")
     else:
@@ -376,7 +371,6 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop('target_users', None)
     context.user_data.pop('target_name', None)
     
-    # عرض لوحة التحكم مرة أخرى
     await admin_panel_from_callback(update, context)
 
 async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -387,19 +381,19 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
-        title = "لوحة التحكم الإدارية"
+        title = "خيارات إرسال الرسائل"
         buttons = [
-            "📢 إرسال رسالة لكل المشتركين",
-            "👥 إرسال رسالة للمسجلين ببيانات",
-            "✅ إرسال رسالة لأصحاب الحسابات المقبولة",
+            "📢 للمشتركين",
+            "👥 للمسجلين",
+            "✅ لأصحاب الحسابات المقبولة",
             "🔙 الرجوع"
         ]
     else:
-        title = "Admin Control Panel"
+        title = "Message sending options"
         buttons = [
-            "📢 Send to All Subscribers",
-            "👥 Send to Registered Users", 
-            "✅ Send to Approved Accounts",
+            "📢 To Subscribers",
+            "👥 To Registrants", 
+            "✅ To Approved Accounts",
             "🔙 Back"
         ]
     
@@ -410,11 +404,11 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 إرسال رسالة لكل المشتركين" or btn == "📢 Send to All Subscribers":
+            if btn == "📢 للمشتركين" or btn == "📢 To Subscribers":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_all"))
-            elif btn == "👥 إرسال رسالة للمسجلين ببيانات" or btn == "👥 Send to Registered Users":
+            elif btn == "👥 للمسجلين" or btn == "👥 To Registrants":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_registered"))
-            elif btn == "✅ إرسال رسالة لأصحاب الحسابات المقبولة" or btn == "✅ Send to Approved Accounts":
+            elif btn == "✅ لأصحاب الحسابات المقبولة" or btn == "✅ To Approved Accounts":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_approved"))
         keyboard.append(keyboard_row)
     
