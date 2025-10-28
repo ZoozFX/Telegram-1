@@ -178,7 +178,7 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 20
+    MIN_TITLE_WIDTH = 29
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -199,9 +199,9 @@ def build_header_html(
     title_width = display_width(measure_title)
     
     if is_arabic:
-        target_width = 30
+        target_width = 29
     else:
-        target_width = 30
+        target_width = 29
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
