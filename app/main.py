@@ -155,7 +155,7 @@ def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
     return build_header_html(
         title,
         labels,
-        header_emoji=HEADER_EMOJI,
+        header_emoji="",  # إزالة الإيموجي
         arabic_indent=1 if lang == "ar" else 0
     )
 # -------------------------------
@@ -164,7 +164,7 @@ def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
 def build_header_html(
     title: str,
     keyboard_labels: List[str],
-    header_emoji: str = HEADER_EMOJI,
+    header_emoji: str = "",  # جعل الإيموجي فارغًا افتراضيًا لإزالته
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
@@ -178,43 +178,38 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 20
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
-    if title_len < MIN_TITLE_WIDTH:
-        extra_spaces = MIN_TITLE_WIDTH - title_len
-        left_pad = extra_spaces // 2
-        right_pad = extra_spaces - left_pad
-        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
+
+    # إزالة أي مسافات زائدة من العنوان
+    title = title.strip()
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
     if is_arabic:
         indent = NBSP * arabic_indent
-        visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+        visible_title = f"{indent}{RLE}{title}{PDF}"  # بدون إيموجي أو مسافات زائدة
     else:
-        visible_title = f"{header_emoji} {title} {header_emoji}"
+        visible_title = f"{title}"  # بدون إيموجي أو مسافات زائدة
 
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-   
-    if is_arabic:
-        target_width = 28
-    else:
-        target_width = 28
-    
-    space_needed = max(0, target_width - title_width)
-    pad_left = space_needed // 2
-    pad_right = space_needed - pad_left
+    # إزالة التوسيط: جعل space_needed = 0
+    space_needed = 0
+    pad_left = 0
+    pad_right = 0
+
+    # محاذاة العنوان: في العربية محاذي لليمين (RTL)، في الإنجليزية لليسار (LTR)
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
+
     underline_line = ""
     if underline_enabled:
-        
+        # محاذاة الخط: في العربية مع RLM ليكون محاذي لليمين، في الإنجليزية لليسار
         if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * target_width)
+            underline_line = "\n" + RLM + (underline_char * title_width)
         else:
-            underline_line = "\n" + RLM + (underline_char * target_width)
+            underline_line = "\n" + (underline_char * title_width)
 
     return centered_line + underline_line
 # -------------------------------
@@ -651,7 +646,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
             if lang == "ar":
                 title = "مبارك"
                 labels = ["✅ حسناً"]
-                header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=1)
+                header = build_header_html(title, labels, header_emoji="", arabic_indent=1)
                 message = f"""
 {header}
 ✅ تم ربط الحساب بخدمة النسخ
@@ -666,7 +661,7 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
             else:
                 title = "Congratulations"
                 labels = ["✅ OK"]
-                header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
+                header = build_header_html(title, labels, header_emoji="", arabic_indent=0)
                 message = f"""
 {header}
 ✅ Your account is linked to the copy service️
@@ -807,7 +802,7 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         labels = ["🇺🇸 English", "🇪🇬 العربية"]
-        header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
+        header = build_header_html("Language | اللغة", labels, header_emoji="")
         
         if update.callback_query:
             q = update.callback_query
@@ -858,7 +853,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
         
         
         labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
-        header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+        header = build_header_html(title, labels, header_emoji="", arabic_indent=1 if admin_lang == "ar" else 0)
         
         if admin_lang == "ar":
             message = f"""
@@ -972,7 +967,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
-    header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
+    header = build_header_html("Language | اللغة", labels, header_emoji="")
     
     if update.callback_query:
         q = update.callback_query
@@ -1010,7 +1005,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = [name for name, _ in sections] + [back_button[0]]
-    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
+    header = build_header_html(title, labels, header_emoji="", arabic_indent=1 if lang == "ar" else 0)
     try:
         await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
@@ -1037,12 +1032,12 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title = "من فضلك ادخل البيانات"
             back_label_text = "🔙 الرجوع للغة"
             open_label = "📝 افتح نموذج التسجيل"
-            header_emoji_for_lang = HEADER_EMOJI
+            header_emoji_for_lang = ""
         else:
             title = "Please enter your data"
             back_label_text = "🔙 Back to language"
             open_label = "📝 Open registration form"
-            header_emoji_for_lang = "✨"
+            header_emoji_for_lang = ""
 
         labels = [open_label, back_label_text]
         header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang == "ar" else 0)
@@ -1261,7 +1256,7 @@ def webapp_existing_account(request: Request):
         labels['agent'],
         labels['expected_return']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji="", underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
     #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
@@ -1479,7 +1474,7 @@ def webapp_edit_accounts(request: Request):
         labels['save'],
         labels['delete']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji="", underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
     #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
@@ -2003,7 +1998,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         if edit_accounts_label:
             labels.append(edit_accounts_label)
         labels.extend([edit_data_label, back_label])
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1)
+        header = build_header_html(header_title, labels, header_emoji="", arabic_indent=1)
         user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
         no_accounts = "\nلا توجد حسابات مسجلة بعد."
@@ -2017,7 +2012,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         if edit_accounts_label:
             labels.append(edit_accounts_label)
         labels.extend([edit_data_label, back_label])
-        header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=0)
+        header = build_header_html(header_title, labels, header_emoji="", arabic_indent=0)
         user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
         no_accounts = "\nNo trading accounts registered yet."
@@ -2255,7 +2250,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
-            header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
+            header = build_header_html(title, labels, header_emoji="", arabic_indent=1 if display_lang == "ar" else 0)
 
             keyboard = [
                 [InlineKeyboardButton(button_text, url=ea_link)],
@@ -2310,7 +2305,7 @@ async def webapp_submit(payload: dict = Body(...)):
                     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     labels = [name for name, _ in sections] + [back_button[0]]
-                    header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
+                    header = build_header_html(title, labels, header_emoji="", arabic_indent=1 if display_lang == "ar" else 0)
                     
                     edited = False
                     if ref:
@@ -2364,7 +2359,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 try:
                     await application.bot.edit_message_text(
                         text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
-                        header_emoji=HEADER_EMOJI,
+                        header_emoji="",
                         arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                         chat_id=ref["chat_id"], 
                         message_id=ref["message_id"],
@@ -2383,7 +2378,7 @@ async def webapp_submit(payload: dict = Body(...)):
                         sent = await application.bot.send_message(
                             chat_id=telegram_id, 
                             text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], 
-                            header_emoji=HEADER_EMOJI,
+                            header_emoji="",
                             arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                             reply_markup=reply_markup, 
                             parse_mode="HTML", 
@@ -2439,7 +2434,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         header = build_header_html(
             header_title, 
             labels,
-            header_emoji=HEADER_EMOJI,
+            header_emoji="",
             arabic_indent=1
         )
         
@@ -2460,7 +2455,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         header = build_header_html(
             header_title, 
             labels,
-            header_emoji=HEADER_EMOJI,
+            header_emoji="",
             arabic_indent=0
         )
      
@@ -2792,7 +2787,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = data[f"title_{lang}"]
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
-        header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+        header_emoji_for_lang = "" 
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
         keyboard = []
         for name in options:
@@ -2832,11 +2827,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji="", arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
         except Exception:
             try:
-                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji="", arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
             except Exception:
                 logger.exception("Failed to show congrats screen for already-registered user.")
@@ -2912,7 +2907,7 @@ We're here to help you with {service_title}!
         back_callback = "dev_main" if q.data in ["📈 برمجة المؤشرات", "📈 Indicators", "🤖 برمجة الاكسبيرتات", "🤖 Expert Advisors", "💬 بوتات التليجرام", "💬 Telegram Bots", "🌐 مواقع الويب", "🌐 Web Development"] else "agency_main"
         
         labels = [service_title, support_label, back_label]
-        header = build_header_html(service_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
+        header = build_header_html(service_title, labels, header_emoji="", arabic_indent=1 if lang == "ar" else 0)
         
         keyboard = [
             [InlineKeyboardButton(support_label, url="https://t.me/Nagyfx")],
@@ -2946,7 +2941,7 @@ We're here to help you with {service_title}!
         details = "Details will be added soon..."
     
     labels_for_header = [q.data]
-    header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", arabic_indent=1 if lang=="ar" else 0)
+    header_box = build_header_html(placeholder, labels_for_header, header_emoji="" if lang=="ar" else "", arabic_indent=1 if lang=="ar" else 0)
     
     # Add support and back buttons even for fallback
     if lang == "ar":
@@ -3058,13 +3053,13 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         ref = get_form_ref(user_id) if user_id else None
         if ref:
             try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji="", arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
                 clear_form_ref(user_id)
             except Exception:
                 logger.exception("Failed to edit form message in fallback path")
         if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji="", arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
             try:
                 if user_id:
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
