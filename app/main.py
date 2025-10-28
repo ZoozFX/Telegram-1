@@ -693,7 +693,7 @@ Thanks for choosing YesFX!
 🔢 رقم الحساب: {account.account_number}
 
 يرجى مراجعة البيانات المقدمة
-أو التواصل مع <a href="https://t.me/Omarkin9">الدعم</a>.
+أو التواصل مع @Omarkin9.
                 """
             else:
                 title = "Account Not Activated"
@@ -708,7 +708,7 @@ Your account was not activated ❌{reason_text}
 🔢 Account Number: {account.account_number}
 
 Please review the submitted data
-or contact <a href="https://t.me/Omarkin9">support</a>.
+or contact @Omarkin9.
                 """
 
         keyboard = [
