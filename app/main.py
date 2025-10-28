@@ -200,9 +200,9 @@ def build_header_html(
     
     # تحديد طول الخط بناءً على اللغة
     if is_arabic:
-        target_width = 28  # 40 للغة العربية
+        target_width = 25  # 40 للغة العربية
     else:
-        target_width = 28  # 25 للغة الإنجليزية
+        target_width = 25  # 25 للغة الإنجليزية
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
