@@ -161,72 +161,61 @@ def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
 # -------------------------------
 # consistent header builder
 # -------------------------------
-
-
 def build_header_html(
     title: str,
     keyboard_labels: List[str],
-    header_emoji: str = "⭐",
+    header_emoji: str = HEADER_EMOJI,
     underline_enabled: bool = True,
     underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
     
-    # رموز Unicode للتحكم في الاتجاه
-    NBSP = "\u00A0"   # مسافة غير قابلة للكسر (Non-Breaking Space)
-    RLE = "\u202B"    # Right-to-Left Embedding
-    PDF = "\u202C"    # Pop Directional Formatting
-    RLM = "\u200F"    # Right-to-Left Mark
-    LRM = "\u200E"    # Left-to-Right Mark
-
+    NBSP = "\u00A0"
+    RLE = "\u202B"
+    PDF = "\u202C"
+    RLM = "\u200F"
+    LLM = "\u200E"
     def _strip_directionals(s: str) -> str:
-        """إزالة رموز الاتجاه من النص"""
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
     MIN_TITLE_WIDTH = 20
-
-    # تنظيف العنوان (لو لديك دالة remove_emoji و display_width)
-    clean_title = title  # مؤقتًا دون إزالة الإيموجي
-    title_len = len(clean_title)
-
-    # توسيط العنوان باستخدام NBSP بدل المسافات
+    clean_title = remove_emoji(title)
+    title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
         extra_spaces = MIN_TITLE_WIDTH - title_len
         left_pad = extra_spaces // 2
         right_pad = extra_spaces - left_pad
-        title = f"{NBSP * left_pad}{title}{NBSP * right_pad}"
+        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
 
-    # كشف ما إذا كان النص عربي
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
-    # إعداد النص المرئي مع الاتجاه المناسب
     if is_arabic:
         indent = NBSP * arabic_indent
-        visible_title = f"{indent}{NBSP}{header_emoji}{NBSP}{title}{NBSP}{header_emoji}{NBSP}"
+        visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
-        visible_title = f"{header_emoji}{NBSP}{title}{NBSP}{header_emoji}"
+        visible_title = f"{header_emoji} {title} {header_emoji}"
 
-    # حساب العرض بعد إزالة رموز الاتجاه
     measure_title = _strip_directionals(visible_title)
-    title_width = len(measure_title)
+    title_width = display_width(measure_title)
     
-    # تحديد طول الخط بناءً على اللغة
-    target_width = 25 if not is_arabic else 25
-
+    if is_arabic:
+        target_width = 29
+    else:
+        target_width = 29
+    
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
-
-    # التوسيط الكامل باستخدام NBSP
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
-
-    # إنشاء الخط السفلي بنفس المنطق
     underline_line = ""
     if underline_enabled:
-        underline_line = "\n" + (NBSP * 1) + (underline_char * target_width)
+        
+        if is_arabic:
+            underline_line = "\n" + RLM + (underline_char * target_width)
+        else:
+            underline_line = "\n" + RLM + (underline_char * target_width)
 
     return centered_line + underline_line
-
 # -------------------------------
 # DB helpers
 # -------------------------------
