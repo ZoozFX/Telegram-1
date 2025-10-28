@@ -181,48 +181,39 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 20
-    clean_title = remove_emoji(title)
-    title_len = display_width(clean_title)
-    
-    # توسيط العنوان إذا كان قصيراً
-    if title_len < MIN_TITLE_WIDTH:
-        extra_spaces = MIN_TITLE_WIDTH - title_len
-        left_pad = extra_spaces // 2
-        right_pad = extra_spaces - left_pad
-        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
-
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
 
+    # إنشاء العنوان المرئي مع الإيموجيات
     if is_arabic:
         indent = NBSP * arabic_indent
         visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
     else:
         visible_title = f"{header_emoji} {title} {header_emoji}"
 
+    # 🎯 **الحساب الصحيح للعرض بعد إضافة الإيموجيات**
     measure_title = _strip_directionals(visible_title)
-    title_width = display_width(measure_title)
+    final_title_width = display_width(measure_title)  # العرض النهائي بعد الإيموجيات
     
-    # 🎯 تحديد طول الخط بناءً على المعامل أو العرض الافتراضي
+    # 🎯 **تحديد طول الخط - توسيط دائماً**
     if line_width is not None:
         target_width = line_width  # استخدام الطول المحدد
     else:
         # الطول الافتراضي بناءً على اللغة
         target_width = 40 if is_arabic else 30
     
-    # 🎯 توسيط العنوان والخط معاً
-    total_padding = max(0, target_width - title_width)
+    # 🎯 **توسيط العنوان دائماً (سواء كان قصيراً أو طويلاً)**
+    total_padding = max(0, target_width - final_title_width)
     left_padding = total_padding // 2
     right_padding = total_padding - left_padding
     
     # العنوان الموسط
     centered_title = f"{NBSP * left_padding}<b>{visible_title}</b>{NBSP * right_padding}"
     
-    # 🎯 الخط السفلي المتوسط
+    # 🎯 **الخط السفلي المتوسط - استخدام نفس العرض المستخدم في العنوان**
     underline_line = ""
     if underline_enabled:
-        # استخدام نفس التباعد لتوسيط الخط
-        underline_line = f"\n{NBSP * left_padding}{underline_char * title_width}{NBSP * right_padding}"
+        # استخدام نفس التباعد ونفس العرض المستخدم في العنوان
+        underline_line = f"\n{NBSP * left_padding}{underline_char * final_title_width}{NBSP * right_padding}"
 
     return centered_title + underline_line
 # -------------------------------
