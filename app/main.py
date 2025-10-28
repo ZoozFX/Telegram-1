@@ -687,7 +687,7 @@ Thanks for choosing YesFX!
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ لم يتم تفعيل حسابك
+❌ لم يتم تفعيل حسابك{reason_text}
 
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
@@ -702,7 +702,7 @@ Thanks for choosing YesFX!
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-Your account was not activated ❌
+Your account was not activated ❌{reason_text}
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
