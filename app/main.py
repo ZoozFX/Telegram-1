@@ -654,14 +654,14 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=1)
                 message = f"""
 {header}
-✅ تم تفعيل حساب التداول الخاص بك
+تم ربط الحساب بخدمة النسخ ✅️
 
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
 
-أنت الآن تتمتع بخدمة نسخ الصفقات.
-شكراً لثقتك بنا!
+نتمنى لك التوفيق.
+وشكراً علي اختيارك لنظام YesFX!
                 """
             else:
                 title = "Congratulations"
@@ -669,14 +669,14 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
                 message = f"""
 {header}
-Your trading account has been activated ✅
+Your account is linked to the copy service ✅️
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
 
-You are now enjoying copy trading services.
-Thank you for your trust!
+Wishing you success.
+Thanks for choosing YesFX!
                 """
         else:
             # حالة الرفض
@@ -692,7 +692,8 @@ Thank you for your trust!
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 
-يرجى مراجعة البيانات المقدمة أو التواصل مع <a href="https://t.me/Omarkin9">الدعم</a>.
+يرجى مراجعة البيانات المقدمة
+أو التواصل مع <a href="https://t.me/Omarkin9">الدعم</a>.
                 """
             else:
                 title = "Account Not Activated"
@@ -706,7 +707,8 @@ Your trading account was not activated ❌{reason_text}
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 
-Please review the submitted data or contact <a href="https://t.me/Omarkin9">support</a>.
+Please review the submitted data
+or contact <a href="https://t.me/Omarkin9">support</a>.
                 """
 
         keyboard = [
@@ -1453,10 +1455,10 @@ def webapp_edit_accounts(request: Request):
     if is_ar:
         expected_return_options = """
             <option value="">اختر العائد المتوقع</option>
-            <option value="من 10 : 15 %">من 10 : 15 %</option>
-            <option value="من 20 : 30 %">من 20 : 30 %</option>
-            <option value="من 30 : 45 %">من 30 : 45 %</option>
-            <option value="من 40 : 60 %">من 40 : 60 %</option>
+            <option value="10% - 15%">10% - 15%</option>
+            <option value="20% - 30%">20% - 30%</option>
+            <option value="30% - 45%">30% - 45%</option>
+            <option value="40% - 60%">40% - 60%</option>
         """
     else:
         expected_return_options = """
@@ -2242,14 +2244,14 @@ async def webapp_submit(payload: dict = Body(...)):
             
             ea_link = "https://t.me/Nagyfx"
             if display_lang == "ar":
-                title = "طلب نسخة من الاكسبيرت"
+                title = "طلب اختبار أنظمة YesFX (الوكلاء فقط)"
                 message_text = ""
-                button_text = "🤖 طلب نسخة من الاكسبيرت"
+                button_text = "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)"
                 back_button = "🔙 الرجوع لتداول الفوركس"
             else:
-                title = "Request EA Version"
+                title = "Request to Test YesFX Systems (Agents Only)"
                 message_text = ""
-                button_text = "🤖 Request EA Version"
+                button_text = "🤖 Request to Test YesFX Systems (Agents Only)"
                 back_button = "🔙 Back to Forex"
 
             labels = [button_text, back_button]
@@ -2765,8 +2767,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sections_data = {
         "forex_main": {
-            "ar": ["📊 نسخ الصفقات", "🤖 طلب نسخة من الاكسبيرت"],
-            "en": ["📊 Copy Trading", "🤖 Request EA Version"],
+            "ar": ["📊 نسخ الصفقات", "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)"],
+            "en": ["📊 Copy Trading", "🤖 Request to Test YesFX Systems (Agents Only)"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -2794,7 +2796,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
         keyboard = []
         for name in options:
-            if name in ("🤖 طلب نسخة من الاكسبيرت", "🤖 Request EA Version"):
+            if name in ("🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)", "🤖 Request to Test YesFX Systems (Agents Only)"):
                 keyboard.append([InlineKeyboardButton(name, url="https://t.me/Nagyfx")])
             else:
                 keyboard.append([InlineKeyboardButton(name, callback_data=name)])
