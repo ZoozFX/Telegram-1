@@ -200,9 +200,9 @@ def build_header_html(
     
    
     if is_arabic:
-        target_width = 29
+        target_width = 28
     else:
-        target_width = 29
+        target_width = 28
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -702,7 +702,7 @@ Thanks for choosing YesFX!
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ Your account was not activated
+❌ Your account was not activated{reason_text}
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
