@@ -217,7 +217,7 @@ def build_header_html(
         if is_arabic:
             underline_line = "\n" + RLM + (underline_char * TARGET_WIDTH)
         else:
-            underline_line = "\n" + RLM + (underline_char * TARGET_WIDTH)
+            underline_line = "\n" + LLM + (underline_char * TARGET_WIDTH)
 
     return centered_line + underline_line
 # -------------------------------
