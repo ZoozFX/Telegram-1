@@ -212,9 +212,9 @@ def build_header_html(
     if underline_enabled:
         # إضافة RLM قبل الخط في حالة اللغة العربية
         if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * target_width)
+            underline_line = "\n" + NBSP + (underline_char * target_width)
         else:
-            underline_line = "\n" + LLM + (underline_char * target_width)
+            underline_line = "\n" + NBSP + (underline_char * target_width)
 
     return centered_line + underline_line
 # -------------------------------
