@@ -683,7 +683,7 @@ Thanks for choosing YesFX!
             if lang == "ar":
                 title = "لم يتم تفعيل الحساب"
                 labels = ["✅ حسناً"]
-                header = build_header_html(title, labels, header_emoji="❗️",  arabic_indent=1)
+                header = build_header_html(title, labels, header_emoji="🎉",  arabic_indent=1)
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
@@ -698,11 +698,11 @@ Thanks for choosing YesFX!
             else:
                 title = "Account Not Activated"
                 labels = ["✅ OK"]
-                header = build_header_html(title, labels, header_emoji="❗️", arabic_indent=0)
+                header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-Your account was not activated ❌{reason_text}
+❌ Your account was not activated{reason_text}
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
