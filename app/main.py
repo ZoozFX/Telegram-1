@@ -198,10 +198,7 @@ def build_header_html(
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-    if is_arabic:
-        target_width = 29
-    else:
-        target_width = 29
+    target_width = 25  # Changed to 25 as per request
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -1260,7 +1257,7 @@ def webapp_existing_account(request: Request):
         labels['agent'],
         labels['expected_return']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=True,arabic_indent=1 if lang == "ar" else 0)
     #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
@@ -1478,7 +1475,7 @@ def webapp_edit_accounts(request: Request):
         labels['save'],
         labels['delete']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=True,arabic_indent=1 if lang == "ar" else 0)
     #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
