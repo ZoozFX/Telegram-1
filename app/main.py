@@ -202,7 +202,7 @@ def build_header_html(
     # إعداد النص المرئي مع الاتجاه المناسب
     if is_arabic:
         indent = NBSP * arabic_indent
-        visible_title = f"{indent}{RLE}{header_emoji}{NBSP}{title}{NBSP}{header_emoji}{PDF}"
+        visible_title = f"{indent}{NBSP}{header_emoji}{NBSP}{title}{NBSP}{header_emoji}{NBSP}"
     else:
         visible_title = f"{header_emoji}{NBSP}{title}{NBSP}{header_emoji}"
 
