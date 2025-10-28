@@ -3714,6 +3714,11 @@ async def submit_existing_account(payload: dict = Body(...)):
 # ===============================
 # Handlers registration - CORRECTED ORDER
 # ===============================
+# Message handlers
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
+
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("admin", admin_start))
 
@@ -3731,10 +3736,7 @@ application.add_handler(CallbackQueryHandler(handle_notification_confirmation, p
 # GENERAL menu_handler - SHOULD COME LAST
 application.add_handler(CallbackQueryHandler(menu_handler))
 
-# Message handlers
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
+
 # ===============================
 # Webhook setup
 # ===============================
