@@ -306,6 +306,26 @@ def save_trading_account(
 ) -> Tuple[bool, TradingAccount]:
     
     try:
+        # التحقق من الحقول المطلوبة
+        required_fields = {
+            'broker_name': broker_name,
+            'account_number': account_number,
+            'password': password,
+            'server': server,
+            'initial_balance': initial_balance,
+            'current_balance': current_balance,
+            'withdrawals': withdrawals,
+            'copy_start_date': copy_start_date,
+            'agent': agent,
+            'expected_return': expected_return
+        }
+        
+        # التحقق من أن جميع الحقول غير فارغة
+        for field_name, field_value in required_fields.items():
+            if not field_value or str(field_value).strip() == "":
+                logger.error(f"Missing required field: {field_name}")
+                return False, None
+        
         db = SessionLocal()
         subscriber = db.query(Subscriber).filter(Subscriber.id == subscriber_id).first()
         if not subscriber:
@@ -371,13 +391,25 @@ def save_trading_account(
 def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAccount]:
     
     try:
+        # التحقق من الحقول المطلوبة إذا كانت موجودة في kwargs
+        required_fields = [
+            'broker_name', 'account_number', 'password', 'server',
+            'initial_balance', 'current_balance', 'withdrawals',
+            'copy_start_date', 'agent', 'expected_return'
+        ]
+        
+        for field in required_fields:
+            if field in kwargs and (not kwargs[field] or str(kwargs[field]).strip() == ""):
+                logger.error(f"Missing required field in update: {field}")
+                return False, None
+        
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
         if not account:
             db.close()
             return False, None
         
-       
+        # حفظ البيانات القديمة للإشعار
         old_data = {
             "broker_name": account.broker_name,
             "account_number": account.account_number,
@@ -388,14 +420,14 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             if hasattr(account, key) and value is not None:
                 setattr(account, key, value)
         
-        
+        # إعادة الحساب إلى حالة قيد المراجعة بعد التعديل
         account.status = "under_review"
         account.rejection_reason = None 
         
         db.commit()
         db.refresh(account)
         
-        
+        # إعداد البيانات للإشعار
         subscriber = account.subscriber
         account_data = {
             "id": account.id,
@@ -423,7 +455,7 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
         
         db.close()
         
-       
+        # إرسال إشعار للمسؤول
         import asyncio
         try:
             asyncio.create_task(send_admin_notification("updated_account", account_data, subscriber_data))
@@ -1234,19 +1266,20 @@ def webapp_existing_account(request: Request):
 
     page_title = "🧾 تسجيل بيانات حساب التداول" if is_ar else "🧾 Register Trading Account"
     labels = {
-        "broker": "اسم الشركة" if is_ar else "Broker Name",
-        "account": "رقم الحساب" if is_ar else "Account Number",
-        "password": "كلمة السر" if is_ar else "Password",
-        "server": "سيرفر التداول" if is_ar else "Trading Server",
-        "initial_balance": "رصيد البداية" if is_ar else "Initial Balance",
-        "current_balance": "الرصيد الحالي" if is_ar else "Current Balance",
-        "withdrawals": "المسحوبات" if is_ar else "Withdrawals",
-        "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
-        "agent": "الوكيل" if is_ar else "Agent",
-        "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
+        "broker": "اسم الشركة *" if is_ar else "Broker Name *",
+        "account": "رقم الحساب *" if is_ar else "Account Number *",
+        "password": "كلمة السر *" if is_ar else "Password *",
+        "server": "سيرفر التداول *" if is_ar else "Trading Server *",
+        "initial_balance": "رصيد البداية *" if is_ar else "Initial Balance *",
+        "current_balance": "الرصيد الحالي *" if is_ar else "Current Balance *",
+        "withdrawals": "المسحوبات *" if is_ar else "Withdrawals *",
+        "copy_start_date": "تاريخ بدء النسخ *" if is_ar else "Copy Start Date *",
+        "agent": "الوكيل *" if is_ar else "Agent *",
+        "expected_return": "العائد المتوقع *" if is_ar else "Expected Return *",
         "submit": "تسجيل" if is_ar else "Submit",
         "close": "إغلاق" if is_ar else "Close",
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
+        "required_field": "هذا الحقل مطلوب" if is_ar else "This field is required",
         "risk_warning": "⚠️ تنبيه: كلما ارتفع العائد المتوقع زادت المخاطر" if is_ar else "⚠️ Warning: Higher expected returns come with higher risks"
     }
     dir_attr = "rtl" if is_ar else "ltr"
@@ -1284,7 +1317,6 @@ def webapp_existing_account(request: Request):
         labels['expected_return']
     ]
     header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
-    #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
     <!doctype html>
@@ -1306,6 +1338,8 @@ def webapp_existing_account(request: Request):
         .form-row > div{{flex:1;}}
         .risk-warning{{font-size:12px;color:#ff6b35;margin-top:4px;text-align:{text_align};font-weight:500;}}
         .header-container{{text-align:{text_align}; margin-bottom:20px;}}
+        .required{{color:#ff4444;}}
+        .field-error{{color:#ff4444;font-size:12px;margin-top:2px;display:none;}}
       </style>
     </head>
     <body>
@@ -1314,59 +1348,69 @@ def webapp_existing_account(request: Request):
           {header_html}
         </div>
         
-        <label>{labels['broker']}</label>
-        <select id="broker">
+        <label>{labels['broker']} <span class="required">*</span></label>
+        <select id="broker" required>
           <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
           <option value="Oneroyal">Oneroyal</option>
           <option value="Tickmill">Tickmill</option>
         </select>
+        <div id="broker_error" class="field-error">{labels['required_field']}</div>
 
         <div class="form-row">
           <div>
-            <label>{labels['account']}</label>
-            <input id="account" placeholder="123456" />
+            <label>{labels['account']} <span class="required">*</span></label>
+            <input id="account" placeholder="123456" required />
+            <div id="account_error" class="field-error">{labels['required_field']}</div>
           </div>
           <div>
-            <label>{labels['password']}</label>
-            <input id="password" type="password" placeholder="••••••••" />
+            <label>{labels['password']} <span class="required">*</span></label>
+            <input id="password" type="password" placeholder="••••••••" required />
+            <div id="password_error" class="field-error">{labels['required_field']}</div>
           </div>
         </div>
 
-        <label>{labels['server']}</label>
-        <input id="server" placeholder="Oneroyal-Live" />
+        <label>{labels['server']} <span class="required">*</span></label>
+        <input id="server" placeholder="Oneroyal-Live" required />
+        <div id="server_error" class="field-error">{labels['required_field']}</div>
 
         <div class="form-row">
           <div>
-            <label>{labels['initial_balance']}</label>
-            <input id="initial_balance" type="number" placeholder="0.00" step="0.01" />
+            <label>{labels['initial_balance']} <span class="required">*</span></label>
+            <input id="initial_balance" type="number" placeholder="0.00" step="0.01" required />
+            <div id="initial_balance_error" class="field-error">{labels['required_field']}</div>
           </div>
           <div>
-            <label>{labels['current_balance']}</label>
-            <input id="current_balance" type="number" placeholder="0.00" step="0.01" />
+            <label>{labels['current_balance']} <span class="required">*</span></label>
+            <input id="current_balance" type="number" placeholder="0.00" step="0.01" required />
+            <div id="current_balance_error" class="field-error">{labels['required_field']}</div>
           </div>
         </div>
 
         <div class="form-row">
           <div>
-            <label>{labels['withdrawals']}</label>
-            <input id="withdrawals" type="number" placeholder="0.00" step="0.01" />
+            <label>{labels['withdrawals']} <span class="required">*</span></label>
+            <input id="withdrawals" type="number" placeholder="0.00" step="0.01" required />
+            <div id="withdrawals_error" class="field-error">{labels['required_field']}</div>
           </div>
           <div>
-            <label>{labels['copy_start_date']}</label>
-            <input id="copy_start_date" type="date" />
+            <label>{labels['copy_start_date']} <span class="required">*</span></label>
+            <input id="copy_start_date" type="date" required />
+            <div id="copy_start_date_error" class="field-error">{labels['required_field']}</div>
           </div>
         </div>
 
-        <label>{labels['agent']}</label>
-        <select id="agent">
+        <label>{labels['agent']} <span class="required">*</span></label>
+        <select id="agent" required>
           <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
           {agents_options}
         </select>
+        <div id="agent_error" class="field-error">{labels['required_field']}</div>
 
-        <label>{labels['expected_return']}</label>
-        <select id="expected_return">
+        <label>{labels['expected_return']} <span class="required">*</span></label>
+        <select id="expected_return" required>
           {expected_return_options}
         </select>
+        <div id="expected_return_error" class="field-error">{labels['required_field']}</div>
         <div class="risk-warning">{labels['risk_warning']}</div>
 
         <div style="margin-top:12px;text-align:{text_align}">
@@ -1382,7 +1426,60 @@ def webapp_existing_account(request: Request):
         try{{tg.expand();}}catch(e){{}}
         const statusEl = document.getElementById('status');
 
+        // دالة للتحقق من الحقول المطلوبة
+        function validateForm() {{
+          const fields = [
+            {{id: 'broker', name: '{labels['broker']}'}},
+            {{id: 'account', name: '{labels['account']}'}},
+            {{id: 'password', name: '{labels['password']}'}},
+            {{id: 'server', name: '{labels['server']}'}},
+            {{id: 'initial_balance', name: '{labels['initial_balance']}'}},
+            {{id: 'current_balance', name: '{labels['current_balance']}'}},
+            {{id: 'withdrawals', name: '{labels['withdrawals']}'}},
+            {{id: 'copy_start_date', name: '{labels['copy_start_date']}'}},
+            {{id: 'agent', name: '{labels['agent']}'}},
+            {{id: 'expected_return', name: '{labels['expected_return']}'}}
+          ];
+
+          let isValid = true;
+          
+          // إخفاء جميع رسائل الخطأ أولاً
+          fields.forEach(field => {{
+            const errorEl = document.getElementById(field.id + '_error');
+            if (errorEl) errorEl.style.display = 'none';
+          }});
+
+          // التحقق من كل حقل
+          fields.forEach(field => {{
+            const inputEl = document.getElementById(field.id);
+            const value = inputEl.value.trim();
+            
+            if (!value) {{
+              const errorEl = document.getElementById(field.id + '_error');
+              if (errorEl) {{
+                errorEl.style.display = 'block';
+                errorEl.textContent = '{labels['required_field']}';
+              }}
+              isValid = false;
+              
+              // إضافة تأثير للخطأ
+              inputEl.style.borderColor = '#ff4444';
+            }} else {{
+              inputEl.style.borderColor = '#ccc';
+            }}
+          }});
+
+          return isValid;
+        }}
+
         async function submitForm(){{
+          // التحقق من جميع الحقول أولاً
+          if (!validateForm()) {{
+            statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
           const broker = document.getElementById('broker').value.trim();
           const account = document.getElementById('account').value.trim();
           const password = document.getElementById('password').value.trim();
@@ -1393,11 +1490,6 @@ def webapp_existing_account(request: Request):
           const copy_start_date = document.getElementById('copy_start_date').value.trim();
           const agent = document.getElementById('agent').value.trim();
           const expected_return = document.getElementById('expected_return').value.trim();
-
-          if(!broker || !account || !password || !server){{
-            statusEl.textContent = '{ "يرجى ملئ جميع الحقول الأساسية" if is_ar else "Please fill all required fields" }';
-            return;
-          }}
 
           const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
           const payload = {{
@@ -1416,6 +1508,9 @@ def webapp_existing_account(request: Request):
           }};
 
           try{{
+            statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
+            statusEl.style.color = '#1E90FF';
+            
             const resp = await fetch(window.location.origin + '/webapp/existing-account/submit', {{
               method:'POST',
               headers:{{'Content-Type':'application/json'}},
@@ -1424,16 +1519,31 @@ def webapp_existing_account(request: Request):
             const data = await resp.json();
             if(resp.ok){{
               statusEl.style.color='green';
-              statusEl.textContent=data.message||'تم الحفظ بنجاح';
-              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},700);
+              statusEl.textContent=data.message||'{ "تم الحفظ بنجاح" if is_ar else "Saved successfully" }';
+              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},1500);
               try{{tg.sendData(JSON.stringify({{status:'sent',type:'existing_account'}}));}}catch(e){{}}
             }}else{{
               statusEl.textContent=data.error||'{labels["error"]}';
+              statusEl.style.color='#ff4444';
             }}
           }}catch(e){{
             statusEl.textContent='{labels["error"]}: '+e.message;
+            statusEl.style.color='#ff4444';
           }}
         }}
+
+        // إضافة مستمعين للأحداث للتحقق الفوري
+        document.querySelectorAll('input, select').forEach(element => {{
+          element.addEventListener('blur', validateForm);
+          element.addEventListener('input', function() {{
+            const value = this.value.trim();
+            if (value) {{
+              this.style.borderColor = '#ccc';
+              const errorEl = document.getElementById(this.id + '_error');
+              if (errorEl) errorEl.style.display = 'none';
+            }}
+          }});
+        }});
 
         document.getElementById('submit').addEventListener('click',submitForm);
         document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
@@ -1451,20 +1561,21 @@ def webapp_edit_accounts(request: Request):
     page_title = "✏️ تعديل حسابات التداول" if is_ar else "✏️ Edit Trading Accounts"
     labels = {
         "select_account": "اختر الحساب" if is_ar else "Select Account",
-        "broker": "اسم الشركة" if is_ar else "Broker Name",
-        "account": "رقم الحساب" if is_ar else "Account Number",
-        "password": "كلمة السر" if is_ar else "Password",
-        "server": "سيرفر التداول" if is_ar else "Trading Server",
-        "initial_balance": "رصيد البداية" if is_ar else "Initial Balance",
-        "current_balance": "الرصيد الحالي" if is_ar else "Current Balance",
-        "withdrawals": "المسحوبات" if is_ar else "Withdrawals",
-        "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
-        "agent": "الوكيل" if is_ar else "Agent",
-        "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
+        "broker": "اسم الشركة *" if is_ar else "Broker Name *",
+        "account": "رقم الحساب *" if is_ar else "Account Number *",
+        "password": "كلمة السر *" if is_ar else "Password *",
+        "server": "سيرفر التداول *" if is_ar else "Trading Server *",
+        "initial_balance": "رصيد البداية *" if is_ar else "Initial Balance *",
+        "current_balance": "الرصيد الحالي *" if is_ar else "Current Balance *",
+        "withdrawals": "المسحوبات *" if is_ar else "Withdrawals *",
+        "copy_start_date": "تاريخ بدء النسخ *" if is_ar else "Copy Start Date *",
+        "agent": "الوكيل *" if is_ar else "Agent *",
+        "expected_return": "العائد المتوقع *" if is_ar else "Expected Return *",
         "save": "حفظ التغييرات" if is_ar else "Save Changes",
         "delete": "حذف الحساب" if is_ar else "Delete Account",
         "close": "إغلاق" if is_ar else "Close",
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
+        "required_field": "هذا الحقل مطلوب" if is_ar else "This field is required",
         "no_accounts": "لا توجد حسابات" if is_ar else "No accounts found",
         "account_under_review": "⚠️ الحساب قيد المراجعة - لا يمكن التعديل" if is_ar else "⚠️ Account under review - cannot edit",
         "account_under_review_delete": "⚠️ الحساب قيد المراجعة - لا يمكن الحذف" if is_ar else "⚠️ Account under review - cannot delete",
@@ -1502,7 +1613,6 @@ def webapp_edit_accounts(request: Request):
         labels['delete']
     ]
     header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
-    #header_html = build_webapp_header(page_title, lang, form_labels)
 
     html = f"""
     <!doctype html>
@@ -1529,6 +1639,8 @@ def webapp_edit_accounts(request: Request):
         .status-warning{{background:#fff3cd;border:1px solid #ffeaa7;color:#856404}}
         .risk-warning{{font-size:12px;color:#ff6b35;margin-top:4px;text-align:{text_align};font-weight:500;}}
         .header-container{{text-align:{text_align}; margin-bottom:20px;}}
+        .required{{color:#ff4444;}}
+        .field-error{{color:#ff4444;font-size:12px;margin-top:2px;display:none;}}
       </style>
     </head>
     <body>
@@ -1548,59 +1660,69 @@ def webapp_edit_accounts(request: Request):
 
         <div id="status_message" class="status-message hidden"></div>
 
-        <label>{labels['broker']}</label>
-        <select id="broker">
+        <label>{labels['broker']} <span class="required">*</span></label>
+        <select id="broker" required>
           <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
           <option value="Oneroyal">Oneroyal</option>
           <option value="Tickmill">Tickmill</option>
         </select>
+        <div id="broker_error" class="field-error">{labels['required_field']}</div>
 
         <div class="form-row">
           <div>
-            <label>{labels['account']}</label>
-            <input id="account" placeholder="123456" />
+            <label>{labels['account']} <span class="required">*</span></label>
+            <input id="account" placeholder="123456" required />
+            <div id="account_error" class="field-error">{labels['required_field']}</div>
           </div>
           <div>
-            <label>{labels['password']}</label>
-            <input id="password" type="password" placeholder="••••••••" />
+            <label>{labels['password']} <span class="required">*</span></label>
+            <input id="password" type="password" placeholder="••••••••" required />
+            <div id="password_error" class="field-error">{labels['required_field']}</div>
           </div>
         </div>
 
-        <label>{labels['server']}</label>
-        <input id="server" placeholder="Oneroyal-Live" />
+        <label>{labels['server']} <span class="required">*</span></label>
+        <input id="server" placeholder="Oneroyal-Live" required />
+        <div id="server_error" class="field-error">{labels['required_field']}</div>
 
         <div class="form-row">
           <div>
-            <label>{labels['initial_balance']}</label>
-            <input id="initial_balance" type="number" placeholder="0.00" step="0.01" />
+            <label>{labels['initial_balance']} <span class="required">*</span></label>
+            <input id="initial_balance" type="number" placeholder="0.00" step="0.01" required />
+            <div id="initial_balance_error" class="field-error">{labels['required_field']}</div>
           </div>
           <div>
-            <label>{labels['current_balance']}</label>
-            <input id="current_balance" type="number" placeholder="0.00" step="0.01" />
+            <label>{labels['current_balance']} <span class="required">*</span></label>
+            <input id="current_balance" type="number" placeholder="0.00" step="0.01" required />
+            <div id="current_balance_error" class="field-error">{labels['required_field']}</div>
           </div>
         </div>
 
         <div class="form-row">
           <div>
-            <label>{labels['withdrawals']}</label>
-            <input id="withdrawals" type="number" placeholder="0.00" step="0.01" />
+            <label>{labels['withdrawals']} <span class="required">*</span></label>
+            <input id="withdrawals" type="number" placeholder="0.00" step="0.01" required />
+            <div id="withdrawals_error" class="field-error">{labels['required_field']}</div>
           </div>
           <div>
-            <label>{labels['copy_start_date']}</label>
-            <input id="copy_start_date" type="date" />
+            <label>{labels['copy_start_date']} <span class="required">*</span></label>
+            <input id="copy_start_date" type="date" required />
+            <div id="copy_start_date_error" class="field-error">{labels['required_field']}</div>
           </div>
         </div>
 
-        <label>{labels['agent']}</label>
-        <select id="agent">
+        <label>{labels['agent']} <span class="required">*</span></label>
+        <select id="agent" required>
           <option value="">{ 'اختر الوكيل' if is_ar else 'Select Agent' }</option>
           {agents_options}
         </select>
+        <div id="agent_error" class="field-error">{labels['required_field']}</div>
 
-        <label>{labels['expected_return']}</label>
-        <select id="expected_return">
+        <label>{labels['expected_return']} <span class="required">*</span></label>
+        <select id="expected_return" required>
           {expected_return_options}
         </select>
+        <div id="expected_return_error" class="field-error">{labels['required_field']}</div>
         <div class="risk-warning">{labels['risk_warning']}</div>
 
         <div style="margin-top:12px;text-align:{text_align}">
@@ -1619,6 +1741,52 @@ def webapp_edit_accounts(request: Request):
         const statusMessageEl = document.getElementById('status_message');
         let currentAccountId = null;
         let currentAccountStatus = null;
+
+        // دالة للتحقق من الحقول المطلوبة
+        function validateForm() {{
+          const fields = [
+            {{id: 'broker', name: '{labels['broker']}'}},
+            {{id: 'account', name: '{labels['account']}'}},
+            {{id: 'password', name: '{labels['password']}'}},
+            {{id: 'server', name: '{labels['server']}'}},
+            {{id: 'initial_balance', name: '{labels['initial_balance']}'}},
+            {{id: 'current_balance', name: '{labels['current_balance']}'}},
+            {{id: 'withdrawals', name: '{labels['withdrawals']}'}},
+            {{id: 'copy_start_date', name: '{labels['copy_start_date']}'}},
+            {{id: 'agent', name: '{labels['agent']}'}},
+            {{id: 'expected_return', name: '{labels['expected_return']}'}}
+          ];
+
+          let isValid = true;
+          
+          // إخفاء جميع رسائل الخطأ أولاً
+          fields.forEach(field => {{
+            const errorEl = document.getElementById(field.id + '_error');
+            if (errorEl) errorEl.style.display = 'none';
+          }});
+
+          // التحقق من كل حقل
+          fields.forEach(field => {{
+            const inputEl = document.getElementById(field.id);
+            const value = inputEl.value.trim();
+            
+            if (!value) {{
+              const errorEl = document.getElementById(field.id + '_error');
+              if (errorEl) {{
+                errorEl.style.display = 'block';
+                errorEl.textContent = '{labels['required_field']}';
+              }}
+              isValid = false;
+              
+              // إضافة تأثير للخطأ
+              inputEl.style.borderColor = '#ff4444';
+            }} else {{
+              inputEl.style.borderColor = '#ccc';
+            }}
+          }});
+
+          return isValid;
+        }}
 
         // دالة لتحميل الحسابات
         async function loadAccounts() {{
@@ -1783,12 +1951,21 @@ def webapp_edit_accounts(request: Request):
           
           if (!accountId) {{
             statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
+            statusEl.style.color = '#ff4444';
             return;
           }}
 
           // التحقق مما إذا كان الحساب قيد المراجعة
           if (accountStatus === 'under_review') {{
             statusEl.textContent = '{labels["account_under_review"]}';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
+          // التحقق من جميع الحقول المطلوبة
+          if (!validateForm()) {{
+            statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
+            statusEl.style.color = '#ff4444';
             return;
           }}
 
@@ -1807,12 +1984,6 @@ def webapp_edit_accounts(request: Request):
             tg_user: tg.initDataUnsafe.user,
             lang: "{lang}"
           }};
-
-          // التحقق من الحقول المطلوبة
-          if (!payload.broker_name || !payload.account_number || !payload.password || !payload.server) {{
-            statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
-            return;
-          }}
 
           try {{
             statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
@@ -1841,11 +2012,11 @@ def webapp_edit_accounts(request: Request):
                 }}
               }}, 1500);
             }} else {{
-              statusEl.style.color = '#b00';
+              statusEl.style.color = '#ff4444';
               statusEl.textContent = data.detail || '{labels["error"]}';
             }}
           }} catch (e) {{
-            statusEl.style.color = '#b00';
+            statusEl.style.color = '#ff4444';
             statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
@@ -1857,12 +2028,14 @@ def webapp_edit_accounts(request: Request):
           
           if (!accountId) {{
             statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
+            statusEl.style.color = '#ff4444';
             return;
           }}
 
           // التحقق مما إذا كان الحساب قيد المراجعة
           if (accountStatus === 'under_review') {{
             statusEl.textContent = '{labels["account_under_review_delete"]}';
+            statusEl.style.color = '#ff4444';
             return;
           }}
 
@@ -1905,11 +2078,11 @@ def webapp_edit_accounts(request: Request):
                 }}
               }}, 1500);
             }} else {{
-              statusEl.style.color = '#b00';
+              statusEl.style.color = '#ff4444';
               statusEl.textContent = data.detail || '{labels["error"]}';
             }}
           }} catch (e) {{
-            statusEl.style.color = '#b00';
+            statusEl.style.color = '#ff4444';
             statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
@@ -1921,6 +2094,19 @@ def webapp_edit_accounts(request: Request):
           
           // تعطيل النموذج في البداية
           disableForm();
+
+          // إضافة مستمعين للتحقق من الحقول
+          document.querySelectorAll('input, select').forEach(element => {{
+            element.addEventListener('blur', validateForm);
+            element.addEventListener('input', function() {{
+              const value = this.value.trim();
+              if (value) {{
+                this.style.borderColor = '#ccc';
+                const errorEl = document.getElementById(this.id + '_error');
+                if (errorEl) errorEl.style.display = 'none';
+              }}
+            }});
+          }});
         }});
 
         // إضافة المستمعين للأحداث
@@ -3115,8 +3301,31 @@ async def submit_existing_account(payload: dict = Body(...)):
         expected_return = (payload.get("expected_return") or "").strip()
         lang = (payload.get("lang") or "ar").lower()
 
+        # التحقق من جميع الحقول المطلوبة
+        required_fields = {
+            'broker': broker,
+            'account': account,
+            'password': password,
+            'server': server,
+            'initial_balance': initial_balance,
+            'current_balance': current_balance,
+            'withdrawals': withdrawals,
+            'copy_start_date': copy_start_date,
+            'agent': agent,
+            'expected_return': expected_return
+        }
+        
+        missing_fields = []
+        for field_name, field_value in required_fields.items():
+            if not field_value:
+                missing_fields.append(field_name)
+        
+        if missing_fields:
+            error_message = "Missing required fields: " + ", ".join(missing_fields)
+            return JSONResponse(status_code=400, content={"error": error_message})
+
         if not all([telegram_id, broker, account, password, server]):
-            return JSONResponse(status_code=400, content={"error": "Missing fields."})
+            return JSONResponse(status_code=400, content={"error": "Missing required fields."})
 
         subscriber = get_subscriber_by_telegram_id(telegram_id)
         if not subscriber:
