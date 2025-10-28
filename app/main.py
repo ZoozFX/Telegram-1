@@ -681,9 +681,9 @@ Thanks for choosing YesFX!
         else:
             # حالة الرفض
             if lang == "ar":
-                title = "لم يتم تفعيل الحساب"
+                title = "هناك بعض المشاكل"
                 labels = ["✅ حسناً"]
-                header = build_header_html(title, labels, header_emoji="🎉",  arabic_indent=1)
+                header = build_header_html(title, labels, header_emoji="⚠️",  arabic_indent=1)
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
@@ -696,13 +696,13 @@ Thanks for choosing YesFX!
 أو التواصل مع <a href="https://t.me/Omarkin9">الدعم</a>.
                 """
             else:
-                title = "Account Not Activated"
+                title = "Bad News"
                 labels = ["✅ OK"]
-                header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
+                header = build_header_html(title, labels, header_emoji="⚠️", arabic_indent=0)
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ Your account was not activated{reason_text}
+❌ Your account was not activated
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
