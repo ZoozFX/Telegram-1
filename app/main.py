@@ -99,7 +99,377 @@ def set_admin_language(admin_id: int, lang: str):
 def get_admin_language(admin_id: int) -> str:
     
     return ADMIN_LANGUAGE.get(admin_id, "ar")
-            
+
+# أضف هذه الدوال في قسم الـ Admin functions
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض لوحة التحكم الإدارية"""
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        await update.message.reply_text("❌ غير مصرح لك بالوصول إلى هذه الصفحة")
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        title = "لوحة التحكم الإدارية"
+        buttons = [
+            "📢 إرسال رسالة لكل المشتركين",
+            "👥 إرسال رسالة للمسجلين ببيانات",
+            "✅ إرسال رسالة لأصحاب الحسابات المقبولة",
+            "🔙 الرجوع"
+        ]
+    else:
+        title = "Admin Control Panel"
+        buttons = [
+            "📢 Send to All Subscribers",
+            "👥 Send to Registered Users", 
+            "✅ Send to Approved Accounts",
+            "🔙 Back"
+        ]
+    
+    header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+    
+    keyboard = []
+    for i in range(0, len(buttons) - 1, 2):
+        row = buttons[i:i+2]
+        keyboard_row = []
+        for btn in row:
+            if btn == "📢 إرسال رسالة لكل المشتركين" or btn == "📢 Send to All Subscribers":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_all"))
+            elif btn == "👥 إرسال رسالة للمسجلين ببيانات" or btn == "👥 Send to Registered Users":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_registered"))
+            elif btn == "✅ إرسال رسالة لأصحاب الحسابات المقبولة" or btn == "✅ Send to Approved Accounts":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_approved"))
+        keyboard.append(keyboard_row)
+    
+    keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML")
+
+def get_all_subscribers() -> List[Dict[str, Any]]:
+    """جلب جميع المشتركين في البوت"""
+    try:
+        db = SessionLocal()
+        subscribers = db.query(Subscriber).all()
+        result = []
+        for sub in subscribers:
+            result.append({
+                "telegram_id": sub.telegram_id,
+                "name": sub.name,
+                "lang": sub.lang
+            })
+        db.close()
+        return result
+    except Exception as e:
+        logger.exception(f"Failed to get all subscribers: {e}")
+        return []
+
+def get_registered_users() -> List[Dict[str, Any]]:
+    """جلب المستخدمين المسجلين ببيانات (لديهم بيانات شخصية)"""
+    try:
+        db = SessionLocal()
+        # جميع المشتركين في جدول subscribers يعتبرون مسجلين ببيانات
+        subscribers = db.query(Subscriber).all()
+        result = []
+        for sub in subscribers:
+            result.append({
+                "telegram_id": sub.telegram_id,
+                "name": sub.name,
+                "lang": sub.lang
+            })
+        db.close()
+        return result
+    except Exception as e:
+        logger.exception(f"Failed to get registered users: {e}")
+        return []
+
+def get_approved_accounts_users() -> List[Dict[str, Any]]:
+    """جلب المستخدمين الذين لديهم حسابات تداول مقبولة"""
+    try:
+        db = SessionLocal()
+        # جلب الحسابات التي حالتها "active"
+        approved_accounts = db.query(TradingAccount).filter(TradingAccount.status == "active").all()
+        
+        result = []
+        processed_users = set()
+        
+        for account in approved_accounts:
+            subscriber = account.subscriber
+            if subscriber.telegram_id and subscriber.telegram_id not in processed_users:
+                result.append({
+                    "telegram_id": subscriber.telegram_id,
+                    "name": subscriber.name,
+                    "lang": subscriber.lang,
+                    "account_number": account.account_number,
+                    "broker_name": account.broker_name
+                })
+                processed_users.add(subscriber.telegram_id)
+        
+        db.close()
+        return result
+    except Exception as e:
+        logger.exception(f"Failed to get approved accounts users: {e}")
+        return []
+
+async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة اختيار نوع البث الإداري"""
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    
+    # حفظ نوع البث المختار
+    context.user_data['broadcast_type'] = q.data
+    
+    if admin_lang == "ar":
+        message = "📝 يرجى إرسال الرسالة التي تريد بثها:"
+        cancel_btn = "❌ إلغاء"
+    else:
+        message = "📝 Please send the message you want to broadcast:"
+        cancel_btn = "❌ Cancel"
+    
+    keyboard = [[InlineKeyboardButton(cancel_btn, callback_data="admin_cancel_broadcast")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(message, reply_markup=reply_markup)
+
+async def process_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الرسالة المراد بثها"""
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_type' not in context.user_data:
+        return
+    
+    broadcast_type = context.user_data['broadcast_type']
+    message_text = update.message.text
+    admin_lang = get_admin_language(user_id)
+    
+    # جلب المستخدمين المستهدفين بناءً على النوع
+    if broadcast_type == "admin_broadcast_all":
+        target_users = get_all_subscribers()
+        target_name = "جميع المشتركين" if admin_lang == "ar" else "All Subscribers"
+    elif broadcast_type == "admin_broadcast_registered":
+        target_users = get_registered_users()
+        target_name = "المسجلين ببيانات" if admin_lang == "ar" else "Registered Users"
+    elif broadcast_type == "admin_broadcast_approved":
+        target_users = get_approved_accounts_users()
+        target_name = "أصحاب الحسابات المقبولة" if admin_lang == "ar" else "Approved Accounts Owners"
+    else:
+        return
+    
+    # إرسال رسالة تأكيد
+    if admin_lang == "ar":
+        confirm_text = f"""
+📊 تفاصيل البث:
+🎯 المستهدف: {target_name}
+👥 عدد المستخدمين: {len(target_users)}
+📝 الرسالة:
+{message_text}
+
+هل تريد متابعة البث؟
+        """
+    else:
+        confirm_text = f"""
+📊 Broadcast Details:
+🎯 Target: {target_name}
+👥 Users Count: {len(target_users)}
+📝 Message:
+{message_text}
+
+Do you want to proceed with broadcasting?
+        """
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ نعم، إرسال" if admin_lang == "ar" else "✅ Yes, Send", 
+                               callback_data="admin_confirm_broadcast"),
+            InlineKeyboardButton("❌ إلغاء" if admin_lang == "ar" else "❌ Cancel", 
+                               callback_data="admin_cancel_broadcast")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # حفظ البيانات مؤقتاً
+    context.user_data['broadcast_message'] = message_text
+    context.user_data['target_users'] = target_users
+    context.user_data['target_name'] = target_name
+    
+    await update.message.reply_text(confirm_text, reply_markup=reply_markup)
+
+async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تنفيذ عملية البث"""
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_message' not in context.user_data or 'target_users' not in context.user_data:
+        return
+    
+    message_text = context.user_data['broadcast_message']
+    target_users = context.user_data['target_users']
+    target_name = context.user_data['target_name']
+    admin_lang = get_admin_language(user_id)
+    
+    # إرسال رسالة بدء البث
+    if admin_lang == "ar":
+        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم...")
+    else:
+        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users...")
+    
+    # إحصاءات البث
+    successful = 0
+    failed = 0
+    
+    # إرسال الرسالة لكل مستخدم
+    for user in target_users:
+        try:
+            await application.bot.send_message(
+                chat_id=user['telegram_id'],
+                text=message_text
+            )
+            successful += 1
+        except Exception as e:
+            logger.error(f"Failed to send broadcast to {user['telegram_id']}: {e}")
+            failed += 1
+        
+        # تحديث الرسالة كل 10 عمليات إرسال
+        if (successful + failed) % 10 == 0:
+            if admin_lang == "ar":
+                await progress_msg.edit_text(f"⏳ جاري الإرسال... {successful + failed}/{len(target_users)}")
+            else:
+                await progress_msg.edit_text(f"⏳ Sending... {successful + failed}/{len(target_users)}")
+    
+    # إرسال تقرير النتائج
+    if admin_lang == "ar":
+        report_text = f"""
+✅ تقرير البث:
+🎯 المستهدف: {target_name}
+✅ تم الإرسال بنجاح: {successful}
+❌ فشل في الإرسال: {failed}
+📊 الإجمالي: {len(target_users)}
+        """
+    else:
+        report_text = f"""
+✅ Broadcast Report:
+🎯 Target: {target_name}
+✅ Successful: {successful}
+❌ Failed: {failed}
+📊 Total: {len(target_users)}
+        """
+    
+    await progress_msg.edit_text(report_text)
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.pop('broadcast_type', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_users', None)
+    context.user_data.pop('target_name', None)
+    
+    # عرض لوحة التحكم مرة أخرى
+    await admin_panel_from_callback(update, context)
+
+async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض لوحة التحكم من callback"""
+    q = update.callback_query
+    user_id = q.from_user.id
+    
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        title = "لوحة التحكم الإدارية"
+        buttons = [
+            "📢 إرسال رسالة لكل المشتركين",
+            "👥 إرسال رسالة للمسجلين ببيانات",
+            "✅ إرسال رسالة لأصحاب الحسابات المقبولة",
+            "🔙 الرجوع"
+        ]
+    else:
+        title = "Admin Control Panel"
+        buttons = [
+            "📢 Send to All Subscribers",
+            "👥 Send to Registered Users", 
+            "✅ Send to Approved Accounts",
+            "🔙 Back"
+        ]
+    
+    header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+    
+    keyboard = []
+    for i in range(0, len(buttons) - 1, 2):
+        row = buttons[i:i+2]
+        keyboard_row = []
+        for btn in row:
+            if btn == "📢 إرسال رسالة لكل المشتركين" or btn == "📢 Send to All Subscribers":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_all"))
+            elif btn == "👥 إرسال رسالة للمسجلين ببيانات" or btn == "👥 Send to Registered Users":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_registered"))
+            elif btn == "✅ إرسال رسالة لأصحاب الحسابات المقبولة" or btn == "✅ Send to Approved Accounts":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_approved"))
+        keyboard.append(keyboard_row)
+    
+    keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+
+async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """العودة من القائمة الإدارية"""
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id in ADMIN_TELEGRAM_IDS:
+        set_admin_language(user_id, "ar")  # أو احتفظ بالإعداد الحالي
+    
+    # تنظيف أي بيانات بث مؤقتة
+    context.user_data.pop('broadcast_type', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_users', None)
+    context.user_data.pop('target_name', None)
+    
+    await show_main_sections(update, context, get_admin_language(user_id))
+
+async def handle_admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إلغاء عملية البث"""
+    q = update.callback_query
+    await q.answer()
+    
+    # تنظيف البيانات المؤقتة
+    context.user_data.pop('broadcast_type', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_users', None)
+    context.user_data.pop('target_name', None)
+    
+    await admin_panel_from_callback(update, context)
+
+# تحديث دالة admin_start الحالية
+async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بدء الوضع الإداري"""
+    user_id = update.effective_user.id
+    if user_id in ADMIN_TELEGRAM_IDS:
+        await admin_panel(update, context)
+    else:
+        await start(update, context)
+
+# أضف هذه ال handlers في قسم تسجيل ال handlers
+application.add_handler(CommandHandler("admin", admin_start))
+application.add_handler(CallbackQueryHandler(handle_admin_broadcast, pattern="^admin_broadcast_"))
+application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_confirm_broadcast$"))
+application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
+application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
+
 def remove_emoji(text: str) -> str:
     out = []
     for ch in text:
