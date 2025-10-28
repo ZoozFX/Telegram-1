@@ -166,7 +166,7 @@ def build_header_html(
     keyboard_labels: List[str],
     header_emoji: str = "",  # جعل الإيموجي فارغًا افتراضيًا لإزالته
     underline_enabled: bool = True,
-    underline_char: str = "━━━━",
+    underline_char: str = "━━",
     arabic_indent: int = 0,
 ) -> str:
     
