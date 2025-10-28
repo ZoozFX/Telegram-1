@@ -200,9 +200,9 @@ def build_header_html(
     
    
     if is_arabic:
-        target_width = 28
+        target_width = 29
     else:
-        target_width = 28
+        target_width = 29
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
