@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 import asyncio
+import requests  # إضافة مكتبة requests لاستدعاء الـ API
 
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
@@ -179,6 +180,9 @@ WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
+# إضافة الـ SECRET_KEY كمتغير بيئي للحماية
+SECRET_KEY = os.getenv("SECRET_KEY")  # يجب تعيينه في Render كمتغير بيئي
+
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
 if not WEBAPP_URL:
@@ -315,6 +319,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "✅ الحسابات المقبولة",
             "❌ الحسابات المرفوضة",
             "🔍 بحث عن حساب",
+            "🔄 تحديث أداء الحسابات",
             "🔙 رجوع"
         ]
     else:
@@ -324,6 +329,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "✅ Approved",
             "❌ Rejected",
             "🔍 Search Account",
+            "🔄 Update Account Performances",
             "🔙 Back"
         ]
     
@@ -342,12 +348,51 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_rejected"))
             elif btn == "🔍 بحث عن حساب" or btn == "🔍 Search Account":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_search"))
+            elif btn == "🔄 تحديث أداء الحسابات" or btn == "🔄 Update Account Performances":
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_update_performances"))
         keyboard.append(keyboard_row)
     
     keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+
+# دالة جديدة لتحديث أداء الحسابات عند النقر على الزر
+async def admin_update_performances(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        await q.edit_message_text("❌ غير مصرح لك بالوصول إلى هذه الوظيفة")
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    
+    # استدعاء الرابط باستخدام الـ SECRET_KEY من المتغيرات البيئية
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        error_msg = "⚠️ SECRET_KEY غير معرف في المتغيرات البيئية" if admin_lang == "ar" else "⚠️ SECRET_KEY not defined in environment variables"
+        await q.edit_message_text(error_msg)
+        return
+    
+    url = f"https://telegram-1-i1z5.onrender.com/update-performances?key={secret_key}"
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            success_msg = "✅ تم تحديث أداء الحسابات بنجاح!" if admin_lang == "ar" else "✅ Account performances updated successfully!"
+            await q.edit_message_text(success_msg)
+        else:
+            error_msg = f"❌ فشل في التحديث: {response.json().get('detail', 'خطأ غير معروف')}" if admin_lang == "ar" else f"❌ Update failed: {response.json().get('detail', 'Unknown error')}"
+            await q.edit_message_text(error_msg)
+    except Exception as e:
+        error_msg = f"❌ خطأ في الاتصال: {str(e)}" if admin_lang == "ar" else f"❌ Connection error: {str(e)}"
+        await q.edit_message_text(error_msg)
+    
+    # بعد 2 ثواني، العودة إلى قائمة إدارة الحسابات
+    await asyncio.sleep(2)
+    await admin_accounts_menu(update, context)
 
 async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -3212,6 +3257,19 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
     except Exception as e:
         logger.exception(f"Failed to refresh user interface: {e}")
         
+       
+        try:
+            sent = await application.bot.send_message(
+                chat_id=telegram_id,
+                text=updated_message,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
+        except Exception:
+            logger.exception("Failed to send fallback refresh message")
+
 # ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
 # ===============================
@@ -4194,6 +4252,7 @@ application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(ac
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
 application.add_handler(CallbackQueryHandler(menu_handler))
+application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))  # إضافة الهاندلر الجديد
 # ===============================
 # Webhook setup
 # ===============================
@@ -4203,8 +4262,7 @@ def root():
 
 @app.get("/update-performances")
 def update_performances(key: str):
-    SECRET_KEY = "my_secret_key"  # غير هذا إلى مفتاح سري قوي
-    if key != SECRET_KEY:
+    if key != SECRET_KEY:  # التحقق من الـ key المخزن في المتغيرات البيئية
         raise HTTPException(status_code=403, detail="Invalid key")
     
     populate_account_performances()
