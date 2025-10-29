@@ -211,7 +211,7 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
             
             # حذف رسالة النجاح بعد 3 ثواني
             async def delete_success_msg():
-                await asyncio.sleep(3)
+                await asyncio.sleep(0)
                 try:
                     await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
                 except Exception:
@@ -1108,7 +1108,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # حذف رسالة النجاح بعد 3 ثواني
             async def delete_success_msg():
-                await asyncio.sleep(3)
+                await asyncio.sleep(0)
                 try:
                     await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
                 except Exception:
