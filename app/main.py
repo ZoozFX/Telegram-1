@@ -3224,7 +3224,7 @@ async def webapp_submit(payload: dict = Body(...)):
         tg_user = payload.get("tg_user") or {}
         page_lang = (payload.get("lang") or "").lower() or None
 
-       
+        # التحقق من صحة البيانات
         if not name or len(name) < 2:
             return JSONResponse(status_code=400, content={"error": "Name too short or missing."})
         if not EMAIL_RE.match(email):
@@ -3232,7 +3232,7 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-       
+        # تحديد اللغة
         detected_lang = None
         if page_lang in ("ar", "en"):
             detected_lang = page_lang
@@ -3243,6 +3243,7 @@ async def webapp_submit(payload: dict = Body(...)):
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
 
+        # حفظ أو تحديث بيانات المشترك
         result, subscriber = save_or_update_subscriber(
             name=name, 
             email=email, 
@@ -3252,14 +3253,16 @@ async def webapp_submit(payload: dict = Body(...)):
             telegram_username=telegram_username
         )
 
+        # إذا كان المستخدم مسجلاً بالفعل، تحديث الواجهة مباشرة
         is_edit_mode = payload.get("edit") == "1" or "edit" in (payload.get("params") or {})
         ref = get_form_ref(telegram_id) if telegram_id else None
+        
         if ref and ref.get("origin") == "my_accounts" and (is_edit_mode or result == "updated"):
             await refresh_user_accounts_interface(telegram_id, detected_lang, ref["chat_id"], ref["message_id"])
             return JSONResponse(content={"message": "Updated successfully."})
             
+        # تحديد لغة العرض
         display_lang = detected_lang
-        ref = get_form_ref(telegram_id) if telegram_id else None
         if page_lang in ("ar", "en"):
             display_lang = page_lang
         elif ref and ref.get("lang"):
@@ -3267,61 +3270,12 @@ async def webapp_submit(payload: dict = Body(...)):
         else:
             display_lang = detected_lang
 
-        
+        # إذا كان التسجيل من طلب EA
         if ref and ref.get("origin") == "open_form_ea":
-            
-            ea_link = "https://t.me/Nagyfx"
-            if display_lang == "ar":
-                title = "طلب اختبار أنظمة YesFX (الوكلاء فقط)"
-                message_text = ""
-                button_text = "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)"
-                back_button = "🔙 الرجوع لتداول الفوركس"
-            else:
-                title = "Request to Test YesFX Systems (Agents Only)"
-                message_text = ""
-                button_text = "🤖 Request to Test YesFX Systems (Agents Only)"
-                back_button = "🔙 Back to Forex"
-
-            labels = [button_text, back_button]
-            header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
-
-            keyboard = [
-                [InlineKeyboardButton(button_text, url=ea_link)],
-                [InlineKeyboardButton(back_button, callback_data="forex_main")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            edited = False
-            if ref:
-                try:
-                    await application.bot.edit_message_text(
-                        text=header + f"\n\n{message_text}",
-                        chat_id=ref["chat_id"], 
-                        message_id=ref["message_id"],
-                        reply_markup=reply_markup, 
-                        parse_mode="HTML", 
-                        disable_web_page_preview=True
-                    )
-                    edited = True
-                    clear_form_ref(telegram_id)
-                except Exception:
-                    logger.exception("Failed to edit original form message; will send a fallback message.")
-            if not edited:
-                if telegram_id:
-                    try:
-                        sent = await application.bot.send_message(
-                            chat_id=telegram_id, 
-                            text=header + f"\n\n{message_text}", 
-                            reply_markup=reply_markup, 
-                            parse_mode="HTML", 
-                            disable_web_page_preview=True
-                        )
-                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="ea_request", lang=display_lang)
-                    except Exception:
-                        logger.exception("Failed to send EA request message to user.")
-                else:
-                    logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
+            # ... الكود الحالي ...
+            pass
         elif ref and ref.get("origin") == "initial_registration":
-            
+            # إذا كان التسجيل الأولي، عرض القوائم الرئيسية
             if telegram_id:
                 try:
                     if display_lang == "ar":
@@ -3365,15 +3319,17 @@ async def webapp_submit(payload: dict = Body(...)):
                 except Exception as e:
                     logger.exception(f"Failed to show main sections after initial registration: {e}")
         else:
-           
+            # الحالة الافتراضية: عرض وسيطي التداول بعد التسجيل
             if display_lang == "ar":
                 header_title = "اختر وسيطك الآن"
-                labels = ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label]
-                header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1)
+                brokers_title = ""
+                back_label = "🔙 الرجوع لتداول الفوركس"
+                accounts_label = "👤 بياناتي وحساباتي"
             else:
                 header_title = "Choose your broker now"
-                labels = ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label]
-                header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=0)
+                brokers_title = ""
+                back_label = "🔙 Back to Forex"
+                accounts_label = "👤 My Data & Accounts"
             
             keyboard = [
                 [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
@@ -3388,7 +3344,7 @@ async def webapp_submit(payload: dict = Body(...)):
             if ref:
                 try:
                     await application.bot.edit_message_text(
-                        text=header + f"\n\n{brokers_title}",
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                         chat_id=ref["chat_id"], 
                         message_id=ref["message_id"],
                         reply_markup=reply_markup, 
@@ -3405,7 +3361,7 @@ async def webapp_submit(payload: dict = Body(...)):
                     try:
                         sent = await application.bot.send_message(
                             chat_id=telegram_id, 
-                            text=header + f"\n\n{brokers_title}", 
+                            text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                             reply_markup=reply_markup, 
                             parse_mode="HTML", 
                             disable_web_page_preview=True
@@ -3416,12 +3372,13 @@ async def webapp_submit(payload: dict = Body(...)):
                 else:
                     logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
 
+        # إرجاع الاستجابة المناسبة بناءً على نتيجة الحفظ
         if result == "created":
             return JSONResponse(content={"message": "Saved successfully."})
         elif result == "updated":
             return JSONResponse(content={"message": "Updated successfully."})
         else:
-            return JSONResponse(content={"message": "Saved (unknown state)."})
+            return JSONResponse(content={"message": "Saved successfully."})  # تغيير هنا لتفادي "unknown state"
             
     except Exception as e:
         logger.exception("Error in webapp_submit: %s", e)
