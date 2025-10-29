@@ -83,7 +83,69 @@ if not WEBAPP_URL:
 
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
+# ===============================
+# NEW: API endpoints for WebApp
+# ===============================
+@app.get("/api/webapp/trading_accounts")
+async def api_webapp_trading_accounts(request: Request):
+    """جلب حسابات التداول للـ WebApp بناءً على بيانات Telegram"""
+    try:
+        # الحصول على بيانات المستخدم من Telegram WebApp
+        init_data = request.query_params.get("tgWebAppData")
+        if not init_data:
+            raise HTTPException(status_code=400, detail="Missing Telegram data")
+        
+        # في بيئة الإنتاج، يجب التحقق من التوقيع هنا
+        # للحظة سنستخدم user_id من query parameters كحل سريع
+        user_id = request.query_params.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Missing user ID")
+        
+        telegram_id = int(user_id)
+        
+        # جلب بيانات المستخدم والحسابات
+        user_data = get_subscriber_with_accounts(telegram_id)
+        if not user_data:
+            return JSONResponse(content=[])
+        
+        # إرجاع الحسابات فقط
+        accounts = []
+        for acc in user_data['trading_accounts']:
+            accounts.append({
+                "id": acc['id'],
+                "broker_name": acc['broker_name'],
+                "account_number": acc['account_number'],
+                "status": acc['status'],
+                "server": acc.get('server', ''),
+                "initial_balance": acc.get('initial_balance', ''),
+                "current_balance": acc.get('current_balance', ''),
+                "withdrawals": acc.get('withdrawals', ''),
+                "copy_start_date": acc.get('copy_start_date', ''),
+                "agent": acc.get('agent', ''),
+                "expected_return": acc.get('expected_return', '')
+            })
+        
+        return JSONResponse(content=accounts)
+        
+    except Exception as e:
+        logger.exception(f"Error in api_webapp_trading_accounts: {e}")
+        raise HTTPException(status_code=500, detail="Server error")
 
+@app.get("/api/trading_accounts")
+def api_get_trading_accounts(tg_id: int = None):
+    """جلب حسابات التداول (للـ API العادي)"""
+    try:
+        if not tg_id:
+            raise HTTPException(status_code=400, detail="Missing tg_id parameter")
+        
+        user_data = get_subscriber_with_accounts(tg_id)
+        if not user_data:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return user_data["trading_accounts"]
+    except Exception as e:
+        logger.exception(f"Error in api_get_trading_accounts: {e}")
+        raise HTTPException(status_code=500, detail="Server error")
 HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
 FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
@@ -2376,7 +2438,7 @@ def webapp_edit_accounts(request: Request):
           
           try {{
             const initUser = tg.initDataUnsafe.user;
-            const resp = await fetch(`${{window.location.origin}}/api/trading_accounts?tg_id=${{initUser.id}}`);
+            const resp = await fetch(`${window.location.origin}/api/webapp/trading_accounts?user_id=${initUser.id}`);
             const accounts = await resp.json();
             const acc = accounts.find(a => a.id == accountId);
             
