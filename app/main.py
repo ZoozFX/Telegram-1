@@ -319,12 +319,10 @@ async def admin_set_language(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = q.from_user.id
     set_admin_language(user_id, lang)
     
-    admin_lang = lang  # Updated language
+    admin_lang = lang
     
     success_msg = "✅ تم تغيير اللغة بنجاح" if admin_lang == "ar" else "✅ Language changed successfully"
     await q.edit_message_text(success_msg)
-    
-    # Return to main panel after short delay
     await asyncio.sleep(1)
     await admin_panel_from_callback(update, context)
 
@@ -334,15 +332,13 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = q.from_user.id
     admin_lang = get_admin_language(user_id)
-    
-    # Get stats
     total_subscribers = len(get_all_subscribers())
     registered_users = len(get_registered_users())
     approved_users = len(get_approved_accounts_users())
     under_review = len(get_accounts_by_status("under_review"))
     active_accounts = len(get_accounts_by_status("active"))
     rejected_accounts = len(get_accounts_by_status("rejected"))
-    
+
     if admin_lang == "ar":
         title = "الإحصائيات والتقارير"
         stats_text = f"""
@@ -417,9 +413,6 @@ async def admin_accounts_under_review(update: Update, context: ContextTypes.DEFA
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await q.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
-
-# Add similar functions for approved and rejected if needed
-
 async def admin_individual_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -436,8 +429,6 @@ async def admin_individual_message(update: Update, context: ContextTypes.DEFAULT
     
     await q.edit_message_text(message)
 
-# In admin_text_handler, handle individual messages if state is set
-
 async def admin_exit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -448,29 +439,24 @@ async def admin_exit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "✅ تم الخروج من لوحة الإدارة" if admin_lang == "ar" else "✅ Exited admin panel"
     
     await q.edit_message_text(msg)
-    
-    # Show main user menu
     await show_main_sections(update, context, admin_lang)
 
 async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة أسباب رفض الحسابات - يجب أن يكون أول handler للمسؤولين"""
+   
     user_id = update.message.from_user.id
-    
-    # التحقق إذا كان المستخدم مسؤولاً وفي حالة انتظار سبب الرفض
+   
     if (user_id in ADMIN_TELEGRAM_IDS and 
         'awaiting_rejection_reason' in context.user_data):
         
         reason = update.message.text.strip()
         account_id = context.user_data['awaiting_rejection_reason']
         
-        # التحقق من أن السبب غير فارغ
         if not reason:
             admin_lang = get_admin_language(user_id)
             error_msg = "⚠️ يرجى إدخال سبب الرفض" if admin_lang == "ar" else "⚠️ Please enter a rejection reason"
             await update.message.reply_text(error_msg)
             return True
         
-        # تنظيف أي بيانات بث سابقة لتجنب التداخل
         context.user_data.pop('broadcast_type', None)
         context.user_data.pop('broadcast_message', None)
         context.user_data.pop('target_users', None)
@@ -480,11 +466,10 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
         admin_lang = get_admin_language(user_id)
         
         if success:
-            # إشعار المستخدم
+            
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
             
-            # حذف الرسائل المؤقتة للإداري الحالي
             messages_to_delete = []
             if 'admin_notification_message_id' in context.user_data:
                 messages_to_delete.append(context.user_data.pop('admin_notification_message_id'))
@@ -497,23 +482,18 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
                 except Exception as e:
                     logger.exception(f"Failed to delete message {message_id}: {e}")
             
-            # تنظيف بيانات الرفض
             context.user_data.pop('awaiting_rejection_reason', None)
             
-            # حذف رسالة السبب
             try:
                 await update.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete rejection reason message: {e}")
-                
-            # حذف الرسائل لجميع الإداريين الآخرين
+               
             await delete_all_notification_messages(account_id, context)
                 
-            # إشعار المسؤول بنجاح العملية
             success_msg = "✅ تم رفض الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account rejected and user notified"
             sent_msg = await update.message.reply_text(success_msg)
             
-            # حذف رسالة النجاح بعد 3 ثواني
             async def delete_success_msg():
                 await asyncio.sleep(0)
                 try:
@@ -524,22 +504,22 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
             asyncio.create_task(delete_success_msg())
             
         else:
-            # في حالة الفشل
+            
             error_msg = "❌ فشل في رفض الحساب" if admin_lang == "ar" else "❌ Failed to reject account"
             await update.message.reply_text(error_msg)
-            # تنظيف البيانات حتى في حالة الفشل
+            
             context.user_data.pop('awaiting_rejection_reason', None)
             context.user_data.pop('admin_notification_message_id', None)
             context.user_data.pop('rejection_prompt_message_id', None)
         
-        return True  # تم معالجة الرسالة
+        return True
     
-    return False  # لم يتم معالجة الرسالة
+    return False
     
             
     
 def get_all_subscribers() -> List[Dict[str, Any]]:
-    """جلب جميع المشتركين في البوت"""
+    
     try:
         db = SessionLocal()
         subscribers = db.query(Subscriber).all()
@@ -557,10 +537,10 @@ def get_all_subscribers() -> List[Dict[str, Any]]:
         return []
 
 def get_registered_users() -> List[Dict[str, Any]]:
-    """جلب المستخدمين المسجلين ببيانات (لديهم بيانات شخصية)"""
+   
     try:
         db = SessionLocal()
-        # جميع المشتركين في جدول subscribers يعتبرون مسجلين ببيانات
+       
         subscribers = db.query(Subscriber).all()
         result = []
         for sub in subscribers:
@@ -576,12 +556,10 @@ def get_registered_users() -> List[Dict[str, Any]]:
         return []
 
 def get_approved_accounts_users() -> List[Dict[str, Any]]:
-    """جلب المستخدمين الذين لديهم حسابات تداول مقبولة"""
+   
     try:
         db = SessionLocal()
-        # جلب الحسابات التي حالتها "active"
         approved_accounts = db.query(TradingAccount).filter(TradingAccount.status == "active").all()
-        
         result = []
         processed_users = set()
         
@@ -604,7 +582,7 @@ def get_approved_accounts_users() -> List[Dict[str, Any]]:
         return []
 
 async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة اختيار نوع البث الإداري"""
+    
     q = update.callback_query
     await q.answer()
     
@@ -613,8 +591,6 @@ async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_T
         return
     
     admin_lang = get_admin_language(user_id)
-    
-    # حفظ نوع البث المختار
     context.user_data['broadcast_type'] = q.data
     
     if admin_lang == "ar":
@@ -630,7 +606,7 @@ async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_T
     await q.edit_message_text(message, reply_markup=reply_markup)
 
 async def process_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الرسالة المراد بثها"""
+   
     user_id = update.message.from_user.id
     if user_id not in ADMIN_TELEGRAM_IDS:
         return
@@ -684,8 +660,6 @@ Do you want to proceed with broadcasting?
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # حفظ البيانات مؤقتاً
     context.user_data['broadcast_message'] = message_text
     context.user_data['target_users'] = target_users
     context.user_data['target_name'] = target_name
@@ -693,7 +667,7 @@ Do you want to proceed with broadcasting?
     await update.message.reply_text(confirm_text, reply_markup=reply_markup)
 
 async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تنفيذ عملية البث"""
+   
     q = update.callback_query
     await q.answer()
     
@@ -714,11 +688,9 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users...")
     
-    # إحصاءات البث
     successful = 0
     failed = 0
     
-    # إرسال الرسالة لكل مستخدم
     for user in target_users:
         try:
             await application.bot.send_message(
@@ -730,14 +702,12 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to send broadcast to {user['telegram_id']}: {e}")
             failed += 1
         
-        # تحديث الرسالة كل 10 عمليات إرسال
         if (successful + failed) % 10 == 0:
             if admin_lang == "ar":
                 await progress_msg.edit_text(f"⏳ جاري الإرسال... {successful + failed}/{len(target_users)}")
             else:
                 await progress_msg.edit_text(f"⏳ Sending... {successful + failed}/{len(target_users)}")
     
-    # إرسال تقرير النتائج
     if admin_lang == "ar":
         report_text = f"""
 ✅ تقرير البث:
@@ -757,7 +727,6 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await progress_msg.edit_text(report_text)
     
-    # تنظيف البيانات المؤقتة
     context.user_data.pop('broadcast_type', None)
     context.user_data.pop('broadcast_message', None)
     context.user_data.pop('target_users', None)
@@ -766,7 +735,7 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await admin_panel_from_callback(update, context)
 
 async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض لوحة التحكم من callback"""
+    
     q = update.callback_query
     user_id = q.from_user.id
     
@@ -814,15 +783,14 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
     await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
 
 async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """العودة من القائمة الإدارية"""
+   
     q = update.callback_query
     await q.answer()
     
     user_id = q.from_user.id
     if user_id in ADMIN_TELEGRAM_IDS:
-        set_admin_language(user_id, "ar")  # أو احتفظ بالإعداد الحالي
+        set_admin_language(user_id, "ar")
     
-    # تنظيف أي بيانات بث مؤقتة
     context.user_data.pop('broadcast_type', None)
     context.user_data.pop('broadcast_message', None)
     context.user_data.pop('target_users', None)
@@ -831,11 +799,10 @@ async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_sections(update, context, get_admin_language(user_id))
 
 async def handle_admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إلغاء عملية البث"""
+   
     q = update.callback_query
     await q.answer()
     
-    # تنظيف البيانات المؤقتة
     context.user_data.pop('broadcast_type', None)
     context.user_data.pop('broadcast_message', None)
     context.user_data.pop('target_users', None)
@@ -843,9 +810,8 @@ async def handle_admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await admin_panel_from_callback(update, context)
 
-# تحديث دالة admin_start الحالية
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بدء الوضع الإداري"""
+    
     user_id = update.effective_user.id
     if user_id in ADMIN_TELEGRAM_IDS:
         await admin_panel(update, context)
@@ -911,9 +877,7 @@ def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
     )
 
 def get_agent_username(agent_name: str) -> str:
-    """
-    تحويل اسم الوكيل إلى اليوزر المقابل له بناءً على البيئة
-    """
+    
     if not agent_name:
         return "@Omarkin9"
     
@@ -986,7 +950,7 @@ def build_header_html(
         if is_arabic:
             underline_line = "\n" + RLM + (underline_char * target_width)
         else:
-            underline_line = "\n" + (underline_char * target_width)  # <-- التعديل هنا: إزالة RLM للإنجليزية
+            underline_line = "\n" + (underline_char * target_width)
 
     return centered_line + underline_line
 # -------------------------------
@@ -1057,7 +1021,7 @@ def save_trading_account(
 ) -> Tuple[bool, TradingAccount]:
     
     try:
-        # التحقق من الحقول المطلوبة
+       
         required_fields = {
             'broker_name': broker_name,
             'account_number': account_number,
@@ -1071,7 +1035,6 @@ def save_trading_account(
             'expected_return': expected_return
         }
         
-        # التحقق من أن جميع الحقول غير فارغة
         for field_name, field_value in required_fields.items():
             if not field_value or str(field_value).strip() == "":
                 logger.error(f"Missing required field: {field_name}")
@@ -1142,7 +1105,7 @@ def save_trading_account(
 def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAccount]:
     
     try:
-        # التحقق من الحقول المطلوبة إذا كانت موجودة في kwargs
+        
         required_fields = [
             'broker_name', 'account_number', 'password', 'server',
             'initial_balance', 'current_balance', 'withdrawals',
@@ -1160,7 +1123,6 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             db.close()
             return False, None
         
-        # حفظ البيانات القديمة للإشعار
         old_data = {
             "broker_name": account.broker_name,
             "account_number": account.account_number,
@@ -1171,14 +1133,11 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             if hasattr(account, key) and value is not None:
                 setattr(account, key, value)
         
-        # إعادة الحساب إلى حالة قيد المراجعة بعد التعديل
         account.status = "under_review"
         account.rejection_reason = None 
         
         db.commit()
         db.refresh(account)
-        
-        # إعداد البيانات للإشعار
         subscriber = account.subscriber
         account_data = {
             "id": account.id,
@@ -1206,7 +1165,6 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
         
         db.close()
         
-        # إرسال إشعار للمسؤول
         import asyncio
         try:
             asyncio.create_task(send_admin_notification("updated_account", account_data, subscriber_data))
@@ -1401,20 +1359,16 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "active", user_lang=user_lang)
             
-            # حذف الرسالة الحالية
             try:
                 await q.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete admin message: {e}")
             
-            # حذف الرسائل لجميع الإداريين الآخرين
             await delete_all_notification_messages(account_id, context)
             
-            # إشعار الإداري بالنجاح (استخدم send_message بدلاً من reply_text)
             success_msg = "✅ تم تفعيل الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account activated and user notified"
             sent_msg = await context.bot.send_message(chat_id=user_id, text=success_msg)
             
-            # حذف رسالة النجاح بعد 3 ثواني
             async def delete_success_msg():
                 await asyncio.sleep(0)
                 try:
@@ -1432,17 +1386,12 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     
     elif q.data.startswith("reject_account_"):
         account_id = int(q.data.split("_")[2])
-        
-        # تنظيف أي بيانات بث سابقة
         context.user_data.pop('broadcast_type', None)
         context.user_data.pop('broadcast_message', None)
         context.user_data.pop('target_users', None)
         context.user_data.pop('target_name', None)
-        
-        # إعداد سياق الرفض
         context.user_data['awaiting_rejection_reason'] = account_id
         context.user_data['admin_notification_message_id'] = q.message.message_id
-        
         prompt_text = "يرجى إرسال سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
         rejection_prompt = await q.message.reply_text(prompt_text)
         context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
@@ -1459,7 +1408,6 @@ async def delete_all_notification_messages(account_id: int, context: ContextType
             except Exception as e:
                 logger.exception(f"Failed to delete notification message for admin {msg_info['admin_id']}: {e}")
         
-        # تنظيف بعد الحذف
         del NOTIFICATION_MESSAGES[account_id]
         
 async def handle_notification_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1474,9 +1422,7 @@ async def handle_notification_confirmation(update: Update, context: ContextTypes
         logger.exception(f"Failed to delete notification message: {e}")
 
 async def notify_user_about_account_status(account_id: int, status: str, reason: str = None, user_lang: str = None):
-    """
-    إشعار المستخدم بتغيير حالة حسابه
-    """
+    
     try:
         db = SessionLocal()
         account = db.query(TradingAccount).filter(TradingAccount.id == account_id).first()
@@ -1584,7 +1530,7 @@ async def update_user_interface_after_status_change(telegram_id: int, lang: str)
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
 
 async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج واحد للرسائل النصية من المسؤولين"""
+    
     if await handle_rejection_reason(update, context):
         return
     
@@ -1592,7 +1538,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await process_admin_broadcast(update, context)
         return
     
-    # إذا لم تكن رفض أو بث، إرسال مساعدة للمسؤول
     user_id = update.message.from_user.id
     admin_lang = get_admin_language(user_id)
     
@@ -1625,15 +1570,13 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.exception(f"Failed to send admin help message: {e}")
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الرسائل النصية للمستخدمين العاديين"""
+    
     user_id = update.message.from_user.id
     
-    # إذا كان مسؤولاً، فهذا يُعالج في admin_text_handler، لذا نعود
     if user_id in ADMIN_TELEGRAM_IDS:
         return
     
-    # الحصول على لغة المستخدم
-    lang = "ar"  # قيمة افتراضية
+    lang = "ar"
     subscriber = get_subscriber_by_telegram_id(user_id)
     if subscriber and subscriber.lang:
         lang = subscriber.lang
@@ -1651,9 +1594,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.exception(f"Failed to send help message to user: {e}")
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
-    """
-    إرسال إشعار لجميع المسؤولين
-    """
+    
     try:
         logger.info(f"🔔 Starting admin notification for {action_type}")
         
@@ -1661,12 +1602,10 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             logger.warning("⚠️ ADMIN_TELEGRAM_IDS not set - admin notifications disabled")
             return
         
-        # تهيئة قائمة الرسائل لهذا الحساب إذا لم تكن موجودة
         account_id = account_data['id']
         if account_id not in NOTIFICATION_MESSAGES:
             NOTIFICATION_MESSAGES[account_id] = []
         
-        # إرسال الإشعار لكل أدمن في القائمة
         for admin_id in ADMIN_TELEGRAM_IDS:
             try:
                 logger.info(f"📤 Sending notification to admin {admin_id}")
@@ -1695,7 +1634,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                         title = "ℹ️ Trading Account Activity"
                         action_desc = "Trading account activity"
                 
-                # بناء واجهة الرسالة
                 labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
                 header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
                 
@@ -1759,8 +1697,6 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                     ]
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                # إرسال الرسالة للمسؤول
                 sent_message = await application.bot.send_message(
                     chat_id=admin_id,
                     text=message,
@@ -1768,10 +1704,9 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                     parse_mode="HTML"
                 )
                 
-                # تخزين معرف الرسالة
                 NOTIFICATION_MESSAGES[account_id].append({
                     'admin_id': admin_id,
-                    'chat_id': admin_id,  # افتراضاً أن الإداري يتلقى في الشات الخاص به
+                    'chat_id': admin_id,
                     'message_id': sent_message.message_id
                 })
                 
@@ -1876,14 +1811,12 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMIN_TELEGRAM_IDS:
         set_admin_language(user_id, lang)
 
-    # NEW: Check if user is registered before showing main sections
     subscriber = get_subscriber_by_telegram_id(user_id)
     if subscriber:
-        # User is registered, show main sections
+        
         await show_main_sections(update, context, lang)
     else:
-        # User not registered, show registration form immediately
-        # Similar to the code in menu_handler for showing form
+       
         if lang == "ar":
             title = "من فضلك ادخل البيانات"
             back_label_text = "🔙 الرجوع للغة"
@@ -1906,7 +1839,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fallback_text = "فتح النموذج" if lang == "ar" else "Open form"
             keyboard.append([InlineKeyboardButton(fallback_text, callback_data="fallback_open_form")])
 
-        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="back_language")])  # Back to language selection if needed
+        keyboard.append([InlineKeyboardButton(back_label_text, callback_data="back_language")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
@@ -2100,7 +2033,6 @@ def webapp_existing_account(request: Request):
             <option value="40% - 60%">40% - 60%</option>
         """
 
-    # بناء الهيدر باستخدام الدالة المساعدة
     form_labels = [
         labels['broker'],
         labels['account'],
@@ -2399,7 +2331,6 @@ def webapp_edit_accounts(request: Request):
             <option value="40% - 60%">40% - 60%</option>
         """
 
-    # بناء الهيدر باستخدام الدالة المساعدة
     form_labels = [
         labels['select_account'],
         labels['broker'],
@@ -3287,8 +3218,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 else:
                     logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
         elif ref and ref.get("origin") == "initial_registration":
-            # NEW: For initial registration, only show main sections, no "اختر وسيطك الآن"
-            # Simulate showing main sections by editing or sending a new message
+            
             if telegram_id:
                 try:
                     if display_lang == "ar":
@@ -3332,7 +3262,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 except Exception as e:
                     logger.exception(f"Failed to show main sections after initial registration: {e}")
         else:
-            # Regular flow for non-initial registrations: Show brokers
+           
             if display_lang == "ar":
                 header_title = "اختر وسيطك الآن"
                 labels = ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label]
@@ -3838,9 +3768,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # NEW: Handle all service buttons with proper formatting
     # =============================================
     
-    # Service mapping for proper titles
+    
     service_titles = {
-        # Programming Services
         "📈 برمجة المؤشرات": {"ar": "برمجة المؤشرات", "en": "Indicators Programming"},
         "📈 Indicators": {"ar": "برمجة المؤشرات", "en": "Indicators Programming"},
         "🤖 برمجة الاكسبيرتات": {"ar": "برمجة الاكسبيرتات", "en": "Expert Advisors Programming"},
@@ -3850,18 +3779,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🌐 مواقع الويب": {"ar": "مواقع الويب", "en": "Web Development"},
         "🌐 Web Development": {"ar": "مواقع الويب", "en": "Web Development"},
         
-        # Agency Services
+        
         "📄 طلب وكالة YesFX": {"ar": "طلب وكالة YesFX", "en": "YesFX Partnership Request"},
         "📄 Request YesFX Partnership": {"ar": "طلب وكالة YesFX", "en": "YesFX Partnership Request"},
         
-        # Other services that might be added
+        
         "💬 قناة التوصيات": {"ar": "قناة التوصيات", "en": "Signals Channel"},
         "💬 Signals Channel": {"ar": "قناة التوصيات", "en": "Signals Channel"},
         "📰 الأخبار الاقتصادية": {"ar": "الأخبار الاقتصادية", "en": "Economic News"},
         "📰 Economic News": {"ar": "الأخبار الاقتصادية", "en": "Economic News"}
     }
     
-    # Check if this is a service button
     if q.data in service_titles:
         service_title = service_titles[q.data][lang]
         
@@ -3896,7 +3824,6 @@ We're here to help you with {service_title}!
 • From 9 AM to 6 PM
             """
         
-        # Determine which section to go back to based on the service type
         back_callback = "dev_main" if q.data in ["📈 برمجة المؤشرات", "📈 Indicators", "🤖 برمجة الاكسبيرتات", "🤖 Expert Advisors", "💬 بوتات التليجرام", "💬 Telegram Bots", "🌐 مواقع الويب", "🌐 Web Development"] else "agency_main"
         
         labels = [service_title, support_label, back_label]
@@ -3925,7 +3852,6 @@ We're here to help you with {service_title}!
             )
         return
 
-    # Fallback for any unhandled callback
     if lang == "ar":
         placeholder = "تم اختيار الخدمة"
         details = "سيتم إضافة التفاصيل قريبًا..."
@@ -3936,7 +3862,6 @@ We're here to help you with {service_title}!
     labels_for_header = [q.data]
     header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", arabic_indent=1 if lang=="ar" else 0)
     
-    # Add support and back buttons even for fallback
     if lang == "ar":
         support_label = "💬 التواصل مع الدعم"
         back_label = "🔙 الرجوع"
@@ -4081,7 +4006,6 @@ async def submit_existing_account(payload: dict = Body(...)):
         expected_return = (payload.get("expected_return") or "").strip()
         lang = (payload.get("lang") or "ar").lower()
 
-        # التحقق من جميع الحقول المطلوبة
         required_fields = {
             'broker': broker,
             'account': account,
@@ -4156,21 +4080,11 @@ async def submit_existing_account(payload: dict = Body(...)):
 # ===============================
 # Handlers registration - CORRECTED ORDER
 # ===============================
-
-# 1. الأوامر الأساسية
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("admin", admin_start))
-
-# 2. معالج الرسائل النصية للمسؤولين (يجمع الرفض والبث)
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), admin_text_handler))
-
-# 3. معالج الرسائل النصية للمستخدمين العاديين
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-
-# 4. معالجة WebApp messages
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-
-# 5. Admin callback handlers
 application.add_handler(CallbackQueryHandler(admin_broadcast_menu, pattern="^admin_broadcast_menu$"))
 application.add_handler(CallbackQueryHandler(admin_accounts_menu, pattern="^admin_accounts_menu$"))
 application.add_handler(CallbackQueryHandler(admin_settings, pattern="^admin_settings$"))
@@ -4186,14 +4100,9 @@ application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_
 application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
-
-# 6. Language and notification handlers
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
-
-# 7. GENERAL menu_handler - LAST
 application.add_handler(CallbackQueryHandler(menu_handler))
-
 # ===============================
 # Webhook setup
 # ===============================
