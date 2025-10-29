@@ -64,6 +64,9 @@ class TradingAccount(Base):
     created_at = Column(String(50), default=lambda: datetime.now().isoformat())
     status = Column(String(20), default="under_review")
     rejection_reason = Column(String(255), nullable=True)
+    subscriber_name = Column(String(200), nullable=True)
+    telegram_username = Column(String(200), nullable=True)
+    telegram_id = Column(BigInteger, nullable=True)
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
 Base.metadata.create_all(bind=engine)
@@ -1058,7 +1061,10 @@ def save_trading_account(
             copy_start_date=copy_start_date,
             agent=agent,
             expected_return=expected_return,
-            status="under_review"
+            status="under_review",
+            subscriber_name=subscriber.name,
+            telegram_username=subscriber.telegram_username,
+            telegram_id=subscriber.telegram_id
         )
         
         db.add(trading_account)
@@ -1136,6 +1142,12 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
         account.status = "under_review"
         account.rejection_reason = None 
         
+        # Update subscriber info from linked subscriber
+        subscriber = account.subscriber
+        account.subscriber_name = subscriber.name
+        account.telegram_username = subscriber.telegram_username
+        account.telegram_id = subscriber.telegram_id
+
         db.commit()
         db.refresh(account)
         subscriber = account.subscriber
@@ -1637,6 +1649,64 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 labels = ["👤 المستخدم", "🏦 الوسيط", "✅ تفعيل الحساب", "❌ رفض الحساب"] if admin_lang == "ar" else ["👤 User", "🏦 Broker", "✅ Activate Account", "❌ Reject Account"]
                 header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
                 
+                # Calculate achieved return if possible
+                achieved_return_text = ""
+                if (account_data.get('initial_balance') and account_data.get('current_balance') and 
+                    account_data.get('withdrawals') and account_data.get('copy_start_date')):
+                    try:
+                        initial = float(account_data['initial_balance'])
+                        current = float(account_data['current_balance'])
+                        withdrawals = float(account_data['withdrawals'])
+                        start_date_str = account_data['copy_start_date']
+                        
+                        if 'T' in start_date_str:
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                        else:
+                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                        
+                        today = datetime.now()
+                        delta = today - start_date
+                        total_days = delta.days
+                        
+                        months = total_days // 30
+                        remaining_days = total_days % 30
+                        
+                        period_text = ""
+                        if admin_lang == "ar":
+                            if months > 0:
+                                period_text += f"{months} شهر"
+                                if remaining_days > 0:
+                                    period_text += f" و{remaining_days} يوم"
+                            else:
+                                period_text += f"{total_days} يوم"
+                        else:
+                            if months > 0:
+                                period_text += f"{months} month{'s' if months > 1 else ''}"
+                                if remaining_days > 0:
+                                    period_text += f" and {remaining_days} day{'s' if remaining_days > 1 else ''}"
+                            else:
+                                period_text += f"{total_days} day{'s' if total_days > 1 else ''}"
+                        
+                        if initial > 0:
+                            total_value = current + withdrawals
+                            profit_amount = total_value - initial
+                            profit_percentage = (profit_amount / initial) * 100
+                            
+                            if admin_lang == "ar":
+                                achieved_return_text = f"\n<b>📈 العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}"
+                            else:
+                                achieved_return_text = f"\n<b>📈 Achieved Return:</b> {profit_percentage:.0f}% over {period_text}"
+                    except (ValueError, TypeError) as e:
+                        if admin_lang == "ar":
+                            achieved_return_text = f"\n<b>📈 العائد المحقق:</b> جاري الحساب"
+                        else:
+                            achieved_return_text = f"\n<b>📈 Achieved Return:</b> Calculating..."
+                else:
+                    if admin_lang == "ar":
+                        achieved_return_text = f"\n<b>📈 العائد المحقق:</b> يتطلب بيانات كاملة"
+                    else:
+                        achieved_return_text = f"\n<b>📈 Achieved Return:</b> Requires complete data"
+
                 if admin_lang == "ar":
                     message = f"""
 {header}
@@ -1656,6 +1726,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>💳 الرصيد الحالي:</b> {account_data.get('current_balance', 'N/A')}  
 <b>💸 المسحوبات:</b> {account_data.get('withdrawals', 'N/A')}
 <b>📅 تاريخ البدء:</b> {account_data.get('copy_start_date', 'N/A')}
+{achieved_return_text}
 
 <b>🌐 معرف الحساب:</b> {account_data['id']}
                     """
@@ -1685,6 +1756,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>💳 Current Balance:</b> {account_data.get('current_balance', 'N/A')}  
 <b>💸 Withdrawals:</b> {account_data.get('withdrawals', 'N/A')}
 <b>📅 Start Date:</b> {account_data.get('copy_start_date', 'N/A')}
+{achieved_return_text}
 
 <b>🌐 Account ID:</b> {account_data['id']}
                     """
@@ -3054,17 +3126,11 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                         
                         period_text = ""
                         if months > 0:
-                            period_text += f"{months} month"
-                            if months > 1:
-                                period_text += "s"
+                            period_text += f"{months} month{'s' if months > 1 else ''}"
                             if remaining_days > 0:
-                                period_text += f" and {remaining_days} day"
-                                if remaining_days > 1:
-                                    period_text += "s"
+                                period_text += f" and {remaining_days} day{'s' if remaining_days > 1 else ''}"
                         else:
-                            period_text += f"{total_days} day"
-                            if total_days > 1:
-                                period_text += "s"
+                            period_text += f"{total_days} day{'s' if total_days > 1 else ''}"
                         
                         if initial > 0:
                             total_value = current + withdrawals
@@ -3498,17 +3564,11 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         
                         period_text = ""
                         if months > 0:
-                            period_text += f"{months} month"
-                            if months > 1:
-                                period_text += "s"
+                            period_text += f"{months} month{'s' if months > 1 else ''}"
                             if remaining_days > 0:
-                                period_text += f" and {remaining_days} day"
-                                if remaining_days > 1:
-                                    period_text += "s"
+                                period_text += f" and {remaining_days} day{'s' if remaining_days > 1 else ''}"
                         else:
-                            period_text += f"{total_days} day"
-                            if total_days > 1:
-                                period_text += "s"
+                            period_text += f"{total_days} day{'s' if total_days > 1 else ''}"
                         
                         
                         if initial > 0:
