@@ -3211,7 +3211,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         save_form_ref(telegram_id, chat_id, message_id, origin="my_accounts", lang=lang)
     except Exception as e:
         logger.exception(f"Failed to refresh user interface: {e}")
-
+        
 # ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
 # ===============================
@@ -4201,6 +4201,15 @@ application.add_handler(CallbackQueryHandler(menu_handler))
 def root():
     return {"status": "ok", "message": "Bot is running"}
 
+@app.get("/update-performances")
+def update_performances(key: str):
+    SECRET_KEY = "my_secret_key"  # غير هذا إلى مفتاح سري قوي
+    if key != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid key")
+    
+    populate_account_performances()
+    return {"message": "Performances updated successfully"}
+
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
     try:
@@ -4226,9 +4235,6 @@ async def on_startup():
             logger.exception("Failed to set webhook")
     else:
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set; running without webhook setup")
-    
-    # استدعاء الدالة الجديدة لملء الجدول عند بدء التطبيق
-    populate_account_performances()
 
 @app.on_event("shutdown")
 async def on_shutdown():
