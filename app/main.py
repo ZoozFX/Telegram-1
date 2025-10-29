@@ -1102,9 +1102,42 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             # حذف الرسائل لجميع الإداريين الآخرين
             await delete_all_notification_messages(account_id, context)
             
-            # إشعار الإداري بالنجاح
+            # إشعار الإداري بالنجاح (استخدم send_message بدلاً من reply_text)
             success_msg = "✅ تم تفعيل الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account activated and user notified"
-            sent_msg = await q.message.reply_text(success_msg)
+            sent_msg = await context.bot.send_message(chat_id=user_id, text=success_msg)
+            
+            # حذف رسالة النجاح بعد 3 ثواني
+            async def delete_success_msg():
+                await asyncio.sleep(3)
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
+                except Exception:
+                    pass
+            
+            asyncio.create_task(delete_success_msg())
+            
+        else:
+            try:
+                await q.message.delete()
+            except Exception as e:
+                logger.exception(f"Failed to delete admin message on failure: {e}")
+    
+    elif q.data.startswith("reject_account_"):
+        account_id = int(q.data.split("_")[2])
+        
+        # تنظيف أي بيانات بث سابقة
+        context.user_data.pop('broadcast_type', None)
+        context.user_data.pop('broadcast_message', None)
+        context.user_data.pop('target_users', None)
+        context.user_data.pop('target_name', None)
+        
+        # إعداد سياق الرفض
+        context.user_data['awaiting_rejection_reason'] = account_id
+        context.user_data['admin_notification_message_id'] = q.message.message_id
+        
+        prompt_text = "يرجى إرسال سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
+        rejection_prompt = await q.message.reply_text(prompt_text)
+        context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
             
             
 async def delete_all_notification_messages(account_id: int, context: ContextTypes.DEFAULT_TYPE):
