@@ -21,6 +21,7 @@ from app.db import Base, engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
+import asyncio
 
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
@@ -586,7 +587,6 @@ def max_button_width(labels: List[str]) -> int:
     return max((display_width(lbl) for lbl in labels), default=0)
 
 def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
-    """دالة مساعدة لبناء عناوين الويب أب"""
     if labels is None:
         labels = []
     
@@ -1236,53 +1236,17 @@ async def update_user_interface_after_status_change(telegram_id: int, lang: str)
         if updated_data:
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
 
-async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الرسائل النصية العامة"""
-    
-    # إذا كانت الرسالة من مسؤول وتم معالجتها في أسباب الرفض، تخطي
+async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالج واحد للرسائل النصية من المسؤولين"""
     if await handle_rejection_reason(update, context):
         return
     
+    if 'broadcast_type' in context.user_data and 'broadcast_message' not in context.user_data:
+        await process_admin_broadcast(update, context)
+        return
+    
+    # إذا لم تكن رفض أو بث، إرسال مساعدة للمسؤول
     user_id = update.message.from_user.id
-    
-    # معالجة البث الإداري - إذا كان المستخدم مسؤولاً وفي حالة بث
-    if (user_id in ADMIN_TELEGRAM_IDS and 
-        'broadcast_type' in context.user_data and 
-        'broadcast_message' not in context.user_data):
-        
-        # هذه الحالة يتم معالجتها في process_admin_broadcast
-        # نتركها تمر لل handler المخصص
-        return
-    
-    # الحصول على لغة المستخدم
-    lang = "ar"  # قيمة افتراضية
-    if user_id in ADMIN_TELEGRAM_IDS:
-        lang = get_admin_language(user_id)
-    else:
-        # للمستخدمين العاديين، نحاول الحصول على اللغة من البيانات المحفوظة
-        subscriber = get_subscriber_by_telegram_id(user_id)
-        if subscriber and subscriber.lang:
-            lang = subscriber.lang
-        else:
-            # إذا لم يكن مسجلاً، نستخدم اللغة من context أو الافتراضي
-            lang = context.user_data.get("lang", "ar")
-    
-    # معالجة رسائل المستخدمين العاديين
-    if user_id not in ADMIN_TELEGRAM_IDS:
-        # يمكن إضافة معالجة إضافية لرسائل المستخدمين هنا
-        if lang == "ar":
-            response_text = "⚠️ يمكنك استخدام الأزرار في القائمة للتفاعل مع البوت"
-        else:
-            response_text = "⚠️ Please use the buttons in the menu to interact with the bot"
-        
-        try:
-            await update.message.reply_text(response_text)
-        except Exception as e:
-            logger.exception(f"Failed to send help message to user: {e}")
-        return
-    
-    # إذا وصلنا إلى هنا، فهذه رسالة من مسؤول ولكنها لم تُعالج في أي مكان آخر
-    # يمكن إضافة رد مساعد للمسؤولين
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
@@ -1312,6 +1276,32 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(help_text, parse_mode="HTML")
     except Exception as e:
         logger.exception(f"Failed to send admin help message: {e}")
+
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الرسائل النصية للمستخدمين العاديين"""
+    user_id = update.message.from_user.id
+    
+    # إذا كان مسؤولاً، فهذا يُعالج في admin_text_handler، لذا نعود
+    if user_id in ADMIN_TELEGRAM_IDS:
+        return
+    
+    # الحصول على لغة المستخدم
+    lang = "ar"  # قيمة افتراضية
+    subscriber = get_subscriber_by_telegram_id(user_id)
+    if subscriber and subscriber.lang:
+        lang = subscriber.lang
+    else:
+        lang = context.user_data.get("lang", "ar")
+    
+    if lang == "ar":
+        response_text = "⚠️ يمكنك استخدام الأزرار في القائمة للتفاعل مع البوت"
+    else:
+        response_text = "⚠️ Please use the buttons in the menu to interact with the bot"
+    
+    try:
+        await update.message.reply_text(response_text)
+    except Exception as e:
+        logger.exception(f"Failed to send help message to user: {e}")
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """
@@ -3828,42 +3818,27 @@ async def submit_existing_account(payload: dict = Body(...)):
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("admin", admin_start))
 
-# 2. معالجة أسباب الرفض - PRIORITY HANDLER
-application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), 
-    handle_rejection_reason
-))
+# 2. معالج الرسائل النصية للمسؤولين (يجمع الرفض والبث)
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), admin_text_handler))
 
-# 3. معالجة البث الإداري - للمسؤولين فقط
-application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), 
-    process_admin_broadcast
-))
+# 3. معالج الرسائل النصية للمستخدمين العاديين
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 
-# 4. معالجة الرسائل العامة - للجميع
-application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND, 
-    handle_text_messages
-))
+# 4. معالجة WebApp messages
+application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
 
-# 5. معالجة WebApp messages
-application.add_handler(MessageHandler(
-    filters.UpdateType.MESSAGE & filters.Regex(r'.*'), 
-    web_app_message_handler
-))
-
-# 6. Admin callback handlers
+# 5. Admin callback handlers
 application.add_handler(CallbackQueryHandler(handle_admin_broadcast, pattern="^admin_broadcast_"))
 application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_confirm_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
 
-# 7. Language and notification handlers
+# 6. Language and notification handlers
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
 
-# 8. GENERAL menu_handler - LAST
+# 7. GENERAL menu_handler - LAST
 application.add_handler(CallbackQueryHandler(menu_handler))
 
 # ===============================
