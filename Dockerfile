@@ -1,14 +1,8 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-
-# نسخ ملف المتطلبات أولاً (لتحسين caching)
-COPY requirements.txt .
-
-# تثبيت المتطلبات
-RUN pip install --no-cache-dir -r requirements.txt
-
-# نسخ باقي الملفات
 COPY . .
+
+RUN pip install --no-cache-dir fastapi uvicorn gunicorn python-telegram-bot[webhooks] SQLAlchemy psycopg2-binary python-dotenv alembic
 
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:5000"]
