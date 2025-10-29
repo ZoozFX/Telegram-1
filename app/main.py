@@ -146,6 +146,88 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML")
 
+
+async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة أسباب رفض الحسابات - يجب أن يكون أول handler للمسؤولين"""
+    user_id = update.message.from_user.id
+    
+    # التحقق إذا كان المستخدم مسؤولاً وفي حالة انتظار سبب الرفض
+    if (user_id in ADMIN_TELEGRAM_IDS and 
+        'awaiting_rejection_reason' in context.user_data):
+        
+        reason = update.message.text.strip()
+        account_id = context.user_data['awaiting_rejection_reason']
+        
+        # التحقق من أن السبب غير فارغ
+        if not reason:
+            admin_lang = get_admin_language(user_id)
+            error_msg = "⚠️ يرجى إدخال سبب الرفض" if admin_lang == "ar" else "⚠️ Please enter a rejection reason"
+            await update.message.reply_text(error_msg)
+            return True
+        
+        # تنظيف أي بيانات بث سابقة لتجنب التداخل
+        context.user_data.pop('broadcast_type', None)
+        context.user_data.pop('broadcast_message', None)
+        context.user_data.pop('target_users', None)
+        context.user_data.pop('target_name', None)
+        
+        success = update_account_status(account_id, "rejected", reason=reason)
+        admin_lang = get_admin_language(user_id)
+        
+        if success:
+            # إشعار المستخدم
+            user_lang = get_user_current_language(account_id)
+            await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
+            
+            # حذف الرسائل المؤقتة
+            messages_to_delete = []
+            if 'admin_notification_message_id' in context.user_data:
+                messages_to_delete.append(context.user_data.pop('admin_notification_message_id'))
+            if 'rejection_prompt_message_id' in context.user_data:
+                messages_to_delete.append(context.user_data.pop('rejection_prompt_message_id'))
+            
+            for message_id in messages_to_delete:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=message_id)
+                except Exception as e:
+                    logger.exception(f"Failed to delete message {message_id}: {e}")
+            
+            # تنظيف بيانات الرفض
+            context.user_data.pop('awaiting_rejection_reason', None)
+            
+            # حذف رسالة السبب
+            try:
+                await update.message.delete()
+            except Exception as e:
+                logger.exception(f"Failed to delete rejection reason message: {e}")
+                
+            # إشعار المسؤول بنجاح العملية
+            success_msg = "✅ تم رفض الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account rejected and user notified"
+            sent_msg = await update.message.reply_text(success_msg)
+            
+            # حذف رسالة النجاح بعد 3 ثواني
+            async def delete_success_msg():
+                await asyncio.sleep(3)
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
+                except Exception:
+                    pass
+            
+            asyncio.create_task(delete_success_msg())
+            
+        else:
+            # في حالة الفشل
+            error_msg = "❌ فشل في رفض الحساب" if admin_lang == "ar" else "❌ Failed to reject account"
+            await update.message.reply_text(error_msg)
+            # تنظيف البيانات حتى في حالة الفشل
+            context.user_data.pop('awaiting_rejection_reason', None)
+            context.user_data.pop('admin_notification_message_id', None)
+            context.user_data.pop('rejection_prompt_message_id', None)
+        
+        return True  # تم معالجة الرسالة
+    
+    return False  # لم يتم معالجة الرسالة
+    
 def get_all_subscribers() -> List[Dict[str, Any]]:
     """جلب جميع المشتركين في البوت"""
     try:
@@ -986,7 +1068,6 @@ def update_account_status(account_id: int, status: str, reason: str = None) -> b
         return False
 
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
     q = update.callback_query
     await q.answer()
     
@@ -1004,17 +1085,14 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         account_id = int(q.data.split("_")[2])
         success = update_account_status(account_id, "active")
         if success:
-           
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "active", user_lang=user_lang)
-            
             
             try:
                 await q.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete admin message: {e}")
         else:
-            
             try:
                 await q.message.delete()
             except Exception as e:
@@ -1022,10 +1100,18 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     
     elif q.data.startswith("reject_account_"):
         account_id = int(q.data.split("_")[2])
-        context.user_data['awaiting_rejection_reason'] = account_id
         
+        # تنظيف أي بيانات بث سابقة
+        context.user_data.pop('broadcast_type', None)
+        context.user_data.pop('broadcast_message', None)
+        context.user_data.pop('target_users', None)
+        context.user_data.pop('target_name', None)
+        
+        # إعداد سياق الرفض
+        context.user_data['awaiting_rejection_reason'] = account_id
         context.user_data['admin_notification_message_id'] = q.message.message_id
-        prompt_text = "يرجى تقديم سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
+        
+        prompt_text = "يرجى إرسال سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
         rejection_prompt = await q.message.reply_text(prompt_text)
         context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
 
@@ -1151,58 +1237,81 @@ async def update_user_interface_after_status_change(telegram_id: int, lang: str)
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الرسائل النصية العامة"""
+    
+    # إذا كانت الرسالة من مسؤول وتم معالجتها في أسباب الرفض، تخطي
+    if await handle_rejection_reason(update, context):
+        return
     
     user_id = update.message.from_user.id
     
-    if user_id in ADMIN_TELEGRAM_IDS and 'awaiting_rejection_reason' in context.user_data:
-        reason = update.message.text.strip()
-        account_id = context.user_data.pop('awaiting_rejection_reason')
-        success = update_account_status(account_id, "rejected", reason=reason)
-        admin_lang = get_admin_language(user_id)
+    # معالجة البث الإداري - إذا كان المستخدم مسؤولاً وفي حالة بث
+    if (user_id in ADMIN_TELEGRAM_IDS and 
+        'broadcast_type' in context.user_data and 
+        'broadcast_message' not in context.user_data):
         
-        if success:
-            
-            user_lang = get_user_current_language(account_id)
-            await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
-            admin_notification_message_id = context.user_data.pop('admin_notification_message_id', None)
-            if admin_notification_message_id:
-                try:
-                    await context.bot.delete_message(chat_id=user_id, message_id=admin_notification_message_id)
-                except Exception as e:
-                    logger.exception(f"Failed to delete original admin notification: {e}")
-    
-            rejection_prompt_message_id = context.user_data.pop('rejection_prompt_message_id', None)
-            if rejection_prompt_message_id:
-                try:
-                    await context.bot.delete_message(chat_id=user_id, message_id=rejection_prompt_message_id)
-                except Exception as e:
-                    logger.exception(f"Failed to delete rejection prompt message: {e}")
-            
-            try:
-                await update.message.delete()
-            except Exception as e:
-                logger.exception(f"Failed to delete rejection reason message: {e}")
-        else:
-            
-            admin_notification_message_id = context.user_data.pop('admin_notification_message_id', None)
-            if admin_notification_message_id:
-                try:
-                    await context.bot.delete_message(chat_id=user_id, message_id=admin_notification_message_id)
-                except Exception as e:
-                    logger.exception(f"Failed to delete original admin notification on failure: {e}")
-            
-            rejection_prompt_message_id = context.user_data.pop('rejection_prompt_message_id', None)
-            if rejection_prompt_message_id:
-                try:
-                    await context.bot.delete_message(chat_id=user_id, message_id=rejection_prompt_message_id)
-                except Exception as e:
-                    logger.exception(f"Failed to delete rejection prompt message on failure: {e}")
-            
-            try:
-                await update.message.delete()
-            except Exception as e:
-                logger.exception(f"Failed to delete rejection reason message on failure: {e}")
+        # هذه الحالة يتم معالجتها في process_admin_broadcast
+        # نتركها تمر لل handler المخصص
         return
+    
+    # الحصول على لغة المستخدم
+    lang = "ar"  # قيمة افتراضية
+    if user_id in ADMIN_TELEGRAM_IDS:
+        lang = get_admin_language(user_id)
+    else:
+        # للمستخدمين العاديين، نحاول الحصول على اللغة من البيانات المحفوظة
+        subscriber = get_subscriber_by_telegram_id(user_id)
+        if subscriber and subscriber.lang:
+            lang = subscriber.lang
+        else:
+            # إذا لم يكن مسجلاً، نستخدم اللغة من context أو الافتراضي
+            lang = context.user_data.get("lang", "ar")
+    
+    # معالجة رسائل المستخدمين العاديين
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        # يمكن إضافة معالجة إضافية لرسائل المستخدمين هنا
+        if lang == "ar":
+            response_text = "⚠️ يمكنك استخدام الأزرار في القائمة للتفاعل مع البوت"
+        else:
+            response_text = "⚠️ Please use the buttons in the menu to interact with the bot"
+        
+        try:
+            await update.message.reply_text(response_text)
+        except Exception as e:
+            logger.exception(f"Failed to send help message to user: {e}")
+        return
+    
+    # إذا وصلنا إلى هنا، فهذه رسالة من مسؤول ولكنها لم تُعالج في أي مكان آخر
+    # يمكن إضافة رد مساعد للمسؤولين
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        help_text = """
+🎯 **أدوات المسؤول المتاحة:**
+
+• استخدام /admin للوحة التحكم
+• البث للمستخدمين عبر لوحة التحكم
+• تفعيل/رفض الحسابات من خلال الإشعارات
+
+💡 **للبث:** استخدم /admin ثم اختر نوع البث
+💡 **لإدارة الحسابات:** اضغط على أزرار التفعيل/الرفض في الإشعارات
+        """
+    else:
+        help_text = """
+🎯 **Available Admin Tools:**
+
+• Use /admin for control panel
+• Broadcast to users via control panel  
+• Activate/reject accounts through notifications
+
+💡 **For broadcasting:** Use /admin then choose broadcast type
+💡 **For account management:** Click activate/reject buttons in notifications
+        """
+    
+    try:
+        await update.message.reply_text(help_text, parse_mode="HTML")
+    except Exception as e:
+        logger.exception(f"Failed to send admin help message: {e}")
 
 async def send_admin_notification(action_type: str, account_data: dict, subscriber_data: dict):
     """
@@ -3714,26 +3823,47 @@ async def submit_existing_account(payload: dict = Body(...)):
 # ===============================
 # Handlers registration - CORRECTED ORDER
 # ===============================
+
+# 1. الأوامر الأساسية
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("admin", admin_start))
 
-# Message handlers
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), process_admin_broadcast))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
+# 2. معالجة أسباب الرفض - PRIORITY HANDLER
+application.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), 
+    handle_rejection_reason
+))
 
-# Admin handlers - MUST COME BEFORE GENERAL menu_handler
+# 3. معالجة البث الإداري - للمسؤولين فقط
+application.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), 
+    process_admin_broadcast
+))
+
+# 4. معالجة الرسائل العامة - للجميع
+application.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND, 
+    handle_text_messages
+))
+
+# 5. معالجة WebApp messages
+application.add_handler(MessageHandler(
+    filters.UpdateType.MESSAGE & filters.Regex(r'.*'), 
+    web_app_message_handler
+))
+
+# 6. Admin callback handlers
 application.add_handler(CallbackQueryHandler(handle_admin_broadcast, pattern="^admin_broadcast_"))
 application.add_handler(CallbackQueryHandler(execute_broadcast, pattern="^admin_confirm_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_cancel, pattern="^admin_cancel_broadcast$"))
 application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_back$"))
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
 
-# Language and notification handlers
+# 7. Language and notification handlers
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
 
-# GENERAL menu_handler - SHOULD COME LAST
+# 8. GENERAL menu_handler - LAST
 application.add_handler(CallbackQueryHandler(menu_handler))
 
 # ===============================
