@@ -410,7 +410,7 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users...")
     
-    # إحصاءات البث
+    
     successful = 0
     failed = 0
     
