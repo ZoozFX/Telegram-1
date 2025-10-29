@@ -1,9 +1,8 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-gunicorn==23.0.0
-python-telegram-bot[webhooks]==20.7
-SQLAlchemy==2.0.23
-psycopg2-binary==2.9.7
-python-dotenv==1.0.0
-alembic==1.12.1
-requests>=2.31.0
+Flask>=2.1
+python-telegram-bot>=20.4
+SQLAlchemy>=1.4
+psycopg2-binary
+alembic
+python-dotenv
+gunicorn
+pytest
