@@ -5,7 +5,7 @@ import logging
 import unicodedata
 from typing import List, Optional, Tuple, Dict, Any
 from urllib.parse import urlencode, quote_plus
-from datetime import datetime 
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Request, Body, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -83,6 +83,93 @@ class AccountPerformance(Base):
     trading_account = relationship("TradingAccount")
 
 Base.metadata.create_all(bind=engine)
+
+# -------------------------------
+# دالة جديدة لملء جدول AccountPerformance
+# -------------------------------
+def populate_account_performances():
+    db = SessionLocal()
+    try:
+        # جلب جميع الحسابات النشطة
+        accounts = db.query(TradingAccount).filter(TradingAccount.status == 'active').all()
+        
+        for account in accounts:
+            subscriber = account.subscriber
+            
+            # التحقق من وجود البيانات اللازمة
+            if not (account.initial_balance and account.current_balance and 
+                    account.withdrawals and account.copy_start_date):
+                continue
+            
+            try:
+                initial = float(account.initial_balance)
+                current = float(account.current_balance)
+                withdrawals = float(account.withdrawals)
+                
+                # حساب العائد المحقق
+                if initial > 0:
+                    total_value = current + withdrawals
+                    profit = total_value - initial
+                    achieved_return = f"{(profit / initial * 100):.0f}%"
+                else:
+                    achieved_return = "0%"
+                
+                # حساب المدة
+                start_date = datetime.strptime(account.copy_start_date, '%Y-%m-%d')
+                today = datetime.now()
+                delta = today - start_date
+                total_days = delta.days
+                
+                months = total_days // 30
+                remaining_days = total_days % 30
+                
+                if months > 0:
+                    copy_duration = f"{months} شهر"
+                    if remaining_days > 0:
+                        copy_duration += f" و{remaining_days} يوم"
+                else:
+                    copy_duration = f"{total_days} يوم"
+                
+                # التحقق مما إذا كان السجل موجودًا بالفعل
+                existing_perf = db.query(AccountPerformance).filter(
+                    AccountPerformance.trading_account_id == account.id
+                ).first()
+                
+                if existing_perf:
+                    # تحديث السجل الموجود
+                    existing_perf.name = subscriber.name
+                    existing_perf.email = subscriber.email
+                    existing_perf.phone = subscriber.phone
+                    existing_perf.telegram_username = subscriber.telegram_username
+                    existing_perf.initial_balance = account.initial_balance
+                    existing_perf.achieved_return = achieved_return
+                    existing_perf.copy_duration = copy_duration
+                else:
+                    # إنشاء سجل جديد
+                    performance = AccountPerformance(
+                        trading_account_id=account.id,
+                        name=subscriber.name,
+                        email=subscriber.email,
+                        phone=subscriber.phone,
+                        telegram_username=subscriber.telegram_username,
+                        initial_balance=account.initial_balance,
+                        achieved_return=achieved_return,
+                        copy_duration=copy_duration
+                    )
+                    db.add(performance)
+                
+                db.commit()
+                
+            except ValueError as ve:
+                logger.error(f"خطأ في تحويل القيم للحساب {account.id}: {ve}")
+                continue
+            
+        logger.info("تم ملء جدول الأداء بنجاح!")
+        
+    except Exception as e:
+        logger.exception(f"خطأ في ملء جدول الأداء: {e}")
+    finally:
+        db.close()
 
 # -------------------------------
 # settings & app
@@ -4151,6 +4238,9 @@ async def on_startup():
             logger.exception("Failed to set webhook")
     else:
         logger.warning("⚠️ WEBHOOK_URL or BOT_WEBHOOK_PATH not set; running without webhook setup")
+    
+    # استدعاء الدالة الجديدة لملء الجدول عند بدء التطبيق
+    populate_account_performances()
 
 @app.on_event("shutdown")
 async def on_shutdown():
