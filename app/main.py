@@ -90,7 +90,7 @@ FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
 # -------------------------------
 # helpers: emoji removal / display width
 # -------------------------------
-NOTIFICATION_MESSAGES: Dict[int, List[Dict[str, Any]]] = {}
+NOTIFICATION_MESSAGES: Dict[int, List[Dict[str, int]]] = {}  # {account_id: [{'admin_id': admin_id, 'message_id': message_id}, ...]}
 ADMIN_LANGUAGE: Dict[int, str] = {}
 
 def set_admin_language(admin_id: int, lang: str):
@@ -205,6 +205,9 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
             # إشعار المسؤول بنجاح العملية
             success_msg = "✅ تم رفض الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account rejected and user notified"
             sent_msg = await update.message.reply_text(success_msg)
+            
+            # حذف جميع الإشعارات لدى جميع المسؤولين
+            await delete_all_admin_notifications(account_id)
             
             # حذف رسالة النجاح بعد 3 ثواني
             async def delete_success_msg():
@@ -1092,6 +1095,9 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 await q.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete admin message: {e}")
+            
+            # حذف جميع الإشعارات لدى جميع المسؤولين
+            await delete_all_admin_notifications(account_id)
         else:
             try:
                 await q.message.delete()
@@ -1114,6 +1120,23 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         prompt_text = "يرجى إرسال سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
         rejection_prompt = await q.message.reply_text(prompt_text)
         context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
+
+async def delete_all_admin_notifications(account_id: int):
+    """حذف جميع الإشعارات المتعلقة بحساب معين من عند جميع المسؤولين"""
+    try:
+        if account_id in NOTIFICATION_MESSAGES:
+            for entry in NOTIFICATION_MESSAGES[account_id]:
+                admin_id = entry.get('admin_id')
+                message_id = entry.get('message_id')
+                if admin_id and message_id:
+                    try:
+                        await application.bot.delete_message(chat_id=admin_id, message_id=message_id)
+                    except Exception as e:
+                        logger.exception(f"Failed to delete notification for admin {admin_id}, message {message_id}: {e}")
+            # تنظيف القاموس بعد الحذف
+            del NOTIFICATION_MESSAGES[account_id]
+    except Exception as e:
+        logger.exception(f"Failed to delete all admin notifications for account {account_id}: {e}")
 
 async def handle_notification_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
    
@@ -1314,6 +1337,9 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             logger.warning("⚠️ ADMIN_TELEGRAM_IDS not set - admin notifications disabled")
             return
         
+        account_id = account_data["id"]
+        NOTIFICATION_MESSAGES[account_id] = []  # تهيئة قائمة للرسائل
+        
         # إرسال الإشعار لكل أدمن في القائمة
         for admin_id in ADMIN_TELEGRAM_IDS:
             try:
@@ -1409,12 +1435,18 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 # إرسال الرسالة للمسؤول
-                await application.bot.send_message(
+                sent_message = await application.bot.send_message(
                     chat_id=admin_id,
                     text=message,
                     reply_markup=reply_markup,
                     parse_mode="HTML"
                 )
+                
+                # حفظ معرف الرسالة
+                NOTIFICATION_MESSAGES[account_id].append({
+                    'admin_id': admin_id,
+                    'message_id': sent_message.message_id
+                })
                 
                 logger.info(f"✅ Admin notification sent successfully to {admin_id}")
                 
@@ -1970,7 +2002,7 @@ def webapp_existing_account(request: Request):
           }}
         }}
 
-        // إضافة مستمعين للأحداث للتحقق الفوري
+        // إضافة مستمعين للأحداث للأتحقق الفوري
         document.querySelectorAll('input, select').forEach(element => {{
           element.addEventListener('blur', validateForm);
           element.addEventListener('input', function() {{
@@ -2455,7 +2487,7 @@ def webapp_edit_accounts(request: Request):
             }}
           }} catch (e) {{
             statusEl.style.color = '#ff4444';
-            statusEl.textContent = '{labels["error"]}: ' + e.message;
+            statusEl.textContent = '{labels["error"]}': ' + e.message;
           }}
         }}
 
@@ -2533,7 +2565,7 @@ def webapp_edit_accounts(request: Request):
           // تعطيل النموذج في البداية
           disableForm();
 
-          // إضافة مستمعين للتحقق من الحقول
+          // إضافة مستمعين للأحداث للتحقق من الحقول
           document.querySelectorAll('input, select').forEach(element => {{
             element.addEventListener('blur', validateForm);
             element.addEventListener('input', function() {{
@@ -3242,7 +3274,6 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
-                            
                            
                             account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
                             
