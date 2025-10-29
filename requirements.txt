@@ -6,3 +6,4 @@ alembic
 python-dotenv
 gunicorn
 pytest
+requests>=2.31.0
