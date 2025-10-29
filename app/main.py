@@ -22,7 +22,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 import asyncio
-import requests  # إضافة مكتبة requests لاستدعاء الـ API
 
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
@@ -180,9 +179,6 @@ WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
-# إضافة الـ SECRET_KEY كمتغير بيئي للحماية
-SECRET_KEY = os.getenv("SECRET_KEY")  # يجب تعيينه في Render كمتغير بيئي
-
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
 if not WEBAPP_URL:
@@ -199,6 +195,8 @@ FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
 # -------------------------------
 NOTIFICATION_MESSAGES: Dict[int, List[Dict[str, Any]]] = {}
 ADMIN_LANGUAGE: Dict[int, str] = {}
+
+SECRET_KEY = os.getenv("SECRET_KEY", "my_secret_key")  # استخدام متغير بيئة للسيكريت كي
 
 def set_admin_language(admin_id: int, lang: str):
     
@@ -319,7 +317,6 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "✅ الحسابات المقبولة",
             "❌ الحسابات المرفوضة",
             "🔍 بحث عن حساب",
-            "🔄 تحديث أداء الحسابات",
             "🔙 رجوع"
         ]
     else:
@@ -329,7 +326,6 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "✅ Approved",
             "❌ Rejected",
             "🔍 Search Account",
-            "🔄 Update Account Performances",
             "🔙 Back"
         ]
     
@@ -348,51 +344,12 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_rejected"))
             elif btn == "🔍 بحث عن حساب" or btn == "🔍 Search Account":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_search"))
-            elif btn == "🔄 تحديث أداء الحسابات" or btn == "🔄 Update Account Performances":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_update_performances"))
         keyboard.append(keyboard_row)
     
     keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
-
-# دالة جديدة لتحديث أداء الحسابات عند النقر على الزر
-async def admin_update_performances(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    
-    user_id = q.from_user.id
-    if user_id not in ADMIN_TELEGRAM_IDS:
-        await q.edit_message_text("❌ غير مصرح لك بالوصول إلى هذه الوظيفة")
-        return
-    
-    admin_lang = get_admin_language(user_id)
-    
-    # استدعاء الرابط باستخدام الـ SECRET_KEY من المتغيرات البيئية
-    secret_key = os.getenv("SECRET_KEY")
-    if not secret_key:
-        error_msg = "⚠️ SECRET_KEY غير معرف في المتغيرات البيئية" if admin_lang == "ar" else "⚠️ SECRET_KEY not defined in environment variables"
-        await q.edit_message_text(error_msg)
-        return
-    
-    url = f"https://telegram-1-i1z5.onrender.com/update-performances?key={secret_key}"
-    
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            success_msg = "✅ تم تحديث أداء الحسابات بنجاح!" if admin_lang == "ar" else "✅ Account performances updated successfully!"
-            await q.edit_message_text(success_msg)
-        else:
-            error_msg = f"❌ فشل في التحديث: {response.json().get('detail', 'خطأ غير معروف')}" if admin_lang == "ar" else f"❌ Update failed: {response.json().get('detail', 'Unknown error')}"
-            await q.edit_message_text(error_msg)
-    except Exception as e:
-        error_msg = f"❌ خطأ في الاتصال: {str(e)}" if admin_lang == "ar" else f"❌ Connection error: {str(e)}"
-        await q.edit_message_text(error_msg)
-    
-    # بعد 2 ثواني، العودة إلى قائمة إدارة الحسابات
-    await asyncio.sleep(2)
-    await admin_accounts_menu(update, context)
 
 async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -405,12 +362,14 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = "الإعدادات"
         buttons = [
             "🌐 تغيير اللغة",
+            "🔄 تحديث الأداء",
             "🔙 رجوع"
         ]
     else:
         title = "Settings"
         buttons = [
             "🌐 Change Language",
+            "🔄 Update Performances",
             "🔙 Back"
         ]
     
@@ -418,11 +377,34 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton(buttons[0], callback_data="admin_change_language")],
-        [InlineKeyboardButton(buttons[1], callback_data="admin_main")]
+        [InlineKeyboardButton(buttons[1], callback_data="admin_update_performances")],
+        [InlineKeyboardButton(buttons[2], callback_data="admin_main")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+
+async def admin_update_performances(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        await q.edit_message_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    
+    try:
+        populate_account_performances()
+        success_msg = "✅ تم تحديث جدول الأداء بنجاح!" if admin_lang == "ar" else "✅ Performances table updated successfully!"
+    except Exception as e:
+        logger.exception(f"Failed to update performances: {e}")
+        success_msg = "❌ فشل في تحديث جدول الأداء." if admin_lang == "ar" else "❌ Failed to update performances table."
+    
+    await q.edit_message_text(success_msg)
+    await asyncio.sleep(2)
+    await admin_settings(update, context)
 
 async def admin_change_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -1134,8 +1116,17 @@ def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar
                 db.commit()
                 result = "created"
         else:
-            # If telegram_id is None, raise error as it's required for proper functioning
-            raise ValueError("Telegram ID is required for subscriber creation.")
+            subscriber = Subscriber(
+                name=name,
+                email=email,
+                phone=phone,
+                telegram_username=telegram_username,
+                telegram_id=telegram_id,
+                lang=lang or "ar"
+            )
+            db.add(subscriber)
+            db.commit()
+            result = "created"
         
         db.refresh(subscriber)
         db.close()
@@ -1673,6 +1664,10 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if await handle_rejection_reason(update, context):
         return
     
+    if 'broadcast_type' in context.user_data and 'broadcast_message' not in context.user_data:
+        await process_admin_broadcast(update, context)
+        return
+    
     user_id = update.message.from_user.id
     admin_lang = get_admin_language(user_id)
     
@@ -1917,7 +1912,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         set_admin_language(user_id, lang)
     
     if lang == "ar":
-        #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
+       #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
         sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
@@ -3254,8 +3249,8 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                 disable_web_page_preview=True
             )
             save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
-        except Exception:
-            logger.exception("Failed to send fallback refresh message")
+        except Exception as fallback_error:
+            logger.exception("Failed to send fallback refresh message: {fallback_error}")
 
 # ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
@@ -3277,11 +3272,6 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # Check if telegram_id is present
-        telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
-        if not telegram_id:
-            return JSONResponse(status_code=400, content={"error": "Telegram user ID is required."})
-
         # تحديد اللغة - إصلاح المنطق هنا
         detected_lang = "ar"  # الافتراضي عربي
         if page_lang in ("ar", "en"):
@@ -3291,6 +3281,7 @@ async def webapp_submit(payload: dict = Body(...)):
             if lang_code and str(lang_code).startswith("en"):
                 detected_lang = "en"
 
+        telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
 
         # حفظ أو تحديث بيانات المشترك
@@ -3309,7 +3300,7 @@ async def webapp_submit(payload: dict = Body(...)):
         # الحصول على المرجع إذا كان موجوداً
         ref = get_form_ref(telegram_id) if telegram_id else None
         
-        # إذا كان تعديل
+        # إذا كان تعديل بيانات من قسم "بياناتي وحساباتي"
         is_edit_mode = payload.get("edit") == "1"
         if ref and ref.get("origin") == "my_accounts" and (is_edit_mode or result == "updated"):
             await refresh_user_accounts_interface(telegram_id, display_lang, ref["chat_id"], ref["message_id"])
@@ -3442,7 +3433,7 @@ async def webapp_submit(payload: dict = Body(...)):
             if not edited and telegram_id:
                 try:
                     sent = await application.bot.send_message(
-                        chat_id=telegram_id,
+                        chat_id=telegram_id, 
                         text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                         reply_markup=reply_markup, 
                         parse_mode="HTML", 
@@ -4168,10 +4159,7 @@ async def submit_existing_account(payload: dict = Body(...)):
             error_message = "Missing required fields: " + ", ".join(missing_fields)
             return JSONResponse(status_code=400, content={"error": error_message})
 
-        if not telegram_id:
-            return JSONResponse(status_code=400, content={"error": "Telegram user ID is required."})
-
-        if not all([broker, account, password, server]):
+        if not all([telegram_id, broker, account, password, server]):
             return JSONResponse(status_code=400, content={"error": "Missing required fields."})
 
         subscriber = get_subscriber_by_telegram_id(telegram_id)
@@ -4245,8 +4233,8 @@ application.add_handler(CallbackQueryHandler(handle_admin_back, pattern="^admin_
 application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(activate_account_|reject_account_)"))
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
+application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))  # إضافة الهاندلر الجديد
 # ===============================
 # Webhook setup
 # ===============================
@@ -4256,7 +4244,7 @@ def root():
 
 @app.get("/update-performances")
 def update_performances(key: str):
-    if key != SECRET_KEY:  # التحقق من الـ key المخزن في المتغيرات البيئية
+    if key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Invalid key")
     
     populate_account_performances()
