@@ -180,7 +180,7 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "rejected", reason=reason, user_lang=user_lang)
             
-            # حذف الرسائل المؤقتة
+            # حذف الرسائل المؤقتة للإداري الحالي
             messages_to_delete = []
             if 'admin_notification_message_id' in context.user_data:
                 messages_to_delete.append(context.user_data.pop('admin_notification_message_id'))
@@ -201,6 +201,9 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
                 await update.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete rejection reason message: {e}")
+                
+            # حذف الرسائل لجميع الإداريين الآخرين
+            await delete_all_notification_messages(account_id, context)
                 
             # إشعار المسؤول بنجاح العملية
             success_msg = "✅ تم رفض الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account rejected and user notified"
@@ -228,6 +231,8 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
         return True  # تم معالجة الرسالة
     
     return False  # لم يتم معالجة الرسالة
+    
+            
     
 def get_all_subscribers() -> List[Dict[str, Any]]:
     """جلب جميع المشتركين في البوت"""
@@ -1088,33 +1093,34 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             user_lang = get_user_current_language(account_id)
             await notify_user_about_account_status(account_id, "active", user_lang=user_lang)
             
+            # حذف الرسالة الحالية
             try:
                 await q.message.delete()
             except Exception as e:
                 logger.exception(f"Failed to delete admin message: {e}")
-        else:
+            
+            # حذف الرسائل لجميع الإداريين الآخرين
+            await delete_all_notification_messages(account_id, context)
+            
+            # إشعار الإداري بالنجاح
+            success_msg = "✅ تم تفعيل الحساب وإرسال الإشعار للمستخدم" if admin_lang == "ar" else "✅ Account activated and user notified"
+            sent_msg = await q.message.reply_text(success_msg)
+            
+            
+async def delete_all_notification_messages(account_id: int, context: ContextTypes.DEFAULT_TYPE):
+    if account_id in NOTIFICATION_MESSAGES:
+        for msg_info in NOTIFICATION_MESSAGES[account_id]:
             try:
-                await q.message.delete()
+                await context.bot.delete_message(
+                    chat_id=msg_info['chat_id'],
+                    message_id=msg_info['message_id']
+                )
             except Exception as e:
-                logger.exception(f"Failed to delete admin message on failure: {e}")
-    
-    elif q.data.startswith("reject_account_"):
-        account_id = int(q.data.split("_")[2])
+                logger.exception(f"Failed to delete notification message for admin {msg_info['admin_id']}: {e}")
         
-        # تنظيف أي بيانات بث سابقة
-        context.user_data.pop('broadcast_type', None)
-        context.user_data.pop('broadcast_message', None)
-        context.user_data.pop('target_users', None)
-        context.user_data.pop('target_name', None)
+        # تنظيف بعد الحذف
+        del NOTIFICATION_MESSAGES[account_id]
         
-        # إعداد سياق الرفض
-        context.user_data['awaiting_rejection_reason'] = account_id
-        context.user_data['admin_notification_message_id'] = q.message.message_id
-        
-        prompt_text = "يرجى إرسال سبب الرفض:" if admin_lang == "ar" else "Please provide the rejection reason:"
-        rejection_prompt = await q.message.reply_text(prompt_text)
-        context.user_data['rejection_prompt_message_id'] = rejection_prompt.message_id
-
 async def handle_notification_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
    
     q = update.callback_query
@@ -1314,6 +1320,11 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
             logger.warning("⚠️ ADMIN_TELEGRAM_IDS not set - admin notifications disabled")
             return
         
+        # تهيئة قائمة الرسائل لهذا الحساب إذا لم تكن موجودة
+        account_id = account_data['id']
+        if account_id not in NOTIFICATION_MESSAGES:
+            NOTIFICATION_MESSAGES[account_id] = []
+        
         # إرسال الإشعار لكل أدمن في القائمة
         for admin_id in ADMIN_TELEGRAM_IDS:
             try:
@@ -1409,12 +1420,19 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 # إرسال الرسالة للمسؤول
-                await application.bot.send_message(
+                sent_message = await application.bot.send_message(
                     chat_id=admin_id,
                     text=message,
                     reply_markup=reply_markup,
                     parse_mode="HTML"
                 )
+                
+                # تخزين معرف الرسالة
+                NOTIFICATION_MESSAGES[account_id].append({
+                    'admin_id': admin_id,
+                    'chat_id': admin_id,  # افتراضاً أن الإداري يتلقى في الشات الخاص به
+                    'message_id': sent_message.message_id
+                })
                 
                 logger.info(f"✅ Admin notification sent successfully to {admin_id}")
                 
