@@ -3232,13 +3232,14 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "Invalid phone."})
 
-        # تحديد اللغة
-        detected_lang = None
+        # تحديد اللغة - إصلاح المنطق هنا
+        detected_lang = "ar"  # الافتراضي عربي
         if page_lang in ("ar", "en"):
             detected_lang = page_lang
         else:
             lang_code = tg_user.get("language_code") if isinstance(tg_user, dict) else None
-            detected_lang = "en" if (lang_code and str(lang_code).startswith("en")) else "ar"
+            if lang_code and str(lang_code).startswith("en"):
+                detected_lang = "en"
 
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
@@ -3253,29 +3254,59 @@ async def webapp_submit(payload: dict = Body(...)):
             telegram_username=telegram_username
         )
 
-        # إذا كان المستخدم مسجلاً بالفعل، تحديث الواجهة مباشرة
-        is_edit_mode = payload.get("edit") == "1" or "edit" in (payload.get("params") or {})
+        # استخدام اللغة المحددة من الصفحة كأولوية
+        display_lang = page_lang if page_lang in ("ar", "en") else detected_lang
+
+        # الحصول على المرجع إذا كان موجوداً
         ref = get_form_ref(telegram_id) if telegram_id else None
         
+        # إذا كان تعديل بيانات من قسم "بياناتي وحساباتي"
+        is_edit_mode = payload.get("edit") == "1"
         if ref and ref.get("origin") == "my_accounts" and (is_edit_mode or result == "updated"):
-            await refresh_user_accounts_interface(telegram_id, detected_lang, ref["chat_id"], ref["message_id"])
+            await refresh_user_accounts_interface(telegram_id, display_lang, ref["chat_id"], ref["message_id"])
             return JSONResponse(content={"message": "Updated successfully."})
             
-        # تحديد لغة العرض
-        display_lang = detected_lang
-        if page_lang in ("ar", "en"):
-            display_lang = page_lang
-        elif ref and ref.get("lang"):
-            display_lang = ref.get("lang")
-        else:
-            display_lang = detected_lang
-
         # إذا كان التسجيل من طلب EA
         if ref and ref.get("origin") == "open_form_ea":
-            # ... الكود الحالي ...
-            pass
+            ea_link = "https://t.me/Nagyfx"
+            if display_lang == "ar":
+                title = "طلب اختبار أنظمة YesFX (الوكلاء فقط)"
+                message_text = ""
+                button_text = "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)"
+                back_button = "🔙 الرجوع لتداول الفوركس"
+            else:
+                title = "Request to Test YesFX Systems (Agents Only)"
+                message_text = ""
+                button_text = "🤖 Request to Test YesFX Systems (Agents Only)"
+                back_button = "🔙 Back to Forex"
+
+            labels = [button_text, back_button]
+            header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
+
+            keyboard = [
+                [InlineKeyboardButton(button_text, url=ea_link)],
+                [InlineKeyboardButton(back_button, callback_data="forex_main")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            try:
+                await application.bot.edit_message_text(
+                    text=header + f"\n\n{message_text}",
+                    chat_id=ref["chat_id"], 
+                    message_id=ref["message_id"],
+                    reply_markup=reply_markup, 
+                    parse_mode="HTML", 
+                    disable_web_page_preview=True
+                )
+                clear_form_ref(telegram_id)
+            except Exception:
+                logger.exception("Failed to edit EA request message")
+                
+            return JSONResponse(content={"message": "Sent successfully."})
+
+        # إذا كان التسجيل الأولي من نموذج اللغة
         elif ref and ref.get("origin") == "initial_registration":
-            # إذا كان التسجيل الأولي، عرض القوائم الرئيسية
+            # عرض القوائم الرئيسية بعد التسجيل الناجح
             if telegram_id:
                 try:
                     if display_lang == "ar":
@@ -3293,41 +3324,42 @@ async def webapp_submit(payload: dict = Body(...)):
                     labels = [name for name, _ in sections] + [back_button[0]]
                     header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0)
                     
-                    edited = False
-                    if ref:
-                        try:
-                            await application.bot.edit_message_text(
-                                text=header,
-                                chat_id=ref["chat_id"], 
-                                message_id=ref["message_id"],
-                                reply_markup=reply_markup, 
-                                parse_mode="HTML", 
-                                disable_web_page_preview=True
-                            )
-                            edited = True
-                            clear_form_ref(telegram_id)
-                        except Exception:
-                            logger.exception("Failed to edit form message for initial registration")
-                    if not edited:
-                        await application.bot.send_message(
+                    try:
+                        await application.bot.edit_message_text(
+                            text=header,
+                            chat_id=ref["chat_id"], 
+                            message_id=ref["message_id"],
+                            reply_markup=reply_markup, 
+                            parse_mode="HTML", 
+                            disable_web_page_preview=True
+                        )
+                        clear_form_ref(telegram_id)
+                    except Exception:
+                        # إذا فشل التعديل، إرسال رسالة جديدة
+                        sent = await application.bot.send_message(
                             chat_id=telegram_id,
                             text=header,
                             reply_markup=reply_markup,
                             parse_mode="HTML",
                             disable_web_page_preview=True
                         )
+                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
+                        
                 except Exception as e:
                     logger.exception(f"Failed to show main sections after initial registration: {e}")
+                    
+            return JSONResponse(content={"message": "Registered successfully."})
+
         else:
             # الحالة الافتراضية: عرض وسيطي التداول بعد التسجيل
             if display_lang == "ar":
                 header_title = "اختر وسيطك الآن"
-                brokers_title = ""
+                brokers_title = "🎉 تم تسجيل بياناتك بنجاح! يمكنك الآن فتح حساب تداول مع أحد الوسيطين المعتمدين:"
                 back_label = "🔙 الرجوع لتداول الفوركس"
                 accounts_label = "👤 بياناتي وحساباتي"
             else:
                 header_title = "Choose your broker now"
-                brokers_title = ""
+                brokers_title = "🎉 Your data has been registered successfully! You can now open a trading account with one of our approved brokers:"
                 back_label = "🔙 Back to Forex"
                 accounts_label = "👤 My Data & Accounts"
             
@@ -3340,6 +3372,7 @@ async def webapp_submit(payload: dict = Body(...)):
             keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
 
+            # محاولة تعديل الرسالة الأصلية إذا كان هناك مرجع
             edited = False
             if ref:
                 try:
@@ -3354,31 +3387,29 @@ async def webapp_submit(payload: dict = Body(...)):
                     edited = True
                     clear_form_ref(telegram_id)
                 except Exception:
-                    logger.exception("Failed to edit original form message; will send a fallback message.")
+                    logger.exception("Failed to edit original form message")
 
-            if not edited:
-                if telegram_id:
-                    try:
-                        sent = await application.bot.send_message(
-                            chat_id=telegram_id, 
-                            text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
-                            reply_markup=reply_markup, 
-                            parse_mode="HTML", 
-                            disable_web_page_preview=True
-                        )
-                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
-                    except Exception:
-                        logger.exception("Failed to send congrats message to user.")
-                else:
-                    logger.info("No telegram_id available from WebApp payload; skipping Telegram notification.")
+            # إذا لم يتم التعديل، إرسال رسالة جديدة
+            if not edited and telegram_id:
+                try:
+                    sent = await application.bot.send_message(
+                        chat_id=telegram_id, 
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
+                        reply_markup=reply_markup, 
+                        parse_mode="HTML", 
+                        disable_web_page_preview=True
+                    )
+                    save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
+                except Exception:
+                    logger.exception("Failed to send brokers message to user")
 
-        # إرجاع الاستجابة المناسبة بناءً على نتيجة الحفظ
+        # إرجاع الاستجابة النهائية
         if result == "created":
-            return JSONResponse(content={"message": "Saved successfully."})
+            return JSONResponse(content={"message": "Registered successfully."})
         elif result == "updated":
             return JSONResponse(content={"message": "Updated successfully."})
         else:
-            return JSONResponse(content={"message": "Saved successfully."})  # تغيير هنا لتفادي "unknown state"
+            return JSONResponse(content={"message": "Processed successfully."})
             
     except Exception as e:
         logger.exception("Error in webapp_submit: %s", e)
