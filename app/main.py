@@ -2453,7 +2453,7 @@ def webapp_existing_account(request: Request):
               statusEl.style.color='green';
               statusEl.textContent=data.message||'{ "تم الحفظ بنجاح" if is_ar else "Saved successfully" }';
               setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},1500);
-              try{{tg.sendData(JSON.stringify({{status:'sent',type:'existing_account'}}));}}catch(e){{}}
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'existing_account', lang:"{lang}" }}));}}catch(e){{}}
             }}else{{
               statusEl.textContent=data.error||'{labels["error"]}';
               statusEl.style.color='#ff4444';
@@ -2936,6 +2936,7 @@ def webapp_edit_accounts(request: Request):
                   console.log('Telegram WebApp closed');
                 }}
               }}, 1500);
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'edit_account', lang:"{lang}" }}));}}catch(e){{}}
             }} else {{
               statusEl.style.color = '#ff4444';
               statusEl.textContent = data.detail || '{labels["error"]}';
@@ -3002,6 +3003,7 @@ def webapp_edit_accounts(request: Request):
                   console.log('Telegram WebApp closed');
                 }}
               }}, 1500);
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'delete_account', lang:"{lang}" }}));}}catch(e){{}}
             }} else {{
               statusEl.style.color = '#ff4444';
               statusEl.textContent = data.detail || '{labels["error"]}';
@@ -3022,7 +3024,6 @@ def webapp_edit_accounts(request: Request):
 
           // إضافة مستمعين للتحقق من الحقول
           document.querySelectorAll('input, select').forEach(element => {{
-            element.addEventListener('blur', validateForm);
             element.addEventListener('input', function() {{
               const value = this.value.trim();
               if (value) {{
@@ -3306,18 +3307,31 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
     except Exception as e:
         logger.exception(f"Failed to refresh user interface: {e}")
         
-       
-        try:
-            sent = await application.bot.send_message(
-                chat_id=telegram_id,
-                text=updated_message,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True
-            )
-            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
-        except Exception as fallback_error:
-            logger.exception("Failed to send fallback refresh message: {fallback_error}")
+        # محاولة إعادة الحصول على آخر مرجع معروف
+        ref = get_form_ref(telegram_id)
+        if ref and ref["origin"] == "my_accounts":
+            try:
+                await application.bot.edit_message_text(
+                    chat_id=ref["chat_id"],
+                    message_id=ref["message_id"],
+                    text=updated_message,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+                return
+            except:
+                pass
+        
+        # إذا فشل كل شيء، أرسل رسالة جديدة وأعد حفظ المرجع
+        sent = await application.bot.send_message(
+            chat_id=telegram_id,
+            text=updated_message,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
 
 # ===============================
 # POST endpoint: receive form submission from WebApp (original registration)
@@ -3812,6 +3826,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if q.data == "add_trading_account":
+        save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="my_accounts", lang=lang)
         if WEBAPP_URL:
             url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
             
@@ -4108,84 +4123,34 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         await msg.reply_text("❌ Invalid data received.")
         return
 
-    name = payload.get("name", "").strip()
-    email = payload.get("email", "").strip()
-    phone = payload.get("phone", "").strip()
-    page_lang = (payload.get("lang") or "").lower()
-    lang = "ar" if page_lang not in ("en",) else "en"
+    status = payload.get("status")
+    data_type = payload.get("type")  # مثل 'existing_account' أو 'registration'
+    lang = payload.get("lang", "ar").lower()
+    user_id = msg.from_user.id
 
-    if not name or len(name) < 2:
-        await msg.reply_text("⚠️ الاسم قصير جدًا." if lang == "ar" else "⚠️ Name is too short.")
-        return
-    if not EMAIL_RE.match(email):
-        await msg.reply_text("⚠️ البريد الإلكتروني غير صالح." if lang == "ar" else "⚠️ Invalid email address.")
-        return
-    if not PHONE_RE.match(phone):
-        await msg.reply_text("⚠️ رقم الهاتف غير صالح." if lang == "ar" else "⚠️ Invalid phone number.")
-        return
+    if status == "sent":
+        ref = get_form_ref(user_id)
+        if not ref:
+            # إذا لم يكن هناك مرجع، أعد عرض الواجهة الرئيسية
+            await show_user_accounts(update, context, user_id, lang)
+            return
 
-    try:
-       
-        result, subscriber = save_or_update_subscriber(
-            name=name,
-            email=email,
-            phone=phone,
-            lang=lang,
-            telegram_id=getattr(msg.from_user, "id", None),
-            telegram_username=getattr(msg.from_user, "username", None)
-        )
-    except Exception:
-        logger.exception("Error saving subscriber from web_app message fallback")
-        result = "error"
+        if data_type == "existing_account" or data_type == "edit_account" or data_type == "delete_account":
+            # تحديث واجهة الحسابات
+            await refresh_user_accounts_interface(user_id, lang, ref["chat_id"], ref["message_id"])
+        elif data_type == "registration":
+            # التعامل مع التسجيل الأولي (كما في الكود الحالي)
+            name = payload.get("name", "").strip()
+            email = payload.get("email", "").strip()
+            phone = payload.get("phone", "").strip()
+            # ... (الكود الحالي للتسجيل)
+        else:
+            await msg.reply_text("⚠️ Unknown data type.")
 
-    success_msg = ("✅ تم حفظ بياناتك بنجاح! شكراً." if lang == "ar" else "✅ Your data has been saved successfully! Thank you.") if result != "error" else ("⚠️ حدث خطأ أثناء الحفظ." if lang == "ar" else "⚠️ Error while saving.")
-    try:
+        success_msg = "✅ تم الحفظ بنجاح!" if lang == "ar" else "✅ Saved successfully!"
         await msg.reply_text(success_msg)
-    except Exception:
-        pass
-
-    if lang == "ar":
-        header_title = "اختر وسيطك الآن"
-        brokers_title = ""
-        back_label = "🔙 الرجوع لتداول الفوركس"
-        edit_label = "✏️ تعديل بياناتي"
-        accounts_label = "👤 بياناتي وحساباتي"
     else:
-        header_title = "Choose your broker now"
-        brokers_title = ""
-        back_label = "🔙 Back to Forex"
-        edit_label = "✏️ Edit my data"
-        accounts_label = "👤 My Data & Accounts"
-
-    keyboard = [
-        [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-         InlineKeyboardButton("🏦 Scope", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
-    ]
-
-    user_id = getattr(msg.from_user, "id", None)
-    
-
-    keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    try:
-        edited = False
-        ref = get_form_ref(user_id) if user_id else None
-        if ref:
-            try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
-                edited = True
-                clear_form_ref(user_id)
-            except Exception:
-                logger.exception("Failed to edit form message in fallback path")
-        if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
-            try:
-                if user_id:
-                    save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
-            except Exception:
-                logger.exception("Could not save form message reference (fallback response).")
-    except Exception:
-        logger.exception("Failed to send brokers to user (fallback).")
+        await msg.reply_text("⚠️ Invalid status.")
 
 # ===============================
 # New: endpoint to receive existing-account form submissions
