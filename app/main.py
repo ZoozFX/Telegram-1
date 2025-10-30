@@ -3457,10 +3457,12 @@ async def webapp_submit(payload: dict = Body(...)):
                         sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
                         title = "الأقسام الرئيسية"
                         back_button = ("🔙 الرجوع للغة", "back_language")
+                        description = "\n\nمرحباً! هذه الأقسام الرئيسية."
                     else:
                         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
                         title = "Main Sections"
                         back_button = ("🔙 Back to language", "back_language")
+                        description = "\n\nHello! These are the main sections."
 
                     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
                     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
@@ -3470,7 +3472,7 @@ async def webapp_submit(payload: dict = Body(...)):
 
                     try:
                         await application.bot.edit_message_text(
-                            text=header,
+                            text=header + description,
                             chat_id=ref["chat_id"],
                             message_id=ref["message_id"],
                             reply_markup=reply_markup,
@@ -3482,7 +3484,7 @@ async def webapp_submit(payload: dict = Body(...)):
                         try:
                             sent = await application.bot.send_message(
                                 chat_id=telegram_id,
-                                text=header,
+                                text=header + description,
                                 reply_markup=reply_markup,
                                 parse_mode="HTML",
                                 disable_web_page_preview=True
