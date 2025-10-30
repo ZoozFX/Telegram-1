@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 import asyncio
+from sqlalchemy import text, inspect
 
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
@@ -170,6 +171,42 @@ def populate_account_performances():
         logger.exception(f"خطأ في ملء جدول الأداء: {e}")
     finally:
         db.close()
+
+def reset_sequences():
+    inspector = inspect(engine)
+    tables = ['subscribers', 'trading_accounts', 'account_performances']  # أضف الجداول الأخرى إذا لزم
+    
+    if engine.dialect.name == 'sqlite':
+        with engine.connect() as conn:
+            for table in tables:
+                # جلب أعلى ID
+                max_id_result = conn.execute(text(f"SELECT MAX(id) FROM {table}")).scalar()
+                max_id = max_id_result if max_id_result is not None else 0
+                
+                # تحديث sqlite_sequence
+                conn.execute(text(f"INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('{table}', {max_id})"))
+            conn.commit()
+        logger.info("✅ تم إعادة تعيين التسلسل في SQLite بنجاح!")
+        
+    elif engine.dialect.name == 'postgresql':
+        with engine.connect() as conn:
+            for table in tables:
+                seq_name = f"{table}_id_seq"
+                conn.execute(text(f"SELECT setval('{seq_name}', COALESCE((SELECT MAX(id) + 1 FROM {table}), 1), false)"))
+            conn.commit()
+        logger.info("✅ تم إعادة تعيين التسلسل في PostgreSQL بنجاح!")
+        
+    elif engine.dialect.name == 'mysql':
+        with engine.connect() as conn:
+            for table in tables:
+                max_id_result = conn.execute(text(f"SELECT MAX(id) FROM {table}")).scalar()
+                max_id = (max_id_result or 0) + 1
+                conn.execute(text(f"ALTER TABLE {table} AUTO_INCREMENT = {max_id}"))
+            conn.commit()
+        logger.info("✅ تم إعادة تعيين التسلسل في MySQL بنجاح!")
+        
+    else:
+        logger.error(f"❌ نوع قاعدة البيانات غير مدعوم: {engine.dialect.name}")
 
 # -------------------------------
 # settings & app
@@ -363,6 +400,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [
             "🌐 تغيير اللغة",
             "🔄 تحديث الأداء",
+            "🔄 إعادة تعيين التسلسل",
             "🔙 رجوع"
         ]
     else:
@@ -370,6 +408,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [
             "🌐 Change Language",
             "🔄 Update Performances",
+            "🔄 Reset Sequences",
             "🔙 Back"
         ]
     
@@ -378,7 +417,8 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(buttons[0], callback_data="admin_change_language")],
         [InlineKeyboardButton(buttons[1], callback_data="admin_update_performances")],
-        [InlineKeyboardButton(buttons[2], callback_data="admin_main")]
+        [InlineKeyboardButton(buttons[2], callback_data="admin_reset_sequences")],
+        [InlineKeyboardButton(buttons[3], callback_data="admin_main")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -401,6 +441,28 @@ async def admin_update_performances(update: Update, context: ContextTypes.DEFAUL
     except Exception as e:
         logger.exception(f"Failed to update performances: {e}")
         success_msg = "❌ فشل في تحديث جدول الأداء." if admin_lang == "ar" else "❌ Failed to update performances table."
+    
+    await q.edit_message_text(success_msg)
+    await asyncio.sleep(2)
+    await admin_settings(update, context)
+
+async def admin_reset_sequences(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        await q.edit_message_text("❌ غير مصرح لك بتنفيذ هذا الإجراء")
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    
+    try:
+        reset_sequences()
+        success_msg = "✅ تم إعادة تعيين التسلسل بنجاح!" if admin_lang == "ar" else "✅ Sequences reset successfully!"
+    except Exception as e:
+        logger.exception(f"Failed to reset sequences: {e}")
+        success_msg = "❌ فشل في إعادة تعيين التسلسل." if admin_lang == "ar" else "❌ Failed to reset sequences."
     
     await q.edit_message_text(success_msg)
     await asyncio.sleep(2)
@@ -4234,6 +4296,7 @@ application.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(ac
 application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
 application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
+application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^admin_reset_sequences$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
 # ===============================
 # Webhook setup
