@@ -260,6 +260,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ الإعدادات",
             "🚪 خروج"
         ]
+        description = "\n\nمرحباً! هذه لوحة التحكم الإدارية."
     else:
         title = "Admin Control Panel"
         buttons = [
@@ -269,7 +270,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ Settings",
             "🚪 Exit"
         ]
-    
+        description = "\n\nHello! This is the admin control panel."
+
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
     keyboard = []
@@ -290,7 +292,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_exit")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML")
+    await update.message.reply_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -308,6 +310,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             "🔍 بث فردي",
             "🔙 رجوع"
         ]
+        description = "\n\nمرحباً! هذا قسم البث والرسائل."
     else:
         title = "Broadcasting & Messages"
         buttons = [
@@ -317,6 +320,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             "🔍 Individual Message",
             "🔙 Back"
         ]
+        description = "\n\nHello! This is the broadcasting and messages section."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -338,7 +342,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -356,6 +360,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "🔍 بحث عن حساب",
             "🔙 رجوع"
         ]
+        description = "\n\nمرحباً! هذا قسم إدارة الحسابات."
     else:
         title = "Accounts Management"
         buttons = [
@@ -365,6 +370,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "🔍 Search Account",
             "🔙 Back"
         ]
+        description = "\n\nHello! This is the accounts management section."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -386,7 +392,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_main")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -403,6 +409,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔄 إعادة تعيين التسلسل",
             "🔙 رجوع"
         ]
+        description = "\n\nمرحباً! هذا قسم الإعدادات."
     else:
         title = "Settings"
         buttons = [
@@ -411,6 +418,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔄 Reset Sequences",
             "🔙 Back"
         ]
+        description = "\n\nHello! This is the settings section."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -422,7 +430,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admin_update_performances(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -482,6 +490,7 @@ async def admin_change_language(update: Update, context: ContextTypes.DEFAULT_TY
             "🇺🇸 English",
             "🔙 رجوع"
         ]
+        description = "\n\nمرحباً! اختر اللغة المفضلة."
     else:
         title = "Change Language"
         buttons = [
@@ -489,6 +498,7 @@ async def admin_change_language(update: Update, context: ContextTypes.DEFAULT_TY
             "🇪🇬 العربية",
             "🔙 Back"
         ]
+        description = "\n\nHello! Choose your preferred language."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -501,7 +511,7 @@ async def admin_change_language(update: Update, context: ContextTypes.DEFAULT_TY
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admin_set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -542,6 +552,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ <b>الحسابات النشطة:</b> {active_accounts}
 ❌ <b>الحسابات المرفوضة:</b> {rejected_accounts}
         """
+        description = "\n\nمرحباً! هذه الإحصائيات الحالية."
         back_btn = "🔙 رجوع"
     else:
         title = "Statistics & Reports"
@@ -554,6 +565,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ <b>Active Accounts:</b> {active_accounts}
 ❌ <b>Rejected Accounts:</b> {rejected_accounts}
         """
+        description = "\n\nHello! These are the current statistics."
         back_btn = "🔙 Back"
     
     header = build_header_html(title, [back_btn], header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
@@ -561,7 +573,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(back_btn, callback_data="admin_main")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await q.edit_message_text(header + stats_text, reply_markup=reply_markup, parse_mode="HTML")
+    await q.edit_message_text(header + description + stats_text, reply_markup=reply_markup, parse_mode="HTML")
 
 def get_accounts_by_status(status: str) -> List[TradingAccount]:
     try:
@@ -585,18 +597,20 @@ async def admin_accounts_under_review(update: Update, context: ContextTypes.DEFA
     if admin_lang == "ar":
         title = "الحسابات قيد المراجعة"
         no_accounts = "لا توجد حسابات قيد المراجعة حالياً"
+        description = "\n\nمرحباً! هذه الحسابات قيد المراجعة."
         back_btn = "🔙 رجوع"
     else:
         title = "Accounts Under Review"
         no_accounts = "No accounts under review currently"
+        description = "\n\nHello! These are the accounts under review."
         back_btn = "🔙 Back"
     
     header = build_header_html(title, [back_btn], header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
     if not accounts:
-        text = header + f"\n\n{no_accounts}"
+        text = header + description + f"\n\n{no_accounts}"
     else:
-        text = header + "\n\n"
+        text = header + description + "\n\n"
         for acc in accounts:
             sub = acc.subscriber
             text += f"🏦 {acc.broker_name} - {acc.account_number}\n👤 {sub.name} ({sub.telegram_id})\n\n"
@@ -631,7 +645,7 @@ async def admin_exit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "✅ تم الخروج من لوحة الإدارة" if admin_lang == "ar" else "✅ Exited admin panel"
     
     await q.edit_message_text(msg)
-    await show_main_sections(update, context, admin_lang)
+    await start(update, context)
 
 async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
    
@@ -942,6 +956,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
             "⚙️ الإعدادات",
             "🚪 خروج"
         ]
+        description = "\n\nمرحباً! هذه لوحة التحكم الإدارية."
     else:
         title = "Admin Control Panel"
         buttons = [
@@ -951,6 +966,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
             "⚙️ Settings",
             "🚪 Exit"
         ]
+        description = "\n\nHello! This is the admin control panel."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -972,7 +988,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
     keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_exit")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML")
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
    
@@ -1087,7 +1103,7 @@ def get_agent_username(agent_name: str) -> str:
     return "@Omarkin9"
 
 # -------------------------------
-# consistent header builder - MODIFIED
+# consistent header builder
 # -------------------------------
 def build_header_html(
     title: str,
@@ -1102,7 +1118,7 @@ def build_header_html(
     RLE = "\u202B"
     PDF = "\u202C"
     RLM = "\u200F"
-    LRM = "\u200E"  # NEW: Left-to-Right Mark for English alignment
+    LLM = "\u200E"
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
@@ -1116,7 +1132,6 @@ def build_header_html(
         title = f"{' ' * left_pad}{title}{' ' * right_pad}"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
-    is_language_selection = "Language | اللغة" in title  # NEW: Detect language selection message
 
     if is_arabic:
         indent = NBSP * arabic_indent
@@ -1127,6 +1142,7 @@ def build_header_html(
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
+   
     if is_arabic:
         target_width = 29
     else:
@@ -1142,16 +1158,9 @@ def build_header_html(
         if is_arabic:
             underline_line = "\n" + RLM + (underline_char * target_width)
         else:
-            # NEW: For English and language selection, force left alignment with LRM
-            if not is_arabic or is_language_selection:
-                underline_line = "\n" + LRM + (underline_char * target_width)
-            else:
-                underline_line = "\n" + (underline_char * target_width)
+            underline_line = "\n" + (underline_char * target_width)
 
-    # NEW: Add hidden description (empty space) after the header
-    hidden_description = "\n\n"  # Two new lines as empty space
-
-    return centered_line + underline_line + hidden_description
+    return centered_line + underline_line
 # -------------------------------
 # DB helpers
 # -------------------------------
@@ -1958,21 +1967,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
+    description = "\n\nمرحباً! اختر اللغة."
     
-    # NEW: Add empty description
-    description = "\n\n"
-    full_text = header + description
-
     if update.callback_query:
         q = update.callback_query
         await q.answer()
         try:
-            await q.edit_message_text(full_text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=q.message.chat_id, text=full_text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=q.message.chat_id, text=header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
         if update.message:
-            await update.message.reply_text(full_text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await update.message.reply_text(header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
@@ -1985,15 +1991,15 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         set_admin_language(user_id, lang)
     
     if lang == "ar":
-       #sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main"), ("🤝 طلب وكالة YesFX", "agency_main")]
         sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
+        description = "\n\nمرحباً! هذه الأقسام الرئيسية."
     else:
-       #sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main"), ("🤝 YesFX Partnership", "agency_main")]
         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
+        description = "\n\nHello! These are the main sections."
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
@@ -2001,9 +2007,9 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
     labels = [name for name, _ in sections] + [back_button[0]]
     header = build_header_html(title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
     try:
-        await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     except Exception:
-        await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        await context.bot.send_message(chat_id=q.message.chat_id, text=header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -2025,11 +2031,13 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
             back_label_text = "🔙 الرجوع للغة"
             open_label = "📝 افتح نموذج التسجيل"
             header_emoji_for_lang = HEADER_EMOJI
+            description = "\n\nمرحباً! أكمل البيانات."
         else:
             title = "Please enter your data"
             back_label_text = "🔙 Back to language"
             open_label = "📝 Open registration form"
             header_emoji_for_lang = "✨"
+            description = "\n\nHello! Complete your data."
 
         labels = [open_label, back_label_text]
         header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang == "ar" else 0)
@@ -2046,11 +2054,11 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="initial_registration", lang=lang)
         except Exception:
             try:
-                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 save_form_ref(user_id, sent.chat_id, sent.message_id, origin="initial_registration", lang=lang)
             except Exception:
                 logger.exception("Failed to show initial registration form.")
@@ -2508,7 +2516,7 @@ def webapp_edit_accounts(request: Request):
         "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
         "agent": "الوكيل" if is_ar else "Agent",
         "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
-        "save": "حفظ التغييرات" if is_arelse "Save Changes",
+        "save": "حفظ التغييرات" if is_ar else "Save Changes",
         "delete": "حذف الحساب" if is_ar else "Delete Account",
         "close": "إغلاق" if is_ar else "Close",
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
@@ -2868,6 +2876,7 @@ def webapp_edit_accounts(request: Request):
               
               statusEl.textContent = '';
               statusEl.style.color = '#b00';
+              statusEl.marginTop = '10px';
             }} else {{
               statusEl.textContent = '{ "الحساب غير موجود" if is_ar else "Account not found" }';
               clearForm();
@@ -3152,6 +3161,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
         no_accounts = "\nلا توجد حسابات مسجلة بعد."
+        description = "\n\nمرحباً! هذه بياناتك وحساباتك."
     else:
         header_title = "👤 My Data & Accounts"
         add_account_label = "➕ Add Trading Account"
@@ -3166,8 +3176,9 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
         no_accounts = "\nNo trading accounts registered yet."
+        description = "\n\nHello! This is your data and accounts."
 
-    updated_message = f"{header}\n\n{user_info}{accounts_header}\n"
+    updated_message = f"{header}{description}\n\n{user_info}{accounts_header}\n"
     
     today = datetime.now()
     
@@ -3468,14 +3479,17 @@ async def webapp_submit(payload: dict = Body(...)):
                         )
                         clear_form_ref(telegram_id)
                     except Exception:
-                        sent = await application.bot.send_message(
-                            chat_id=telegram_id,
-                            text=header,
-                            reply_markup=reply_markup,
-                            parse_mode="HTML",
-                            disable_web_page_preview=True
-                        )
-                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
+                        try:
+                            sent = await application.bot.send_message(
+                                chat_id=telegram_id,
+                                text=header,
+                                reply_markup=reply_markup,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True
+                            )
+                            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
+                        except Exception:
+                            logger.exception("Failed to send main sections message after initial registration")
 
                 except Exception as e:
                     logger.exception(f"Failed to show main sections after initial registration: {e}")
@@ -3487,12 +3501,12 @@ async def webapp_submit(payload: dict = Body(...)):
             # الحالة الافتراضية: عرض وسطاء التداول بعد التسجيل
             if display_lang == "ar":
                 header_title = "اختر وسيطك الآن"
-                brokers_title = "🎉 تم تسجيل بياناتك بنجاح! يمكنك الآن فتح حساب تداول مع أحد الوسيطين المعتمدين:"
+                brokers_title = ""
                 back_label = "🔙 الرجوع لتداول الفوركس"
                 accounts_label = "👤 بياناتي وحساباتي"
             else:
                 header_title = "Choose your broker now"
-                brokers_title = "🎉 Your data has been registered successfully! You can now open a trading account with one of our approved brokers:"
+                brokers_title = ""
                 back_label = "🔙 Back to Forex"
                 accounts_label = "👤 My Data & Accounts"
 
@@ -3563,11 +3577,12 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
         
         text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً." if lang == "ar" else "⚠️ You haven't registered yet. Please register first."
+        description = "\n\nمرحباً! " if lang == "ar" else "\n\nHello! "
         
         if update.callback_query and update.callback_query.message:
-            await update.callback_query.edit_message_text(header + f"\n\n{text}")
+            await update.callback_query.edit_message_text(header + description + text)
         else:
-            await context.bot.send_message(chat_id=telegram_id, text=header + f"\n\n{text}")
+            await context.bot.send_message(chat_id=telegram_id, text=header + description + text)
         return
 
     if lang == "ar":
@@ -3586,7 +3601,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             header_emoji=HEADER_EMOJI,
             arabic_indent=1
         )
-        
+        description = "\n\nمرحباً! هذه بياناتك وحساباتك."
         user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
         accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
         no_accounts = "\nلا توجد حسابات مسجلة بعد."
@@ -3607,12 +3622,12 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             header_emoji=HEADER_EMOJI,
             arabic_indent=0
         )
-     
+        description = "\n\nHello! This is your data and accounts."
         user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
         accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
         no_accounts = "\nNo trading accounts registered yet."
 
-    message = f"{header}\n\n{user_info}{accounts_header}\n"
+    message = f"{header}{description}\n\n{user_info}{accounts_header}\n"
     
     today = datetime.now()  
     
@@ -3673,7 +3688,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
                             
-                            
+                           
                             account_text += f"   📈 <b>العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}\n"
                             
                     except (ValueError, TypeError) as e:
@@ -3757,15 +3772,12 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         message += f"\n{no_accounts}"
 
     keyboard = []
-    
     if WEBAPP_URL:
         url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
         keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-    
     if WEBAPP_URL and len(user_data['trading_accounts']) > 0:
         edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
         keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-    
     if WEBAPP_URL:
         params = {
             "lang": lang,
@@ -3776,11 +3788,9 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         }
         edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
         keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-    
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     try:
         if update.callback_query and update.callback_query.message:
             await update.callback_query.edit_message_text(
@@ -3938,6 +3948,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
+        description = "\n\nمرحباً! " if lang == "ar" else "\n\nHello! "
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
         keyboard = []
         for name in options:
@@ -3948,10 +3959,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         try:
-            await q.edit_message_text(box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(box + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin=q.data, lang=lang)
         except Exception:
-            await context.bot.send_message(chat_id=q.message.chat_id, text=box, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=q.message.chat_id, text=box + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         return
 
     if q.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
@@ -3961,11 +3972,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             brokers_title = ""
             back_label = "🔙 الرجوع لتداول الفوركس"
             accounts_label = "👤 بياناتي وحساباتي"
+            description = "\n\nمرحباً! اختر وسيطك."
         else:
             header_title = "Choose your broker now"
             brokers_title = ""
             back_label = "🔙 Back to Forex"
             accounts_label = "👤 My Data & Accounts"
+            description = "\n\nHello! Choose your broker."
 
         keyboard = [
             [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
@@ -3977,11 +3990,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + description + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
         except Exception:
             try:
-                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + description + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
             except Exception:
                 logger.exception("Failed to show congrats screen for already-registered user.")
@@ -4024,7 +4037,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             support_label = "💬 التواصل مع الدعم"
             back_label = "🔙 الرجوع"
             description = f"""
-نحن هنا لمساعدتك في {service_title}!
+مرحباً! نحن هنا لمساعدتك في {service_title}!
 
 <b>📞 للاستفسار أو الطلب:</b>
 • اضغط على زر التواصل مع الدعم
@@ -4039,7 +4052,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             support_label = "💬 Contact Support"
             back_label = "🔙 Back"
             description = f"""
-We're here to help you with {service_title}!
+Hello! We're here to help you with {service_title}!
 
 <b>📞 For inquiries or orders:</b>
 • Click the Contact Support button
@@ -4082,9 +4095,11 @@ We're here to help you with {service_title}!
     if lang == "ar":
         placeholder = "تم اختيار الخدمة"
         details = "سيتم إضافة التفاصيل قريبًا..."
+        description = "\n\nمرحباً! " + details
     else:
         placeholder = "Service selected"
         details = "Details will be added soon..."
+        description = "\n\nHello! " + details
     
     labels_for_header = [q.data]
     header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", arabic_indent=1 if lang=="ar" else 0)
@@ -4104,7 +4119,7 @@ We're here to help you with {service_title}!
     
     try:
         await q.edit_message_text(
-            header_box + f"\n\n{details}",
+            header_box + description,
             reply_markup=reply_markup,
             parse_mode="HTML",
             disable_web_page_preview=True
@@ -4112,7 +4127,7 @@ We're here to help you with {service_title}!
     except Exception:
         await context.bot.send_message(
             chat_id=q.message.chat_id,
-            text=header_box + f"\n\n{details}",
+            text=header_box + description,
             reply_markup=reply_markup,
             parse_mode="HTML",
             disable_web_page_preview=True
