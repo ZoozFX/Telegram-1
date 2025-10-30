@@ -320,7 +320,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             "🔍 Individual",
             "🔙 Back"
         ]
-        description = "\n\nYou can send a message using the following options."
+        description = "\n\nYou can send a message"
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -405,7 +405,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = "الإعدادات"
         buttons = [
             "🌐 تغيير اللغة",
-            "🔄 تحديث الأداء",
+            "🔄 تحديث قاعدة البيانات",
             "🔄 تحديث تسلسل قاعدة البيانات",
             "🔙 رجوع"
         ]
