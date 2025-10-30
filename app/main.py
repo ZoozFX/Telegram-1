@@ -2273,7 +2273,7 @@ def webapp_existing_account(request: Request):
         <select id="broker" required>
           <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
           <option value="Oneroyal">Oneroyal</option>
-          <option value="Tickmill">Tickmill</option>
+          <option value="Scope">Scope</option>
         </select>
         <div id="broker_error" class="field-error">{labels['required_field']}</div>
 
@@ -2584,7 +2584,7 @@ def webapp_edit_accounts(request: Request):
         <select id="broker" required>
           <option value="">{ 'اختر الشركة' if is_ar else 'Select Broker' }</option>
           <option value="Oneroyal">Oneroyal</option>
-          <option value="Tickmill">Tickmill</option>
+          <option value="Scope">Scope</option>
         </select>
         <div id="broker_error" class="field-error">{labels['required_field']}</div>
 
@@ -3467,7 +3467,7 @@ async def webapp_submit(payload: dict = Body(...)):
             
             keyboard = [
                 [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-                 InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+                 InlineKeyboardButton("🏦 Scope", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
             ]
 
             keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
@@ -3479,7 +3479,7 @@ async def webapp_submit(payload: dict = Body(...)):
             if ref:
                 try:
                     await application.bot.edit_message_text(
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                         chat_id=ref["chat_id"], 
                         message_id=ref["message_id"],
                         reply_markup=reply_markup, 
@@ -3496,7 +3496,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 try:
                     sent = await application.bot.send_message(
                         chat_id=telegram_id, 
-                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
+                        text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", 
                         reply_markup=reply_markup, 
                         parse_mode="HTML", 
                         disable_web_page_preview=True
@@ -3935,7 +3935,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-             InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+             InlineKeyboardButton("🏦 Scope", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
         ]
 
         keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
@@ -3943,11 +3943,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
             save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
         except Exception:
             try:
-                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
                 save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
             except Exception:
                 logger.exception("Failed to show congrats screen for already-registered user.")
@@ -4151,7 +4151,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
 
     keyboard = [
         [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-         InlineKeyboardButton("🏦 Tickmill", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+         InlineKeyboardButton("🏦 Scope", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
     ]
 
     user_id = getattr(msg.from_user, "id", None)
@@ -4164,13 +4164,13 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         ref = get_form_ref(user_id) if user_id else None
         if ref:
             try:
-                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+                await msg.bot.edit_message_text(text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", chat_id=ref["chat_id"], message_id=ref["message_id"], reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
                 edited = True
                 clear_form_ref(user_id)
             except Exception:
                 logger.exception("Failed to edit form message in fallback path")
         if not edited:
-            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Tickmill", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
+            sent = await msg.reply_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if lang=="ar" else 0) + f"\n\n{brokers_title}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML", disable_web_page_preview=True)
             try:
                 if user_id:
                     save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=lang)
