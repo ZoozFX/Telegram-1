@@ -2211,18 +2211,18 @@ def webapp_existing_account(request: Request):
     if is_ar:
         expected_return_options = """
             <option value="">اختر العائد المتوقع</option>
-            <option value="10% - 15%">10% - 15%</option>
-            <option value="20% - 30%">20% - 30%</option>
-            <option value="30% - 45%">30% - 45%</option>
-            <option value="40% - 60%">40% - 60%</option>
+            <option value="X1 = 10% - 15%">X1 = 10% - 15%</option>
+            <option value="X2 = 20% - 30%">X2 = 20% - 30%</option>
+            <option value="X3 = 30% - 45%">X3 = 30% - 45%</option>
+            <option value="X4 = 40% - 60%">X4 = 40% - 60%</option>
         """
     else:
         expected_return_options = """
             <option value="">Select Expected Return</option>
-            <option value="10% - 15%">10% - 15%</option>
-            <option value="20% - 30%">20% - 30%</option>
-            <option value="30% - 45%">30% - 45%</option>
-            <option value="40% - 60%">40% - 60%</option>
+            <option value="X1 = 10% - 15%">X1 = 10% - 15%</option>
+            <option value="X2 = 20% - 30%">X2 = 20% - 30%</option>
+            <option value="X3 = 30% - 45%">X3 = 30% - 45%</option>
+            <option value="X4 = 40% - 60%">X4 = 40% - 60%</option>
         """
 
     form_labels = [
@@ -2509,18 +2509,18 @@ def webapp_edit_accounts(request: Request):
     if is_ar:
         expected_return_options = """
             <option value="">اختر العائد المتوقع</option>
-            <option value="10% - 15%">10% - 15%</option>
-            <option value="20% - 30%">20% - 30%</option>
-            <option value="30% - 45%">30% - 45%</option>
-            <option value="40% - 60%">40% - 60%</option>
+            <option value="X1 = 10% - 15%">X1 = 10% - 15%</option>
+            <option value="X2 = 20% - 30%">X2 = 20% - 30%</option>
+            <option value="X3 = 30% - 45%">X3 = 30% - 45%</option>
+            <option value="X4 = 40% - 60%">X4 = 40% - 60%</option>
         """
     else:
         expected_return_options = """
             <option value="">Select Expected Return</option>
-            <option value="10% - 15%">10% - 15%</option>
-            <option value="20% - 30%">20% - 30%</option>
-            <option value="30% - 45%">30% - 45%</option>
-            <option value="40% - 60%">40% - 60%</option>
+            <option value="X1 = 10% - 15%">X1 = 10% - 15%</option>
+            <option value="X2 = 20% - 30%">X2 = 20% - 30%</option>
+            <option value="X3 = 30% - 45%">X3 = 30% - 45%</option>
+            <option value="X4 = 40% - 60%">X4 = 40% - 60%</option>
         """
 
     form_labels = [
