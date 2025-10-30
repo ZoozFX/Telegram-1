@@ -254,8 +254,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if admin_lang == "ar":
         title = "لوحة التحكم الإدارية"
         buttons = [
-            "📢 البث والرسائل",
-            "📊 الإحصائيات والتقارير",
+            "📢 ارسل رسالة",
+            "📊 التقارير",
             "🏦 إدارة الحسابات",
             "⚙️ الإعدادات",
             "🚪 خروج"
@@ -264,7 +264,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         title = "Admin Control Panel"
         buttons = [
-            "📢 Broadcasting & Messages",
+            "📢 Send Message",
             "📊 Reports",
             "🛠 Management",
             "⚙️ Settings",
@@ -279,9 +279,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 البث والرسائل" or btn == "📢 Broadcasting & Messages":
+            if btn == "📢 ارسل رسالة" or btn == "📢 Send Message":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_menu"))
-            elif btn == "📊 الإحصائيات والتقارير" or btn == "📊 Reports":
+            elif btn == "📊 التقارير" or btn == "📊 Reports":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_stats"))
             elif btn == "🏦 إدارة الحسابات" or btn == "🛠 Management":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_menu"))
@@ -302,25 +302,25 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
-        title = "البث والرسائل"
+        title = "ارسل رسالة"
         buttons = [
-            "📢 بث للجميع",
-            "👥 بث للمسجلين",
-            "✅ بث للمقبولين",
-            "🔍 بث فردي",
+            "📢 للجميع",
+            "👥 للمسجلين فقط",
+            "✅ للمقبولين فقط",
+            "🔍 لشخص واحد",
             "🔙 رجوع"
         ]
-        description = "\n\nمرحباً! هذا قسم البث والرسائل."
+        description = "\n\nيمكنك ارسال رسالة من خلال الخيارات التالية."
     else:
-        title = "Broadcasting & Messages"
+        title = "Send Message"
         buttons = [
-            "📢 Broadcast to All",
+            "📢 To All",
             "👥 To Registered",
             "✅ To Approved",
-            "🔍 Individual Message",
+            "🔍 Individual",
             "🔙 Back"
         ]
-        description = "\n\nHello! This is the broadcasting and messages section."
+        description = "\n\nYou can send a message using the following options."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -329,13 +329,13 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 بث للجميع" or btn == "📢 Broadcast to All":
+            if btn == "📢 للجميع" or btn == "📢 To All":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_all"))
-            elif btn == "👥 بث للمسجلين" or btn == "👥 To Registered":
+            elif btn == "👥 للمسجلين فقط" or btn == "👥 To Registered":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_registered"))
-            elif btn == "✅ بث للمقبولين" or btn == "✅ To Approved":
+            elif btn == "✅ للمقبولين فقط" or btn == "✅ To Approved":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_approved"))
-            elif btn == "🔍 بث فردي" or btn == "🔍 Individual Message":
+            elif btn == "🔍 لشخص واحد" or btn == "🔍 Individual":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_individual_message"))
         keyboard.append(keyboard_row)
     
@@ -406,7 +406,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [
             "🌐 تغيير اللغة",
             "🔄 تحديث الأداء",
-            "🔄 إعادة تعيين التسلسل",
+            "🔄 تحديث تسلسل قاعدة البيانات",
             "🔙 رجوع"
         ]
         description = "\n\nمرحباً! هذا قسم الإعدادات."
@@ -414,7 +414,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = "Settings"
         buttons = [
             "🌐 Change Language",
-            "🔄 Update Performances",
+            "🔄 Update Database",
             "🔄 Reset Sequences",
             "🔙 Back"
         ]
@@ -542,7 +542,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rejected_accounts = len(get_accounts_by_status("rejected"))
 
     if admin_lang == "ar":
-        title = "الإحصائيات والتقارير"
+        title = "التقارير"
         stats_text = f"""
 📊 <b>إجمالي المشتركين:</b> {total_subscribers}
 👥 <b>المسجلين:</b> {registered_users}
@@ -950,8 +950,8 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
     if admin_lang == "ar":
         title = "لوحة التحكم الإدارية"
         buttons = [
-            "📢 البث والرسائل",
-            "📊 الإحصائيات والتقارير",
+            "📢 ارسل رسالة",
+            "📊 التقارير",
             "🏦 إدارة الحسابات",
             "⚙️ الإعدادات",
             "🚪 خروج"
@@ -960,7 +960,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
     else:
         title = "Admin Control Panel"
         buttons = [
-            "📢 Broadcasting & Messages",
+            "📢 Send Message",
             "📊 Reports",
             "🛠 Management",
             "⚙️ Settings",
@@ -975,9 +975,9 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 البث والرسائل" or btn == "📢 Broadcasting & Messages":
+            if btn == "📢 ارسل رسالة" or btn == "📢 Send Message":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_menu"))
-            elif btn == "📊 الإحصائيات والتقارير" or btn == "📊 Reports":
+            elif btn == "📊 التقارير" or btn == "📊 Reports":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_stats"))
             elif btn == "🏦 إدارة الحسابات" or btn == "🛠 Management":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_menu"))
