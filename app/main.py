@@ -1146,7 +1146,7 @@ def build_header_html(
     if is_arabic:
         target_width = 25
     else:
-        target_width = 27
+        target_width = 29
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -1967,7 +1967,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("\u200Fاللغة | Language", labels, header_emoji=HEADER_EMOJI)
-    description = "\n\nمرحباً! اختر اللغة."
+    description = "\n\n"
     
     if update.callback_query:
         q = update.callback_query
