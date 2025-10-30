@@ -1094,8 +1094,7 @@ def build_header_html(
     keyboard_labels: List[str],
     header_emoji: str = HEADER_EMOJI,
     underline_enabled: bool = True,
-    underline_char: str = "━━━━━━━━━━━━━━━━━━━━━━━━━
-    ",
+    underline_char: str = "━",
     arabic_indent: int = 0,
 ) -> str:
     
@@ -1128,7 +1127,7 @@ def build_header_html(
     title_width = display_width(measure_title)
     
     # طول الخط الأسفل دائمًا 25
-    underline_width = 1
+    underline_width = 25
 
     space_needed = max(0, underline_width - title_width)
     pad_left = space_needed // 2
@@ -1146,7 +1145,7 @@ def build_header_html(
             underline_line = "\n" + (underline_char * underline_width)
 
     # إضافة سطر NBSP عادي بعد الخط لتوسيع عرض الرسالة إلى أقصى حد (40 NBSP للعرض الأقصى)
-    max_message_width = 1  # قيمة مناسبة لأقصى عرض دون التفاف زائد
+    max_message_width = 40  # قيمة مناسبة لأقصى عرض دون التفاف زائد
     expander_line = f"\n{NBSP * max_message_width}"
 
     # لرسالة اختيار اللغة خاصة (التي تحتوي على مزيج عربي/إنجليزي)، ضمن محاذاة الخط لليسار إذا لزم
@@ -1154,7 +1153,10 @@ def build_header_html(
         if not is_arabic:  # إذا اعتبر غير عربي، ضمن محاذاة يسارية
             underline_line = "\n" + (underline_char * underline_width)
 
-    return centered_line + underline_line + expander_line
+    # إضافة مسافة واحدة (سطر فارغ) بعد الخط لتحسين التنظيم
+    space_line = f"\n{NBSP}"
+
+    return centered_line + underline_line + space_line + expander_line
 # -------------------------------
 # DB helpers
 # -------------------------------
