@@ -1148,7 +1148,7 @@ def build_header_html(
             underline_line = "\n" + (underline_char * underline_width)
 
     # إضافة العنصر المخفي الجديد لتوسيع عرض الرسالة إلى أقصى حد (استخدام tg-spoiler مع 40 NBSP)
-    max_message_width = 40  # قيمة مناسبة لأقصى عرض دون التفاف زائد
+    max_message_width = 100  # قيمة مناسبة لأقصى عرض دون التفاف زائد
     hidden_expander = f"\n<tg-spoiler>{NBSP * max_message_width}</tg-spoiler>"
 
     return centered_line + underline_line + hidden_expander
