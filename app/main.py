@@ -2347,7 +2347,7 @@ def webapp_existing_account(request: Request):
         try{{tg.expand();}}catch(e){{}}
         const statusEl = document.getElementById('status');
 
-        // دالة للتحقق من الحقول المطلوبة
+        // دالة للتحقق من الحقول المطلوبة - تعمل فقط عند الضغط على تسجيل
         function validateForm() {{
           const fields = [
             {{id: 'broker', name: '{labels['broker']}'}},
@@ -2391,6 +2391,17 @@ def webapp_existing_account(request: Request):
           }});
 
           return isValid;
+        }}
+
+        // دالة لمسح رسائل الخطأ عند الكتابة في الحقول
+        function clearFieldError(fieldId) {{
+          const inputEl = document.getElementById(fieldId);
+          const errorEl = document.getElementById(fieldId + '_error');
+          
+          if (inputEl && errorEl) {{
+            inputEl.style.borderColor = '#ccc';
+            errorEl.style.display = 'none';
+          }}
         }}
 
         async function submitForm(){{
@@ -2453,16 +2464,10 @@ def webapp_existing_account(request: Request):
           }}
         }}
 
-        // إضافة مستمعين للأحداث للتحقق الفوري
+        // إضافة مستمعين للأحداث لمسح رسائل الخطأ عند الكتابة
         document.querySelectorAll('input, select').forEach(element => {{
-          element.addEventListener('blur', validateForm);
           element.addEventListener('input', function() {{
-            const value = this.value.trim();
-            if (value) {{
-              this.style.borderColor = '#ccc';
-              const errorEl = document.getElementById(this.id + '_error');
-              if (errorEl) errorEl.style.display = 'none';
-            }}
+            clearFieldError(this.id);
           }});
         }});
 
