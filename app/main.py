@@ -354,10 +354,10 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     if admin_lang == "ar":
         title = "إدارة الحسابات"
         buttons = [
-            "⏳ الحسابات قيد المراجعة",
-            "✅ الحسابات المقبولة",
-            "❌ الحسابات المرفوضة",
-            "🔍 بحث عن حساب",
+            "⏳ قيد المراجعة",
+            "✅ المقبولة",
+            "❌ المرفوضة",
+            "🔍 بحث",
             "🔙 رجوع"
         ]
         description = "\n\nمرحباً! هذا قسم إدارة الحسابات."
@@ -379,13 +379,13 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "⏳ الحسابات قيد المراجعة" or btn == "⏳ Under Review":
+            if btn == "⏳ قيد المراجعة" or btn == "⏳ Under Review":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_under_review"))
-            elif btn == "✅ الحسابات المقبولة" or btn == "✅ Approved":
+            elif btn == "✅ المقبولة" or btn == "✅ Approved":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_approved"))
-            elif btn == "❌ الحسابات المرفوضة" or btn == "❌ Rejected":
+            elif btn == "❌ المرفوضة" or btn == "❌ Rejected":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_rejected"))
-            elif btn == "🔍 بحث عن حساب" or btn == "🔍 Search Account":
+            elif btn == "🔍 بحث" or btn == "🔍 Search Account":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_search"))
         keyboard.append(keyboard_row)
     
