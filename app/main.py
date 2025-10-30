@@ -1089,9 +1089,6 @@ def get_agent_username(agent_name: str) -> str:
 # -------------------------------
 # consistent header builder
 # -------------------------------
-# -------------------------------
-# consistent header builder
-# -------------------------------
 def build_header_html(
     title: str,
     keyboard_labels: List[str],
@@ -1147,11 +1144,16 @@ def build_header_html(
         else:
             underline_line = "\n" + (underline_char * underline_width)
 
-    # إضافة العنصر المخفي الجديد لتوسيع عرض الرسالة إلى أقصى حد (استخدام tg-spoiler مع 40 NBSP)
-    max_message_width = 100  # قيمة مناسبة لأقصى عرض دون التفاف زائد
-    hidden_expander = f"\n<tg-spoiler>{NBSP * max_message_width}</tg-spoiler>"
+    # إضافة سطر NBSP عادي بعد الخط لتوسيع عرض الرسالة إلى أقصى حد (40 NBSP للعرض الأقصى)
+    max_message_width = 333  # قيمة مناسبة لأقصى عرض دون التفاف زائد
+    expander_line = f"\n{NBSP * max_message_width}"
 
-    return centered_line + underline_line + hidden_expander
+    # لرسالة اختيار اللغة خاصة (التي تحتوي على مزيج عربي/إنجليزي)، ضمن محاذاة الخط لليسار إذا لزم
+    if "Language | اللغة" in title:
+        if not is_arabic:  # إذا اعتبر غير عربي، ضمن محاذاة يسارية
+            underline_line = "\n" + (underline_char * underline_width)
+
+    return centered_line + underline_line + expander_line
 # -------------------------------
 # DB helpers
 # -------------------------------
