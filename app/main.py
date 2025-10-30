@@ -1089,6 +1089,9 @@ def get_agent_username(agent_name: str) -> str:
 # -------------------------------
 # consistent header builder
 # -------------------------------
+# -------------------------------
+# consistent header builder
+# -------------------------------
 def build_header_html(
     title: str,
     keyboard_labels: List[str],
@@ -1106,7 +1109,7 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 29
+    MIN_TITLE_WIDTH = 25  # كما طلبت (تم تعديلها إلى 25)
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -1126,15 +1129,20 @@ def build_header_html(
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-   
+    # تعديل: زيادة target_width إلى 40 لجعل الرسائل تمتد إلى أقصى عرض ممكن على الجانبين
     if is_arabic:
-        target_width = 29
+        target_width = 40  # عرض أكبر للعربية لضمان الامتداد الكامل
     else:
-        target_width = 29
-    
+        target_width = 40  # عرض أكبر للإنجليزية مع محاذاة يسارية كاملة
+
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
+    
+    # تعديل: للإنجليزية، ضمن محاذاة يسارية كاملة بإضافة مسافات إضافية إذا لزم
+    if not is_arabic:
+        pad_left += 1  # تعديل طفيف لضمان المحاذاة اليسارية الكاملة بعد التقليل إلى 25
+
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
