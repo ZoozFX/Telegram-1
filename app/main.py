@@ -1109,7 +1109,7 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 25  # كما طلبت (تم تعديلها إلى 25)
+    MIN_TITLE_WIDTH = 25  # كما طلبت
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -1129,30 +1129,29 @@ def build_header_html(
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-    # تعديل: زيادة target_width إلى 40 لجعل الرسائل تمتد إلى أقصى عرض ممكن على الجانبين
-    if is_arabic:
-        target_width = 40  # عرض أكبر للعربية لضمان الامتداد الكامل
-    else:
-        target_width = 40  # عرض أكبر للإنجليزية مع محاذاة يسارية كاملة
+    # طول الخط الأسفل دائمًا 25
+    underline_width = 25
 
-    space_needed = max(0, target_width - title_width)
+    space_needed = max(0, underline_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
     
-    # تعديل: للإنجليزية، ضمن محاذاة يسارية كاملة بإضافة مسافات إضافية إذا لزم
     if not is_arabic:
-        pad_left += 1  # تعديل طفيف لضمان المحاذاة اليسارية الكاملة بعد التقليل إلى 25
+        pad_left += 1  # تعديل للمحاذاة اليسارية في الإنجليزية
 
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
-        
         if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * target_width)
+            underline_line = "\n" + RLM + (underline_char * underline_width)
         else:
-            underline_line = "\n" + (underline_char * target_width)
+            underline_line = "\n" + (underline_char * underline_width)
 
-    return centered_line + underline_line
+    # إضافة العنصر المخفي الجديد لتوسيع عرض الرسالة إلى أقصى حد (استخدام tg-spoiler مع 40 NBSP)
+    max_message_width = 40  # قيمة مناسبة لأقصى عرض دون التفاف زائد
+    hidden_expander = f"\n<tg-spoiler>{NBSP * max_message_width}</tg-spoiler>"
+
+    return centered_line + underline_line + hidden_expander
 # -------------------------------
 # DB helpers
 # -------------------------------
