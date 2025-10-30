@@ -1822,7 +1822,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 
                 if action_type == "new_account":
                     if admin_lang == "ar":
-                        title = "🆕 حساب تداول جديد"
+                        title = "🎊 حساب تداول جديد"
                         action_desc = "تم إضافة حساب تداول جديد"
                     else:
                         title = "🆕 New Trading Account"
