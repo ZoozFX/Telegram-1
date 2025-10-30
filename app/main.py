@@ -1087,7 +1087,7 @@ def get_agent_username(agent_name: str) -> str:
     return "@Omarkin9"
 
 # -------------------------------
-# consistent header builder
+# consistent header builder - MODIFIED
 # -------------------------------
 def build_header_html(
     title: str,
@@ -1102,11 +1102,11 @@ def build_header_html(
     RLE = "\u202B"
     PDF = "\u202C"
     RLM = "\u200F"
-    LLM = "\u200E"
+    LRM = "\u200E"  # NEW: Left-to-Right Mark for English alignment
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 25  # كما طلبت
+    MIN_TITLE_WIDTH = 29
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -1116,6 +1116,7 @@ def build_header_html(
         title = f"{' ' * left_pad}{title}{' ' * right_pad}"
 
     is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
+    is_language_selection = "Language | اللغة" in title  # NEW: Detect language selection message
 
     if is_arabic:
         indent = NBSP * arabic_indent
@@ -1126,37 +1127,31 @@ def build_header_html(
     measure_title = _strip_directionals(visible_title)
     title_width = display_width(measure_title)
     
-    # طول الخط الأسفل دائمًا 25
-    underline_width = 25
-
-    space_needed = max(0, underline_width - title_width)
+    if is_arabic:
+        target_width = 29
+    else:
+        target_width = 29
+    
+    space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
     pad_right = space_needed - pad_left
-    
-    if not is_arabic:
-        pad_left += 1  # تعديل للمحاذاة اليسارية في الإنجليزية
-
     centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
     underline_line = ""
     if underline_enabled:
+        
         if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * underline_width)
+            underline_line = "\n" + RLM + (underline_char * target_width)
         else:
-            underline_line = "\n" + (underline_char * underline_width)
+            # NEW: For English and language selection, force left alignment with LRM
+            if not is_arabic or is_language_selection:
+                underline_line = "\n" + LRM + (underline_char * target_width)
+            else:
+                underline_line = "\n" + (underline_char * target_width)
 
-    # إضافة سطر NBSP عادي بعد الخط لتوسيع عرض الرسالة إلى أقصى حد (40 NBSP للعرض الأقصى)
-    max_message_width = 40  # قيمة مناسبة لأقصى عرض دون التفاف زائد
-    expander_line = f"\n{NBSP * max_message_width}"
+    # NEW: Add hidden description (empty space) after the header
+    hidden_description = "\n\n"  # Two new lines as empty space
 
-    # لرسالة اختيار اللغة خاصة (التي تحتوي على مزيج عربي/إنجليزي)، ضمن محاذاة الخط لليسار إذا لزم
-    if "Language | اللغة" in title:
-        if not is_arabic:  # إذا اعتبر غير عربي، ضمن محاذاة يسارية
-            underline_line = "\n" + (underline_char * underline_width)
-
-    # إضافة مسافة واحدة (سطر فارغ) بعد الخط لتحسين التنظيم
-    space_line = f"\n{NBSP}"
-
-    return centered_line + underline_line + space_line + expander_line
+    return centered_line + underline_line + hidden_description
 # -------------------------------
 # DB helpers
 # -------------------------------
@@ -2869,6 +2864,7 @@ def webapp_edit_accounts(request: Request):
               
               statusEl.textContent = '';
               statusEl.style.color = '#b00';
+              statusEl.marginTop = '10px';
             }} else {{
               statusEl.textContent = '{ "الحساب غير موجود" if is_ar else "Account not found" }';
               clearForm();
@@ -3469,14 +3465,17 @@ async def webapp_submit(payload: dict = Body(...)):
                         )
                         clear_form_ref(telegram_id)
                     except Exception:
-                        sent = await application.bot.send_message(
-                            chat_id=telegram_id,
-                            text=header,
-                            reply_markup=reply_markup,
-                            parse_mode="HTML",
-                            disable_web_page_preview=True
-                        )
-                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
+                        try:
+                            sent = await application.bot.send_message(
+                                chat_id=telegram_id,
+                                text=header,
+                                reply_markup=reply_markup,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True
+                            )
+                            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
+                        except Exception:
+                            logger.exception("Failed to send main sections message")
 
                 except Exception as e:
                     logger.exception(f"Failed to show main sections after initial registration: {e}")
@@ -3758,15 +3757,12 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         message += f"\n{no_accounts}"
 
     keyboard = []
-    
     if WEBAPP_URL:
         url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
         keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-    
     if WEBAPP_URL and len(user_data['trading_accounts']) > 0:
         edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
         keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-    
     if WEBAPP_URL:
         params = {
             "lang": lang,
@@ -3777,9 +3773,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         }
         edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
         keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-    
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -4080,7 +4074,7 @@ We're here to help you with {service_title}!
             )
         return
 
-    if lang == "ar":
+    if q.data in lang == "ar":
         placeholder = "تم اختيار الخدمة"
         details = "سيتم إضافة التفاصيل قريبًا..."
     else:
