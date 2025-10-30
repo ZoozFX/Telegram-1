@@ -1999,7 +1999,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
-        description = "\n\nHello! These are the main sections."
+        description = "\n\n"
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
