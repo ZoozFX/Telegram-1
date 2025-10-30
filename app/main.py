@@ -515,7 +515,7 @@ async def admin_set_language(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     success_msg = "✅ تم تغيير اللغة بنجاح" if admin_lang == "ar" else "✅ Language changed successfully"
     await q.edit_message_text(success_msg)
-    await asyncio.sleep(1)
+    await asyncio.sleep(2)
     await admin_panel_from_callback(update, context)
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -687,7 +687,7 @@ async def handle_rejection_reason(update: Update, context: ContextTypes.DEFAULT_
             sent_msg = await update.message.reply_text(success_msg)
             
             async def delete_success_msg():
-                await asyncio.sleep(0)
+                await asyncio.sleep(2)
                 try:
                     await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
                 except Exception:
@@ -1562,7 +1562,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             sent_msg = await context.bot.send_message(chat_id=user_id, text=success_msg)
             
             async def delete_success_msg():
-                await asyncio.sleep(0)
+                await asyncio.sleep(2)
                 try:
                     await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
                 except Exception:
