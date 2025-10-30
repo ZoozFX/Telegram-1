@@ -1967,7 +1967,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
-    description = "\n\nمرحباً! اختر اللغة."
+    description = "\n\n"
     
     if update.callback_query:
         q = update.callback_query
