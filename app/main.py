@@ -1106,7 +1106,7 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 25
+    MIN_TITLE_WIDTH = 29
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -1128,9 +1128,9 @@ def build_header_html(
     title_width = display_width(measure_title)
     
     if is_arabic:
-        target_width = 25
+        target_width = 29
     else:
-        target_width = 25
+        target_width = 29
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -1959,16 +1959,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("Language | اللغة", labels, header_emoji=HEADER_EMOJI)
     
+    # NEW: Add empty description
+    description = "\n\n"
+    full_text = header + description
+
     if update.callback_query:
         q = update.callback_query
         await q.answer()
         try:
-            await q.edit_message_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await q.edit_message_text(full_text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
-            await context.bot.send_message(chat_id=q.message.chat_id, text=header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await context.bot.send_message(chat_id=q.message.chat_id, text=full_text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
         if update.message:
-            await update.message.reply_text(header, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            await update.message.reply_text(full_text, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
 
 async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
     if not update.callback_query:
@@ -2504,7 +2508,7 @@ def webapp_edit_accounts(request: Request):
         "copy_start_date": "تاريخ بدء النسخ" if is_ar else "Copy Start Date",
         "agent": "الوكيل" if is_ar else "Agent",
         "expected_return": "العائد المتوقع" if is_ar else "Expected Return",
-        "save": "حفظ التغييرات" if is_ar else "Save Changes",
+        "save": "حفظ التغييرات" if is_arelse "Save Changes",
         "delete": "حذف الحساب" if is_ar else "Delete Account",
         "close": "إغلاق" if is_ar else "Close",
         "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
@@ -2864,7 +2868,6 @@ def webapp_edit_accounts(request: Request):
               
               statusEl.textContent = '';
               statusEl.style.color = '#b00';
-              statusEl.marginTop = '10px';
             }} else {{
               statusEl.textContent = '{ "الحساب غير موجود" if is_ar else "Account not found" }';
               clearForm();
@@ -3465,17 +3468,14 @@ async def webapp_submit(payload: dict = Body(...)):
                         )
                         clear_form_ref(telegram_id)
                     except Exception:
-                        try:
-                            sent = await application.bot.send_message(
-                                chat_id=telegram_id,
-                                text=header,
-                                reply_markup=reply_markup,
-                                parse_mode="HTML",
-                                disable_web_page_preview=True
-                            )
-                            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
-                        except Exception:
-                            logger.exception("Failed to send main sections message")
+                        sent = await application.bot.send_message(
+                            chat_id=telegram_id,
+                            text=header,
+                            reply_markup=reply_markup,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True
+                        )
+                        save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="main_sections", lang=display_lang)
 
                 except Exception as e:
                     logger.exception(f"Failed to show main sections after initial registration: {e}")
@@ -3757,12 +3757,15 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         message += f"\n{no_accounts}"
 
     keyboard = []
+    
     if WEBAPP_URL:
         url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
         keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
+    
     if WEBAPP_URL and len(user_data['trading_accounts']) > 0:
         edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
         keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
+    
     if WEBAPP_URL:
         params = {
             "lang": lang,
@@ -3773,7 +3776,9 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         }
         edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
         keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
+    
     keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -4074,7 +4079,7 @@ We're here to help you with {service_title}!
             )
         return
 
-    if q.data in lang == "ar":
+    if lang == "ar":
         placeholder = "تم اختيار الخدمة"
         details = "سيتم إضافة التفاصيل قريبًا..."
     else:
