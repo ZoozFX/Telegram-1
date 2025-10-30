@@ -17,3 +17,6 @@
 
 ## تحميل مدخلات جاهزة
 ضع JSON في `app/stored_inputs/seed_inputs.json` ثم شغّل `from app.utils import load_external_inputs; print(load_external_inputs())`
+
+تم تطويرة بواسطة Ahmed Abdelaziz
+https://t.me/ZoozFX
