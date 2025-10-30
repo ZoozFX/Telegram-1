@@ -264,9 +264,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         title = "Admin Control Panel"
         buttons = [
-            "📢 Sending Messages",
+            "📢 Broadcasting & Messages",
             "📊 Reports",
-            "🏦 Accounts Management",
+            "🛠 Management",
             "⚙️ Settings",
             "🚪 Exit"
         ]
@@ -279,11 +279,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 البث والرسائل" or btn == "📢 Sending Messages":
+            if btn == "📢 البث والرسائل" or btn == "📢 Broadcasting & Messages":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_menu"))
             elif btn == "📊 الإحصائيات والتقارير" or btn == "📊 Reports":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_stats"))
-            elif btn == "🏦 إدارة الحسابات" or btn == "🏦 Accounts Management":
+            elif btn == "🏦 إدارة الحسابات" or btn == "🛠 Management":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_menu"))
             elif btn == "⚙️ الإعدادات" or btn == "⚙️ Settings":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_settings"))
@@ -312,7 +312,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
         ]
         description = "\n\nمرحباً! هذا قسم البث والرسائل."
     else:
-        title = "Sending Messages"
+        title = "Broadcasting & Messages"
         buttons = [
             "📢 Broadcast to All",
             "👥 To Registered",
@@ -362,7 +362,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         description = "\n\nمرحباً! هذا قسم إدارة الحسابات."
     else:
-        title = "Accounts Management"
+        title = "Management"
         buttons = [
             "⏳ Under Review",
             "✅ Approved",
@@ -960,9 +960,9 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
     else:
         title = "Admin Control Panel"
         buttons = [
-            "📢 Sending Messages",
+            "📢 Broadcasting & Messages",
             "📊 Reports",
-            "🏦 Accounts Management",
+            "🛠 Management",
             "⚙️ Settings",
             "🚪 Exit"
         ]
@@ -975,11 +975,11 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
         row = buttons[i:i+2]
         keyboard_row = []
         for btn in row:
-            if btn == "📢 البث والرسائل" or btn == "📢 Sending Messages":
+            if btn == "📢 البث والرسائل" or btn == "📢 Broadcasting & Messages":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_menu"))
             elif btn == "📊 الإحصائيات والتقارير" or btn == "📊 Reports":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_stats"))
-            elif btn == "🏦 إدارة الحسابات" or btn == "🏦 Accounts Management":
+            elif btn == "🏦 إدارة الحسابات" or btn == "🛠 Management":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_accounts_menu"))
             elif btn == "⚙️ الإعدادات" or btn == "⚙️ Settings":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_settings"))
@@ -1122,7 +1122,7 @@ def build_header_html(
     def _strip_directionals(s: str) -> str:
         return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-    MIN_TITLE_WIDTH = 29
+    MIN_TITLE_WIDTH = 25
     clean_title = remove_emoji(title)
     title_len = display_width(clean_title)
     if title_len < MIN_TITLE_WIDTH:
@@ -1144,9 +1144,9 @@ def build_header_html(
     
    
     if is_arabic:
-        target_width = 29
+        target_width = 25
     else:
-        target_width = 29
+        target_width = 25
     
     space_needed = max(0, target_width - title_width)
     pad_left = space_needed // 2
@@ -1822,7 +1822,7 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 
                 if action_type == "new_account":
                     if admin_lang == "ar":
-                        title = "🆕 حساب تداول جديد"
+                        title = "🛎 حساب تداول جديد"
                         action_desc = "تم إضافة حساب تداول جديد"
                     else:
                         title = "🆕 New Trading Account"
@@ -1967,7 +1967,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("\u200Fاللغة | Language", labels, header_emoji=HEADER_EMOJI)
-    description = "\n\nمرحباً! من فضلك اختر لغتك المفضلة."
+    description = "\n\nمرحباً! اختر اللغة."
     
     if update.callback_query:
         q = update.callback_query
@@ -1999,7 +1999,7 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
-        description = "\n\nPlease choose your section."
+        description = "\n\nHello! These are the main sections."
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
