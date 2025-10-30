@@ -136,7 +136,7 @@ def populate_account_performances():
                 ).first()
                 
                 if existing_perf:
-                    # تحديث السجل الموجود
+                    # تحديث السجل الموجود (لا تغيير في ID)
                     existing_perf.name = subscriber.name
                     existing_perf.email = subscriber.email
                     existing_perf.phone = subscriber.phone
@@ -145,8 +145,14 @@ def populate_account_performances():
                     existing_perf.achieved_return = achieved_return
                     existing_perf.copy_duration = copy_duration
                 else:
-                    # إنشاء سجل جديد
+                    # جديد: الحصول على الـ ID التالي
+                    next_id = get_next_id(AccountPerformance)
+                    if next_id is None:
+                        continue
+                    
+                    # إنشاء سجل جديد مع تعيين ID يدويًا
                     performance = AccountPerformance(
+                        id=next_id,  # تعيين ID يدويًا
                         trading_account_id=account.id,
                         name=subscriber.name,
                         email=subscriber.email,
@@ -1086,8 +1092,25 @@ def build_header_html(
 # -------------------------------
 # DB helpers
 # -------------------------------
+def get_next_id(table_class):
+    """
+    تحقق من آخر ID في الجدول، وتعيد max_id + 1 أو 1 إذا كان الجدول فارغًا.
+    """
+    db = SessionLocal()
+    try:
+        max_id = db.query(func.max(table_class.id)).scalar()
+        next_id = (max_id + 1) if max_id is not None else 1
+        return next_id
+    except Exception as e:
+        logger.exception(f"خطأ في الحصول على الـ ID التالي لجدول {table_class.__tablename__}: {e}")
+        return None
+    finally:
+        db.close()
+
+# -------------------------------
+# تعديل دالة save_or_update_subscriber لتحديد ID يدويًا عند الإنشاء
+# -------------------------------
 def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar", telegram_id: int = None, telegram_username: str = None) -> Tuple[str, Subscriber]:
-    
     try:
         db = SessionLocal()
         subscriber = None
@@ -1104,7 +1127,13 @@ def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar
                 db.commit()
                 result = "updated"
             else:
+                # جديد: الحصول على الـ ID التالي
+                next_id = get_next_id(Subscriber)
+                if next_id is None:
+                    return "error", None
+                
                 subscriber = Subscriber(
+                    id=next_id,  # تعيين ID يدويًا
                     name=name,
                     email=email,
                     phone=phone,
@@ -1116,7 +1145,13 @@ def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar
                 db.commit()
                 result = "created"
         else:
+            # جديد: الحصول على الـ ID التالي
+            next_id = get_next_id(Subscriber)
+            if next_id is None:
+                return "error", None
+            
             subscriber = Subscriber(
+                id=next_id,  # تعيين ID يدويًا
                 name=name,
                 email=email,
                 phone=phone,
@@ -1136,6 +1171,9 @@ def save_or_update_subscriber(name: str, email: str, phone: str, lang: str = "ar
         logger.exception("Failed to save_or_update subscriber: %s", e)
         return "error", None
 
+# -------------------------------
+# تعديل دالة save_trading_account لتحديد ID يدويًا
+# -------------------------------
 def save_trading_account(
     subscriber_id: int, 
     broker_name: str, 
@@ -1151,7 +1189,6 @@ def save_trading_account(
 ) -> Tuple[bool, TradingAccount]:
     
     try:
-       
         required_fields = {
             'broker_name': broker_name,
             'account_number': account_number,
@@ -1176,7 +1213,13 @@ def save_trading_account(
             logger.error(f"Subscriber with id {subscriber_id} not found")
             return False, None
         
+        # جديد: الحصول على الـ ID التالي
+        next_id = get_next_id(TradingAccount)
+        if next_id is None:
+            return False, None
+        
         trading_account = TradingAccount(
+            id=next_id,  # تعيين ID يدويًا
             subscriber_id=subscriber_id,
             broker_name=broker_name,
             account_number=account_number,
