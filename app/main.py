@@ -23,6 +23,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 import asyncio
 from sqlalchemy import text, inspect
+import html
 
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
@@ -260,7 +261,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ الإعدادات",
             "🚪 خروج"
         ]
-        description = "\n\nمرحباً بك في لوحة التحكم الإدارية. اختر الخيار المناسب لإدارة النظام بفعالية."
+        description = "\n\nمرحباً! هذه لوحة التحكم الإدارية."
     else:
         title = "Admin Control Panel"
         buttons = [
@@ -270,7 +271,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ Settings",
             "🚪 Exit"
         ]
-        description = "\n\nWelcome to the Admin Control Panel. Select an option to manage the system effectively."
+        description = "\n\nHello! This is the admin control panel."
 
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -302,7 +303,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
-        title = "إرسال رسالة"
+        title = "ارسل رسالة"
         buttons = [
             "📢 للجميع",
             "👥 للمسجلين فقط",
@@ -310,7 +311,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             "🔍 لشخص واحد",
             "🔙 رجوع"
         ]
-        description = "\n\nاختر خيار الإرسال للوصول إلى المستخدمين المستهدفين بدقة."
+        description = "\n\nيمكنك ارسال رسالة من خلال الخيارات التالية."
     else:
         title = "Send Message"
         buttons = [
@@ -320,7 +321,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
             "🔍 Individual",
             "🔙 Back"
         ]
-        description = "\n\nSelect a sending option to reach the targeted users accurately."
+        description = "\n\nYou can send a message"
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -360,7 +361,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "🔍 بحث",
             "🔙 رجوع"
         ]
-        description = "\n\nمرحباً بك في قسم إدارة الحسابات. قم بمراجعة وإدارة الحسابات بكفاءة."
+        description = "\n\nمرحباً! هذا قسم إدارة الحسابات."
     else:
         title = "Management"
         buttons = [
@@ -370,7 +371,7 @@ async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             "🔍 Search Account",
             "🔙 Back"
         ]
-        description = "\n\nWelcome to the Accounts Management section. Review and manage accounts efficiently."
+        description = "\n\nHello! This is the accounts management section."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -409,7 +410,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔄 تحديث تسلسل قاعدة البيانات",
             "🔙 رجوع"
         ]
-        description = "\n\nمرحباً بك في قسم الإعدادات. قم بتخصيص النظام حسب احتياجاتك."
+        description = "\n\nمرحباً! هذا قسم الإعدادات."
     else:
         title = "Settings"
         buttons = [
@@ -418,7 +419,7 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔄 Reset Sequences",
             "🔙 Back"
         ]
-        description = "\n\nWelcome to the Settings section. Customize the system according to your needs."
+        description = "\n\nHello! This is the settings section."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -490,7 +491,7 @@ async def admin_change_language(update: Update, context: ContextTypes.DEFAULT_TY
             "🇺🇸 English",
             "🔙 رجوع"
         ]
-        description = "\n\nاختر اللغة المفضلة لتجربة أفضل."
+        description = "\n\nمرحباً! اختر اللغة المفضلة."
     else:
         title = "Change Language"
         buttons = [
@@ -498,7 +499,7 @@ async def admin_change_language(update: Update, context: ContextTypes.DEFAULT_TY
             "🇪🇬 العربية",
             "🔙 Back"
         ]
-        description = "\n\nSelect your preferred language for a better experience."
+        description = "\n\nHello! Choose your preferred language."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -552,7 +553,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ <b>الحسابات النشطة:</b> {active_accounts}
 ❌ <b>الحسابات المرفوضة:</b> {rejected_accounts}
         """
-        description = "\n\nإليك الإحصائيات الحالية للنظام."
+        description = "\n\nمرحباً! هذه الإحصائيات الحالية."
         back_btn = "🔙 رجوع"
     else:
         title = "Reports"
@@ -565,7 +566,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ <b>Active Accounts:</b> {active_accounts}
 ❌ <b>Rejected Accounts:</b> {rejected_accounts}
         """
-        description = "\n\nHere are the current system statistics."
+        description = "\n\nHello! These are the current statistics."
         back_btn = "🔙 Back"
     
     header = build_header_html(title, [back_btn], header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
@@ -597,12 +598,12 @@ async def admin_accounts_under_review(update: Update, context: ContextTypes.DEFA
     if admin_lang == "ar":
         title = "الحسابات قيد المراجعة"
         no_accounts = "لا توجد حسابات قيد المراجعة حالياً"
-        description = "\n\nإليك قائمة الحسابات قيد المراجعة للمعالجة."
+        description = "\n\nمرحباً! هذه الحسابات قيد المراجعة."
         back_btn = "🔙 رجوع"
     else:
         title = "Accounts Under Review"
         no_accounts = "No accounts under review currently"
-        description = "\n\nHere is the list of accounts under review for processing."
+        description = "\n\nHello! These are the accounts under review."
         back_btn = "🔙 Back"
     
     header = build_header_html(title, [back_btn], header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
@@ -956,7 +957,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
             "⚙️ الإعدادات",
             "🚪 خروج"
         ]
-        description = "\n\nمرحباً بك في لوحة التحكم الإدارية. اختر الخيار المناسب لإدارة النظام بفعالية."
+        description = "\n\nمرحباً! هذه لوحة التحكم الإدارية."
     else:
         title = "Admin Control Panel"
         buttons = [
@@ -966,7 +967,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
             "⚙️ Settings",
             "🚪 Exit"
         ]
-        description = "\n\nWelcome to the Admin Control Panel. Select an option to manage the system effectively."
+        description = "\n\nHello! This is the admin control panel."
     
     header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
     
@@ -1026,63 +1027,85 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await start(update, context)
 
-def remove_emoji(text: str) -> str:
-    out = []
-    for ch in text:
-        o = ord(ch)
-        if (
-            0x1F300 <= o <= 0x1F5FF or
-            0x1F600 <= o <= 0x1F64F or
-            0x1F680 <= o <= 0x1F6FF or
-            0x1F900 <= o <= 0x1F9FF or
-            0x2600 <= o <= 0x26FF or
-            0x2700 <= o <= 0x27BF or
-            0x1FA70 <= o <= 0x1FAFF or
-            o == 0xFE0F
-        ):
-            continue
-        out.append(ch)
-    return "".join(out)
+def _strip_directionals(s: str) -> str:
+    """إزالة محارف التحكم بالاتجاه حتى لا تؤثر على القياس أو العرض."""
+    return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
 
-def display_width(text: str) -> int:
-    if not text:
-        return 0
-    width = 0
-    for ch in text:
-        if unicodedata.combining(ch):
-            continue
-        ea = unicodedata.east_asian_width(ch)
-        if ea in ("F", "W"):
-            width += 2
-            continue
-        o = ord(ch)
-        if (
-            0x1F300 <= o <= 0x1F5FF
-            or 0x1F600 <= o <= 0x1F64F
-            or 0x1F680 <= o <= 0x1F6FF
-            or 0x1F900 <= o <= 0x1F9FF
-            or 0x2600 <= o <= 0x26FF
-            or 0x2700 <= o <= 0x27BF
-            or o == 0xFE0F
-        ):
-            width += 2
-            continue
-        width += 1
-    return width
+def _is_arabic_text(s: str) -> bool:
+    return bool(re.search(r'[\u0600-\u06FF]', s))
 
-def max_button_width(labels: List[str]) -> int:
-    return max((display_width(lbl) for lbl in labels), default=0)
+def html_escape(s: str) -> str:
+    return html.escape(s, quote=False)
 
-def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
-    if labels is None:
-        labels = []
-    
-    return build_header_html(
-        title,
-        labels,
-        header_emoji=HEADER_EMOJI,
-        arabic_indent=1 if lang == "ar" else 0
-    )
+def build_header_html(
+    title: str,
+    keyboard_labels: Optional[List[str]] = None,
+    header_emoji: str = HEADER_EMOJI,
+    arabic_indent: int = 0,
+    separator_height_px: int = 1,
+    separator_opacity: float = 0.25,
+    separator_char: Optional[str] = None,
+    extra_css: str = "",
+) -> str:
+    """
+    يبني شريط عنوان HTML ممتد بعرض الحاوية (full-width) مع فواصل مرنة على اليمين واليسار.
+    - لا يعتمد على سطر نصي تحتي كـ underline.
+    - يتعامل مع العربية (يضع dir="rtl" ويحقن مسافات غير قابلة للكسر لو طُلب).
+    - separator_char: لو عُطي يمكن استخدامه كـ background-repeat بسيط (لن يكون مثاليًا لكل الخطوط،
+      لكن يعطي خيارًا نمطياً بدلاً من خط صلب).
+    """
+    if keyboard_labels is None:
+        keyboard_labels = []
+
+    # تنظيف محارف الاتجاه من القياس / التحليل لكن نحتفظ بالعنوان الأصلي عند العرض
+    stripped_title = _strip_directionals(title)
+    is_ar = _is_arabic_text(stripped_title)
+
+    # تحضير الجزء العربي: استخدام NBSP للمحافظة على الفراغات المطلوبة داخل العنصر
+    NBSP = "\u00A0"
+    indent = NBSP * max(0, arabic_indent) if is_ar and arabic_indent > 0 else ""
+
+    # تأمين النص للـ HTML
+    safe_title = html_escape(title)
+    safe_emoji = html_escape(header_emoji)
+
+    # بناء محتوى العنوان المرئي (نحافظ على emoji على الطرفين كما في أصلك)
+    if is_ar:
+        # إذا أردنا توجيه محدد للعنوان العربي نستخدم dir="rtl" على العنصر المحتوي
+        visible_title_html = f'{indent}{safe_emoji} {safe_title} {safe_emoji}'
+        container_dir = 'rtl'
+        text_align = 'right'
+    else:
+        visible_title_html = f'{safe_emoji} {safe_title} {safe_emoji}'
+        container_dir = 'ltr'
+        text_align = 'center'
+
+    # بناء CSS للـ separator: نستخدم spanين مرنين يمتدان، ونضع خلفية أو خط بسيط
+    if separator_char:
+        # استخدام نمط background مع تكرار الحرف كـ content داخل span قد يكون غير موحد عبر المتصفحات،
+        # لذا نملأ المحتوى بالحرف مرّات قليلة كمظهر. (هذا خيار ثانوي)
+        left_content = html_escape(separator_char * 6)
+        right_content = html_escape(separator_char * 6)
+        left_span = f'<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:clip;opacity:{separator_opacity};">{left_content}</span>'
+        right_span = f'<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:clip;opacity:{separator_opacity};">{right_content}</span>'
+    else:
+        # خط بسيط ممتد يملأ المساحة
+        left_span = f'<span style="flex:1;height:{separator_height_px}px;background-color:currentColor;opacity:{separator_opacity};display:block;"></span>'
+        right_span = left_span
+
+    # بناء HTML النهائي: حاوية فليكس بعرض 100%
+    # نضع <h1> صغير أو <div> بالعناصر داخلها - هنا استخدمت <div role="heading" aria-level="1"> لمرونة
+    html_result = f'''
+<div style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:12px;{extra_css}" dir="{container_dir}">
+  {left_span}
+  <div role="heading" aria-level="1" style="margin:0;padding:6px 12px;font-weight:700;white-space:nowrap;font-size:1rem;text-align:{text_align};flex:0 0 auto;">
+    <b style="display:inline-block;line-height:1;">{visible_title_html}</b>
+  </div>
+  {right_span}
+</div>
+'''.strip()
+
+    return html_result
 
 def get_agent_username(agent_name: str) -> str:
     
@@ -1102,35 +1125,6 @@ def get_agent_username(agent_name: str) -> str:
     
     return "@Omarkin9"
 
-# -------------------------------
-# consistent header builder - IMPROVED
-# -------------------------------
-def build_header_html(
-    title: str,
-    keyboard_labels: List[str],
-    header_emoji: str = HEADER_EMOJI,
-    underline_enabled: bool = True,
-    underline_char: str = "─",
-    arabic_indent: int = 0,
-) -> str:
-    
-    NBSP = "\u00A0"
-    RLE = "\u202B"
-    PDF = "\u202C"
-    RLM = "\u200F"
-    
-    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
-
-    # تنسيق احترافي جديد: <b>━ عنوان ━</b> مع خط تحت إذا مطلوب
-    if is_arabic:
-        indent = NBSP * arabic_indent
-        visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
-        underline_line = f"\n{RLE}{RLM}{underline_char * 30}{PDF}" if underline_enabled else ""
-    else:
-        visible_title = f"{header_emoji} {title} {header_emoji}"
-        underline_line = f"\n{underline_char * 30}" if underline_enabled else ""
-
-    return f"<b>{visible_title}</b>{underline_line}\n"
 # -------------------------------
 # DB helpers
 # -------------------------------
@@ -1620,13 +1614,14 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=1)
                 message = f"""
 {header}
-✅ تم ربط الحساب بخدمة النسخ بنجاح.
+✅ تم ربط الحساب بخدمة النسخ
 
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 🖥️ السيرفر: {account.server}
 
-نتمنى لك التوفيق ونجاحاً مستمراً مع YesFX.
+نتمنى لك التوفيق.
+وشكراً علي اختيارك لنظام YesFX!
                 """
             else:
                 title = "Congratulations"
@@ -1634,13 +1629,14 @@ async def notify_user_about_account_status(account_id: int, status: str, reason:
                 header = build_header_html(title, labels, header_emoji="🎉", arabic_indent=0)
                 message = f"""
 {header}
-✅ Your account has been successfully linked to the copy service.
+✅ Your account is linked to the copy service️
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 🖥️ Server: {account.server}
 
-Wishing you continued success with YesFX.
+Wishing you success.
+Thanks for choosing YesFX!
                 """
         else:
             
@@ -1653,12 +1649,13 @@ Wishing you continued success with YesFX.
                 reason_text = f"\n📝 السبب: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ لم يتم تفعيل حسابك{reason_text}.
+❌ لم يتم تفعيل حسابك{reason_text}
 
 🏦 الوسيط: {account.broker_name}
 🔢 رقم الحساب: {account.account_number}
 
-يرجى مراجعة البيانات المقدمة أو التواصل مع {agent_username} للحل.
+يرجى مراجعة البيانات المقدمة
+أو التواصل مع {agent_username}.
                 """
             else:
                 title = "Account Not Activated"
@@ -1667,12 +1664,13 @@ Wishing you continued success with YesFX.
                 reason_text = f"\n📝 Reason: {reason}" if reason else ""
                 message = f"""
 {header}
-❌ Your account was not activated{reason_text}.
+Your account was not activated ❌{reason_text}
 
 🏦 Broker: {account.broker_name}
 🔢 Account Number: {account.account_number}
 
-Please review the submitted data or contact {agent_username} for resolution.
+Please review the submitted data
+or contact {agent_username}.
                 """
 
         keyboard = [
@@ -1933,7 +1931,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     labels = ["🇺🇸 English", "🇪🇬 العربية"]
     header = build_header_html("\u200Fاللغة | Language", labels, header_emoji=HEADER_EMOJI)
-    description = "\n\nمرحباً بك! اختر اللغة المفضلة للبدء."
+    description = "\n\nمرحباً! اختر اللغة."
     
     if update.callback_query:
         q = update.callback_query
@@ -1960,12 +1958,12 @@ async def show_main_sections(update: Update, context: ContextTypes.DEFAULT_TYPE,
         sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
         title = "الأقسام الرئيسية"
         back_button = ("🔙 الرجوع للغة", "back_language")
-        description = "\n\nمرحباً بك! اختر القسم الذي يناسب احتياجاتك."
+        description = "\n\nمرحباً! هذه الأقسام الرئيسية."
     else:
         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
         title = "Main Sections"
         back_button = ("🔙 Back to language", "back_language")
-        description = "\n\nWelcome! Select the section that suits your needs."
+        description = "\n\nHello! These are the main sections."
 
     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
@@ -1997,13 +1995,13 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
             back_label_text = "🔙 الرجوع للغة"
             open_label = "📝 افتح نموذج التسجيل"
             header_emoji_for_lang = HEADER_EMOJI
-            description = "\n\nمرحباً بك! أكمل بياناتك الشخصية للمتابعة."
+            description = "\n\nمرحباً! أكمل البيانات."
         else:
             title = "Please enter your data"
             back_label_text = "🔙 Back to language"
             open_label = "📝 Open registration form"
             header_emoji_for_lang = "✨"
-            description = "\n\nWelcome! Complete your personal data to proceed."
+            description = "\n\nHello! Complete your data."
 
         labels = [open_label, back_label_text]
         header = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang == "ar" else 0)
@@ -2119,7 +2117,7 @@ def webapp_form(request: Request):
             statusEl.textContent = '{ "الاسم قصير جدًا / Name is too short" if is_ar else "Name is too short" }';
             return;
           }}
-          if (!validateEmail(email) ) {{
+          if (!validateEmail(email)) {{
             statusEl.textContent = '{ "بريد إلكتروني غير صالح / Invalid email" if is_ar else "Invalid email" }';
             return;
           }}
@@ -2222,7 +2220,7 @@ def webapp_existing_account(request: Request):
         labels['agent'],
         labels['expected_return']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
 
     html = f"""
     <!doctype html>
@@ -2522,7 +2520,7 @@ def webapp_edit_accounts(request: Request):
         labels['save'],
         labels['delete']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
 
     html = f"""
     <!doctype html>
@@ -3127,7 +3125,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         user_info = f"👤 <b>الاسم:</b> {updated_data['name']}\n📧 <b>البريد:</b> {updated_data['email']}\n📞 <b>الهاتف:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
         no_accounts = "\nلا توجد حسابات مسجلة بعد."
-        description = "\n\nإليك بياناتك وحساباتك الشخصية."
+        description = "\n\nمرحباً! هذه بياناتك وحساباتك."
     else:
         header_title = "👤 My Data & Accounts"
         add_account_label = "➕ Add Trading Account"
@@ -3142,7 +3140,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         user_info = f"👤 <b>Name:</b> {updated_data['name']}\n📧 <b>Email:</b> {updated_data['email']}\n📞 <b>Phone:</b> {updated_data['phone']}"
         accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
         no_accounts = "\nNo trading accounts registered yet."
-        description = "\n\nHere is your personal data and accounts."
+        description = "\n\nHello! This is your data and accounts."
 
     updated_message = f"{header}{description}\n\n{user_info}{accounts_header}\n"
     
@@ -3423,12 +3421,12 @@ async def webapp_submit(payload: dict = Body(...)):
                         sections = [("💹 تداول الفوركس", "forex_main"), ("💻 خدمات البرمجة", "dev_main")]
                         title = "الأقسام الرئيسية"
                         back_button = ("🔙 الرجوع للغة", "back_language")
-                        description = "\n\nمرحباً بك! اختر القسم الذي يناسب احتياجاتك."
+                        description = "\n\nمرحباً! هذه الأقسام الرئيسية."
                     else:
                         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
                         title = "Main Sections"
                         back_button = ("🔙 Back to language", "back_language")
-                        description = "\n\nWelcome! Select the section that suits your needs."
+                        description = "\n\nHello! These are the main sections."
 
                     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
                     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
@@ -3545,7 +3543,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
         
         text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً." if lang == "ar" else "⚠️ You haven't registered yet. Please register first."
-        description = "\n\nمرحباً بك! " if lang == "ar" else "\n\nWelcome! "
+        description = "\n\nمرحباً! " if lang == "ar" else "\n\nHello! "
         
         if update.callback_query and update.callback_query.message:
             await update.callback_query.edit_message_text(header + description + text)
@@ -3569,7 +3567,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             header_emoji=HEADER_EMOJI,
             arabic_indent=1
         )
-        description = "\n\nإليك بياناتك وحساباتك الشخصية للمراجعة."
+        description = "\n\nمرحباً! هذه بياناتك وحساباتك."
         user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
         accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
         no_accounts = "\nلا توجد حسابات مسجلة بعد."
@@ -3590,7 +3588,7 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
             header_emoji=HEADER_EMOJI,
             arabic_indent=0
         )
-        description = "\n\nHere is your personal data and accounts for review."
+        description = "\n\nHello! This is your data and accounts."
         user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
         accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
         no_accounts = "\nNo trading accounts registered yet."
@@ -3916,7 +3914,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         back_label = "🔙 الرجوع للقائمة الرئيسية" if lang == "ar" else "🔙 Back to main menu"
         labels = options + [back_label]
         header_emoji_for_lang = HEADER_EMOJI if lang == "ar" else "✨"
-        description = "\n\nمرحباً بك في قسم {title}. اختر الخدمة المناسبة." if lang == "ar" else "\n\nWelcome to {title} section. Select the appropriate service."
+        description = "\n\nمرحباً! " if lang == "ar" else "\n\nHello! "
         box = build_header_html(title, labels, header_emoji=header_emoji_for_lang, arabic_indent=1 if lang=="ar" else 0)
         keyboard = []
         for name in options:
@@ -3940,13 +3938,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             brokers_title = ""
             back_label = "🔙 الرجوع لتداول الفوركس"
             accounts_label = "👤 بياناتي وحساباتي"
-            description = "\n\nمرحباً بك! اختر وسيطك المفضل للبدء في التداول."
+            description = "\n\nمرحباً! اختر وسيطك."
         else:
             header_title = "Choose your broker now"
             brokers_title = ""
             back_label = "🔙 Back to Forex"
             accounts_label = "👤 My Data & Accounts"
-            description = "\n\nWelcome! Select your preferred broker to start trading."
+            description = "\n\nHello! Choose your broker."
 
         keyboard = [
             [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
@@ -4005,29 +4003,31 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             support_label = "💬 التواصل مع الدعم"
             back_label = "🔙 الرجوع"
             description = f"""
-مرحباً بك! نحن متخصصون في {service_title} لتلبية احتياجاتك التقنية.
+مرحباً! نحن هنا لمساعدتك في {service_title}!
 
 <b>📞 للاستفسار أو الطلب:</b>
 • اضغط على زر التواصل مع الدعم
-• سيتم ربطك مباشرة مع فريقنا المتخصص
-• قدم متطلباتك وسنساعدك في تحقيق أهدافك
+• سيتم ربطك مباشرة مع فريق الدعم
+• قدم متطلباتك وسنساعدك فوراً
 
 <b>⏰ أوقات الدعم:</b>
-• كل أيام الأسبوع من 9 صباحاً حتى 6 مساءً
+• كل أيام الأسبوع
+• من 9 صباحاً حتى 6 مساءً
             """
         else:
             support_label = "💬 Contact Support"
             back_label = "🔙 Back"
             description = f"""
-Welcome! We specialize in {service_title} to meet your technical needs.
+Hello! We're here to help you with {service_title}!
 
 <b>📞 For inquiries or orders:</b>
 • Click the Contact Support button
-• You'll be connected directly with our expert team
-• Provide your requirements and we'll help you achieve your goals
+• You'll be connected directly with our support team
+• Provide your requirements and we'll assist you immediately
 
 <b>⏰ Support Hours:</b>
-• Every day of the week from 9 AM to 6 PM
+• Every day of the week
+• From 9 AM to 6 PM
             """
         
         back_callback = "dev_main" if q.data in ["📈 برمجة المؤشرات", "📈 Indicators", "🤖 برمجة الاكسبيرتات", "🤖 Expert Advisors", "💬 بوتات التليجرام", "💬 Telegram Bots", "🌐 مواقع الويب", "🌐 Web Development"] else "agency_main"
@@ -4061,11 +4061,11 @@ Welcome! We specialize in {service_title} to meet your technical needs.
     if lang == "ar":
         placeholder = "تم اختيار الخدمة"
         details = "سيتم إضافة التفاصيل قريبًا..."
-        description = "\n\nمرحباً بك! " + details
+        description = "\n\nمرحباً! " + details
     else:
         placeholder = "Service selected"
         details = "Details will be added soon..."
-        description = "\n\nWelcome! " + details
+        description = "\n\nHello! " + details
     
     labels_for_header = [q.data]
     header_box = build_header_html(placeholder, labels_for_header, header_emoji=HEADER_EMOJI if lang=="ar" else "✨", arabic_indent=1 if lang=="ar" else 0)
