@@ -23,7 +23,6 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship
 import asyncio
 from sqlalchemy import text, inspect
-import html
 
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
@@ -68,56 +67,77 @@ class TradingAccount(Base):
     rejection_reason = Column(String(255), nullable=True)
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
+# الجدول الجديد المطلوب
 class AccountPerformance(Base):
     __tablename__ = "account_performances"
     id = Column(Integer, primary_key=True, index=True)
     trading_account_id = Column(Integer, ForeignKey('trading_accounts.id', ondelete='CASCADE'), nullable=False)
-    name = Column(String(200), nullable=False)
-    email = Column(String(200), nullable=False)
-    phone = Column(String(50), nullable=False)
-    telegram_username = Column(String(200), nullable=True)
-    initial_balance = Column(String(50), nullable=True)
-    achieved_return = Column(String(50), nullable=True)
-    copy_duration = Column(String(50), nullable=True)
+    name = Column(String(200), nullable=False)  # من Subscriber
+    email = Column(String(200), nullable=False)  # من Subscriber
+    phone = Column(String(50), nullable=False)  # من Subscriber
+    telegram_username = Column(String(200), nullable=True)  # من Subscriber
+    initial_balance = Column(String(50), nullable=True)  # من TradingAccount
+    achieved_return = Column(String(50), nullable=True)  # محسوب (مثل: "25%")
+    copy_duration = Column(String(50), nullable=True)  # محسوب (مثل: "3 أشهر")
+
+    # علاقة مع جدول TradingAccount
     trading_account = relationship("TradingAccount")
 
 Base.metadata.create_all(bind=engine)
 
+# -------------------------------
+# دالة جديدة لملء جدول AccountPerformance
+# -------------------------------
 def populate_account_performances():
     db = SessionLocal()
     try:
+        # جلب جميع الحسابات النشطة
         accounts = db.query(TradingAccount).filter(TradingAccount.status == 'active').all()
+        
         for account in accounts:
             subscriber = account.subscriber
+            
+            # التحقق من وجود البيانات اللازمة
             if not (account.initial_balance and account.current_balance and 
                     account.withdrawals and account.copy_start_date):
                 continue
+            
             try:
                 initial = float(account.initial_balance)
                 current = float(account.current_balance)
                 withdrawals = float(account.withdrawals)
+                
+                # حساب العائد المحقق
                 if initial > 0:
                     total_value = current + withdrawals
                     profit = total_value - initial
                     achieved_return = f"{(profit / initial * 100):.0f}%"
                 else:
                     achieved_return = "0%"
+                
+                # حساب المدة
                 start_date = datetime.strptime(account.copy_start_date, '%Y-%m-%d')
                 today = datetime.now()
                 delta = today - start_date
                 total_days = delta.days
+                
                 months = total_days // 30
                 remaining_days = total_days % 30
+                
                 if months > 0:
                     copy_duration = f"{months} شهر"
                     if remaining_days > 0:
                         copy_duration += f" و{remaining_days} يوم"
                 else:
                     copy_duration = f"{total_days} يوم"
+                
+                # التحقق مما إذا كان السجل موجودًا بالفعل
                 existing_perf = db.query(AccountPerformance).filter(
                     AccountPerformance.trading_account_id == account.id
                 ).first()
+                
                 if existing_perf:
+                    # تحديث السجل الموجود
                     existing_perf.name = subscriber.name
                     existing_perf.email = subscriber.email
                     existing_perf.phone = subscriber.phone
@@ -126,6 +146,7 @@ def populate_account_performances():
                     existing_perf.achieved_return = achieved_return
                     existing_perf.copy_duration = copy_duration
                 else:
+                    # إنشاء سجل جديد
                     performance = AccountPerformance(
                         trading_account_id=account.id,
                         name=subscriber.name,
@@ -137,11 +158,15 @@ def populate_account_performances():
                         copy_duration=copy_duration
                     )
                     db.add(performance)
+                
                 db.commit()
+                
             except ValueError as ve:
                 logger.error(f"خطأ في تحويل القيم للحساب {account.id}: {ve}")
                 continue
+            
         logger.info("تم ملء جدول الأداء بنجاح!")
+        
     except Exception as e:
         logger.exception(f"خطأ في ملء جدول الأداء: {e}")
     finally:
@@ -149,15 +174,20 @@ def populate_account_performances():
 
 def reset_sequences():
     inspector = inspect(engine)
-    tables = ['subscribers', 'trading_accounts', 'account_performances']
+    tables = ['subscribers', 'trading_accounts', 'account_performances']  # أضف الجداول الأخرى إذا لزم
+    
     if engine.dialect.name == 'sqlite':
         with engine.connect() as conn:
             for table in tables:
+                # جلب أعلى ID
                 max_id_result = conn.execute(text(f"SELECT MAX(id) FROM {table}")).scalar()
                 max_id = max_id_result if max_id_result is not None else 0
+                
+                # تحديث sqlite_sequence
                 conn.execute(text(f"INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('{table}', {max_id})"))
             conn.commit()
         logger.info("✅ تم إعادة تعيين التسلسل في SQLite بنجاح!")
+        
     elif engine.dialect.name == 'postgresql':
         with engine.connect() as conn:
             for table in tables:
@@ -165,6 +195,7 @@ def reset_sequences():
                 conn.execute(text(f"SELECT setval('{seq_name}', COALESCE((SELECT MAX(id) + 1 FROM {table}), 1), false)"))
             conn.commit()
         logger.info("✅ تم إعادة تعيين التسلسل في PostgreSQL بنجاح!")
+        
     elif engine.dialect.name == 'mysql':
         with engine.connect() as conn:
             for table in tables:
@@ -173,9 +204,13 @@ def reset_sequences():
                 conn.execute(text(f"ALTER TABLE {table} AUTO_INCREMENT = {max_id}"))
             conn.commit()
         logger.info("✅ تم إعادة تعيين التسلسل في MySQL بنجاح!")
+        
     else:
         logger.error(f"❌ نوع قاعدة البيانات غير مدعوم: {engine.dialect.name}")
 
+# -------------------------------
+# settings & app
+# -------------------------------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -192,15 +227,20 @@ app = FastAPI()
 HEADER_EMOJI = "✨"
 NBSP = "\u00A0"
 FORM_MESSAGES: Dict[int, Dict[str, Any]] = {}
+# -------------------------------
+# helpers: emoji removal / display width
+# -------------------------------
 NOTIFICATION_MESSAGES: Dict[int, List[Dict[str, Any]]] = {}
 ADMIN_LANGUAGE: Dict[int, str] = {}
 
-SECRET_KEY = os.getenv("SECRET_KEY", "my_secret_key")
+SECRET_KEY = os.getenv("SECRET_KEY", "my_secret_key")  # استخدام متغير بيئة للسيكريت كي
 
 def set_admin_language(admin_id: int, lang: str):
+    
     ADMIN_LANGUAGE[admin_id] = lang
 
 def get_admin_language(admin_id: int) -> str:
+    
     return ADMIN_LANGUAGE.get(admin_id, "ar")
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1030,61 +1070,19 @@ def display_width(text: str) -> int:
         width += 1
     return width
 
-def build_header_html(
-    title: str,
-    keyboard_labels: List[str],
-    header_emoji: str = HEADER_EMOJI,
-    underline_enabled: bool = True,
-    underline_char: str = "━",
-    arabic_indent: int = 0,
-) -> str:
+def max_button_width(labels: List[str]) -> int:
+    return max((display_width(lbl) for lbl in labels), default=0)
+
+def build_webapp_header(title: str, lang: str, labels: List[str] = None) -> str:
+    if labels is None:
+        labels = []
     
-    NBSP = "\u00A0"
-    RLE = "\u202B"
-    PDF = "\u202C"
-    RLM = "\u200F"
-    LLM = "\u200E"
-    def _strip_directionals(s: str) -> str:
-        return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
-
-    MIN_TITLE_WIDTH = 44
-    clean_title = remove_emoji(title)
-    title_len = display_width(clean_title)
-    if title_len < MIN_TITLE_WIDTH:
-        extra_spaces = MIN_TITLE_WIDTH - title_len
-        left_pad = extra_spaces // 2
-        right_pad = extra_spaces - left_pad
-        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
-
-    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
-
-    if is_arabic:
-        indent = NBSP * arabic_indent
-        visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
-    else:
-        visible_title = f"{header_emoji} {title} {header_emoji}"
-
-    measure_title = _strip_directionals(visible_title)
-    title_width = display_width(measure_title)
-    
-    if is_arabic:
-        target_width = 44
-    else:
-        target_width = 44
-    
-    space_needed = max(0, target_width - title_width)
-    pad_left = space_needed // 2
-    pad_right = space_needed - pad_left
-    centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
-    underline_line = ""
-    if underline_enabled:
-        
-        if is_arabic:
-            underline_line = "\n" + RLM + (underline_char * target_width)
-        else:
-            underline_line = "\n" + (underline_char * target_width)
-
-    return centered_line + underline_line
+    return build_header_html(
+        title,
+        labels,
+        header_emoji=HEADER_EMOJI,
+        arabic_indent=1 if lang == "ar" else 0
+    )
 
 def get_agent_username(agent_name: str) -> str:
     
@@ -1104,6 +1102,65 @@ def get_agent_username(agent_name: str) -> str:
     
     return "@Omarkin9"
 
+# -------------------------------
+# consistent header builder
+# -------------------------------
+def build_header_html(
+    title: str,
+    keyboard_labels: List[str],
+    header_emoji: str = HEADER_EMOJI,
+    underline_enabled: bool = True,
+    underline_char: str = "━",
+    arabic_indent: int = 0,
+) -> str:
+    
+    NBSP = "\u00A0"
+    RLE = "\u202B"
+    PDF = "\u202C"
+    RLM = "\u200F"
+    LLM = "\u200E"
+    def _strip_directionals(s: str) -> str:
+        return re.sub(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069\u200D\u200C]', '', s)
+
+    MIN_TITLE_WIDTH = 25
+    clean_title = remove_emoji(title)
+    title_len = display_width(clean_title)
+    if title_len < MIN_TITLE_WIDTH:
+        extra_spaces = MIN_TITLE_WIDTH - title_len
+        left_pad = extra_spaces // 2
+        right_pad = extra_spaces - left_pad
+        title = f"{' ' * left_pad}{title}{' ' * right_pad}"
+
+    is_arabic = bool(re.search(r'[\u0600-\u06FF]', title))
+
+    if is_arabic:
+        indent = NBSP * arabic_indent
+        visible_title = f"{indent}{RLE}{header_emoji} {title} {header_emoji}{PDF}"
+    else:
+        visible_title = f"{header_emoji} {title} {header_emoji}"
+
+    measure_title = _strip_directionals(visible_title)
+    title_width = display_width(measure_title)
+    
+   
+    if is_arabic:
+        target_width = 25
+    else:
+        target_width = 25
+    
+    space_needed = max(0, target_width - title_width)
+    pad_left = space_needed // 2
+    pad_right = space_needed - pad_left
+    centered_line = f"{NBSP * pad_left}<b>{visible_title}</b>{NBSP * pad_right}"
+    underline_line = ""
+    if underline_enabled:
+        
+        if is_arabic:
+            underline_line = "\n" + RLM + (underline_char * target_width)
+        else:
+            underline_line = "\n" + (underline_char * target_width)
+
+    return centered_line + underline_line
 # -------------------------------
 # DB helpers
 # -------------------------------
@@ -1417,6 +1474,9 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
         logger.exception("Failed to get subscriber with accounts")
         return None
         
+# -------------------------------
+# helpers for form-message references
+# -------------------------------
 def save_form_ref(tg_id: int, chat_id: int, message_id: int, origin: str = "", lang: str = "ar"):
     try:
         FORM_MESSAGES[int(tg_id)] = {"chat_id": int(chat_id), "message_id": int(message_id), "origin": origin, "lang": lang}
@@ -1432,9 +1492,15 @@ def clear_form_ref(tg_id: int):
     except Exception:
         logger.exception("Failed to clear form ref")
 
+# -------------------------------
+# validation regex
+# -------------------------------
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 
+# -------------------------------
+# Admin and notification functions
+# -------------------------------
 def get_user_current_language(account_id: int) -> str:
     
     try:
@@ -2190,7 +2256,7 @@ def webapp_existing_account(request: Request):
         labels['agent'],
         labels['expected_return']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
 
     html = f"""
     <!doctype html>
@@ -2490,7 +2556,7 @@ def webapp_edit_accounts(request: Request):
         labels['save'],
         labels['delete']
     ]
-    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, arabic_indent=1 if lang == "ar" else 0)
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False,arabic_indent=1 if lang == "ar" else 0)
 
     html = f"""
     <!doctype html>
@@ -2604,7 +2670,8 @@ def webapp_edit_accounts(request: Request):
         <div class="risk-warning">{labels['risk_warning']}</div>
 
         <div style="margin-top:12px;text-align:{text_align}">
-          <button class="btn btn-primary" id="submit">{labels['submit']}</button>
+          <button class="btn btn-primary" id="save">{labels['save']}</button>
+          <button class="btn btn-danger" id="delete">{labels['delete']}</button>
           <button class="btn btn-ghost" id="close">{labels['close']}</button>
         </div>
         <div id="status" class="small" style="margin-top:10px;color:#b00;"></div>
@@ -2615,8 +2682,11 @@ def webapp_edit_accounts(request: Request):
         const tg = window.Telegram.WebApp || {{}};
         try{{tg.expand();}}catch(e){{}}
         const statusEl = document.getElementById('status');
+        const statusMessageEl = document.getElementById('status_message');
+        let currentAccountId = null;
+        let currentAccountStatus = null;
 
-        // دالة للتحقق من الحقول المطلوبة - تعمل فقط عند الضغط على تسجيل
+        // دالة للتحقق من الحقول المطلوبة
         function validateForm() {{
           const fields = [
             {{id: 'broker', name: '{labels['broker']}'}},
@@ -2662,86 +2732,343 @@ def webapp_edit_accounts(request: Request):
           return isValid;
         }}
 
-        // دالة لمسح رسائل الخطأ عند الكتابة في الحقول
-        function clearFieldError(fieldId) {{
-          const inputEl = document.getElementById(fieldId);
-          const errorEl = document.getElementById(fieldId + '_error');
-          
-          if (inputEl && errorEl) {{
-            inputEl.style.borderColor = '#ccc';
-            errorEl.style.display = 'none';
+        // دالة لتحميل الحسابات
+        async function loadAccounts() {{
+          const initUser = tg.initDataUnsafe.user;
+          if (!initUser) {{
+            statusEl.textContent = 'Unable to get user info';
+            return;
+          }}
+          try {{
+            const resp = await fetch(`${{window.location.origin}}/api/trading_accounts?tg_id=${{initUser.id}}`);
+            const accounts = await resp.json();
+            const select = document.getElementById('account_select');
+            select.innerHTML = '';
+            
+            if (accounts.length === 0) {{
+              select.innerHTML = `<option value="">{labels['no_accounts']}</option>`;
+              disableForm();
+              return;
+            }}
+            
+            // إضافة خيار افتراضي
+            select.innerHTML = `<option value="">{ 'اختر حساب للتعديل' if is_ar else 'Select account to edit' }</option>`;
+            
+            accounts.forEach(acc => {{
+              const option = document.createElement('option');
+              option.value = acc.id;
+              option.textContent = `${{acc.broker_name}} - ${{acc.account_number}} (${{acc.status}})`;
+              select.appendChild(option);
+            }});
+          }} catch (e) {{
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
 
-        async function submitForm(){{
-          // التحقق من جميع الحقول أولاً
+        // دالة لتعطيل النموذج
+        function disableForm() {{
+          document.getElementById('broker').disabled = true;
+          document.getElementById('account').disabled = true;
+          document.getElementById('password').disabled = true;
+          document.getElementById('server').disabled = true;
+          document.getElementById('initial_balance').disabled = true;
+          document.getElementById('current_balance').disabled = true;
+          document.getElementById('withdrawals').disabled = true;
+          document.getElementById('copy_start_date').disabled = true;
+          document.getElementById('agent').disabled = true;
+          document.getElementById('expected_return').disabled = true;
+          document.getElementById('save').disabled = true;
+          document.getElementById('delete').disabled = true;
+        }}
+
+        // دالة لتمكين النموذج
+        function enableForm() {{
+          document.getElementById('broker').disabled = false;
+          document.getElementById('account').disabled = false;
+          document.getElementById('password').disabled = false;
+          document.getElementById('server').disabled = false;
+          document.getElementById('initial_balance').disabled = false;
+          document.getElementById('current_balance').disabled = false;
+          document.getElementById('withdrawals').disabled = false;
+          document.getElementById('copy_start_date').disabled = false;
+          document.getElementById('agent').disabled = false;
+          document.getElementById('expected_return').disabled = false;
+          document.getElementById('save').disabled = false;
+          document.getElementById('delete').disabled = false;
+        }}
+
+        // دالة لإدارة حالة الأزرار بناءً على حالة الحساب
+        function updateButtonsBasedOnStatus() {{
+          const saveBtn = document.getElementById('save');
+          const deleteBtn = document.getElementById('delete');
+          
+          if (currentAccountStatus === 'under_review') {{
+            // إذا كان الحساب قيد المراجعة، تعطيل الأزرار وإظهار رسالة
+            saveBtn.disabled = true;
+            saveBtn.classList.add('btn-disabled');
+            deleteBtn.disabled = true;
+            deleteBtn.classList.add('btn-disabled');
+            
+            statusMessageEl.innerHTML = `<div class="status-warning">{labels['account_under_review']}</div>`;
+            statusMessageEl.classList.remove('hidden');
+          }} else {{
+            // إذا كان الحساب مفعل أو مرفوض، تمكين الأزرار
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('btn-disabled');
+            deleteBtn.disabled = false;
+            deleteBtn.classList.remove('btn-disabled');
+            statusMessageEl.classList.add('hidden');
+          }}
+        }}
+
+        // دالة لتفريغ النموذج
+        function clearForm() {{
+          document.getElementById('broker').value = '';
+          document.getElementById('account').value = '';
+          document.getElementById('password').value = '';
+          document.getElementById('server').value = '';
+          document.getElementById('initial_balance').value = '';
+          document.getElementById('current_balance').value = '';
+          document.getElementById('withdrawals').value = '';
+          document.getElementById('copy_start_date').value = '';
+          document.getElementById('agent').value = '';
+          document.getElementById('expected_return').value = '';
+          document.getElementById('current_account_id').value = '';
+          document.getElementById('current_account_status').value = '';
+          currentAccountId = null;
+          currentAccountStatus = null;
+          statusMessageEl.classList.add('hidden');
+        }}
+
+        // دالة لتحميل تفاصيل الحساب
+        async function loadAccountDetails(accountId) {{
+          if (!accountId) {{
+            clearForm();
+            disableForm();
+            return;
+          }}
+          
+          try {{
+            const initUser = tg.initDataUnsafe.user;
+            const resp = await fetch(`${{window.location.origin}}/api/trading_accounts?tg_id=${{initUser.id}}`);
+            const accounts = await resp.json();
+            const acc = accounts.find(a => a.id == accountId);
+            
+            if (acc) {{
+              // تعيين معرف الحساب الحالي وحالته
+              currentAccountId = acc.id;
+              currentAccountStatus = acc.status;
+              document.getElementById('current_account_id').value = acc.id;
+              document.getElementById('current_account_status').value = acc.status;
+              document.getElementById('broker').value = acc.broker_name || '';
+              document.getElementById('account').value = acc.account_number || '';
+              document.getElementById('password').value = acc.password || '';
+              document.getElementById('server').value = acc.server || '';
+              document.getElementById('initial_balance').value = acc.initial_balance || '';
+              document.getElementById('current_balance').value = acc.current_balance || '';
+              document.getElementById('withdrawals').value = acc.withdrawals || '';
+              document.getElementById('copy_start_date').value = acc.copy_start_date || '';
+              document.getElementById('agent').value = acc.agent || '';
+              document.getElementById('expected_return').value = acc.expected_return || '';
+              
+              enableForm();
+              updateButtonsBasedOnStatus();
+              
+              statusEl.textContent = '';
+              statusEl.style.color = '#b00';
+              statusEl.marginTop = '10px';
+            }} else {{
+              statusEl.textContent = '{ "الحساب غير موجود" if is_ar else "Account not found" }';
+              clearForm();
+              disableForm();
+            }}
+          }} catch (e) {{
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
+            clearForm();
+            disableForm();
+          }}
+        }}
+
+        // دالة لحفظ التغييرات
+        async function saveChanges() {{
+          const accountId = document.getElementById('current_account_id').value;
+          const accountStatus = document.getElementById('current_account_status').value;
+          
+          if (!accountId) {{
+            statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
+          // التحقق مما إذا كان الحساب قيد المراجعة
+          if (accountStatus === 'under_review') {{
+            statusEl.textContent = '{labels["account_under_review"]}';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
+          // التحقق من جميع الحقول المطلوبة
           if (!validateForm()) {{
             statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة" if is_ar else "Please fill all required fields" }';
             statusEl.style.color = '#ff4444';
             return;
           }}
 
-          const broker = document.getElementById('broker').value.trim();
-          const account = document.getElementById('account').value.trim();
-          const password = document.getElementById('password').value.trim();
-          const server = document.getElementById('server').value.trim();
-          const initial_balance = document.getElementById('initial_balance').value.trim();
-          const current_balance = document.getElementById('current_balance').value.trim();
-          const withdrawals = document.getElementById('withdrawals').value.trim();
-          const copy_start_date = document.getElementById('copy_start_date').value.trim();
-          const agent = document.getElementById('agent').value.trim();
-          const expected_return = document.getElementById('expected_return').value.trim();
-
-          const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
           const payload = {{
-            broker,
-            account,
-            password,
-            server,
-            initial_balance,
-            current_balance,
-            withdrawals,
-            copy_start_date,
-            agent,
-            expected_return,
-            tg_user: initUser,
-            lang:"{lang}"
+            id: parseInt(accountId),
+            broker_name: document.getElementById('broker').value.trim(),
+            account_number: document.getElementById('account').value.trim(),
+            password: document.getElementById('password').value.trim(),
+            server: document.getElementById('server').value.trim(),
+            initial_balance: document.getElementById('initial_balance').value.trim(),
+            current_balance: document.getElementById('current_balance').value.trim(),
+            withdrawals: document.getElementById('withdrawals').value.trim(),
+            copy_start_date: document.getElementById('copy_start_date').value.trim(),
+            agent: document.getElementById('agent').value.trim(),
+            expected_return: document.getElementById('expected_return').value.trim(),
+            tg_user: tg.initDataUnsafe.user,
+            lang: "{lang}"
           }};
 
-          try{{
+          try {{
             statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
             statusEl.style.color = '#1E90FF';
             
-            const resp = await fetch(window.location.origin + '/webapp/existing-account/submit', {{
-              method:'POST',
-              headers:{{'Content-Type':'application/json'}},
-              body:JSON.stringify(payload)
+            const resp = await fetch(`${{window.location.origin}}/api/update_trading_account`, {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/json'}},
+              body: JSON.stringify(payload)
             }});
+            
             const data = await resp.json();
-            if(resp.ok){{
-              statusEl.style.color='green';
-              statusEl.textContent=data.message||'{ "تم الحفظ بنجاح" if is_ar else "Saved successfully" }';
-              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},1500);
-              try{{tg.sendData(JSON.stringify({{status:'sent',type:'existing_account', lang:"{lang}" }}));}}catch(e){{}}
-            }}else{{
-              statusEl.textContent=data.error||'{labels["error"]}';
-              statusEl.style.color='#ff4444';
+            
+            if (data.success) {{
+              statusEl.style.color = 'green';
+              statusEl.textContent = '{ "تم حفظ التغييرات بنجاح" if is_ar else "Changes saved successfully" }';
+              
+              // إعادة تحميل الحسابات لتحديث القائمة
+              await loadAccounts();
+              
+              setTimeout(() => {{ 
+                try{{ 
+                  tg.close(); 
+                }}catch(e){{
+                  console.log('Telegram WebApp closed');
+                }}
+              }}, 1500);
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'edit_account', lang:"{lang}" }}));}}catch(e){{}}
+            }} else {{
+              statusEl.style.color = '#ff4444';
+              statusEl.textContent = data.detail || '{labels["error"]}';
             }}
-          }}catch(e){{
-            statusEl.textContent='{labels["error"]}: '+e.message;
-            statusEl.style.color='#ff4444';
+          }} catch (e) {{
+            statusEl.style.color = '#ff4444';
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
 
-        // إضافة مستمعين للأحداث لمسح رسائل الخطأ عند الكتابة
-        document.querySelectorAll('input, select').forEach(element => {{
-          element.addEventListener('input', function() {{
-            clearFieldError(this.id);
+        // دالة لحذف الحساب
+        async function deleteAccount() {{
+          const accountId = document.getElementById('current_account_id').value;
+          const accountStatus = document.getElementById('current_account_status').value;
+          
+          if (!accountId) {{
+            statusEl.textContent = '{ "يرجى اختيار حساب أولاً" if is_ar else "Please select an account first" }';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
+          // التحقق مما إذا كان الحساب قيد المراجعة
+          if (accountStatus === 'under_review') {{
+            statusEl.textContent = '{labels["account_under_review_delete"]}';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
+          if (!confirm('{ "هل أنت متأكد من حذف هذا الحساب؟" if is_ar else "Are you sure you want to delete this account?" }')) {{
+            return;
+          }}
+
+          const payload = {{
+            id: parseInt(accountId),
+            tg_user: tg.initDataUnsafe.user,
+            lang: "{lang}"
+          }};
+
+          try {{
+            statusEl.textContent = '{ "جاري الحذف..." if is_ar else "Deleting..." }';
+            statusEl.style.color = '#1E90FF';
+            
+            const resp = await fetch(`${{window.location.origin}}/api/delete_trading_account`, {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/json'}},
+              body: JSON.stringify(payload)
+            }});
+            
+            const data = await resp.json();
+            
+            if (data.success) {{
+              statusEl.style.color = 'green';
+              statusEl.textContent = '{ "تم حذف الحساب بنجاح" if is_ar else "Account deleted successfully" }';
+              
+              // إعادة تحميل الحسابات وتفريغ النموذج
+              await loadAccounts();
+              clearForm();
+              disableForm();
+              
+              setTimeout(() => {{ 
+                try{{ 
+                  tg.close(); 
+                }}catch(e){{
+                  console.log('Telegram WebApp closed');
+                }}
+              }}, 1500);
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'delete_account', lang:"{lang}" }}));}}catch(e){{}}
+            }} else {{
+              statusEl.style.color = '#ff4444';
+              statusEl.textContent = data.detail || '{labels["error"]}';
+            }}
+          }} catch (e) {{
+            statusEl.style.color = '#ff4444';
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
+          }}
+        }}
+
+        // تهيئة الصفحة
+        document.addEventListener('DOMContentLoaded', function() {{
+          // تحميل الحسابات أولاً
+          loadAccounts();
+          
+          // تعطيل النموذج في البداية
+          disableForm();
+
+          // إضافة مستمعين للتحقق من الحقول
+          document.querySelectorAll('input, select').forEach(element => {{
+            element.addEventListener('input', function() {{
+              const value = this.value.trim();
+              if (value) {{
+                this.style.borderColor = '#ccc';
+                const errorEl = document.getElementById(this.id + '_error');
+                if (errorEl) errorEl.style.display = 'none';
+              }}
+            }});
           }});
         }});
 
-        document.getElementById('submit').addEventListener('click',submitForm);
-        document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
+        // إضافة المستمعين للأحداث
+        document.getElementById('account_select').addEventListener('change', function(e) {{
+          loadAccountDetails(e.target.value);
+        }});
+        
+        document.getElementById('save').addEventListener('click', saveChanges);
+        document.getElementById('delete').addEventListener('click', deleteAccount);
+        document.getElementById('close').addEventListener('click', function() {{ 
+          try{{ 
+            tg.close(); 
+          }}catch(e){{
+            console.log('Telegram WebApp closed');
+          }}
+        }});
       </script>
     </body>
     </html>
@@ -3002,6 +3329,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
     except Exception as e:
         logger.exception(f"Failed to refresh user interface: {e}")
         
+        # محاولة إعادة الحصول على آخر مرجع معروف
         ref = get_form_ref(telegram_id)
         if ref and ref["origin"] == "my_accounts":
             try:
@@ -3017,6 +3345,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
             except:
                 pass
         
+        # إذا فشل كل شيء، أرسل رسالة جديدة وأعد حفظ المرجع
         sent = await application.bot.send_message(
             chat_id=telegram_id,
             text=updated_message,
@@ -3026,6 +3355,9 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
         )
         save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
 
+# ===============================
+# POST endpoint: receive form submission from WebApp (original registration)
+# ===============================
 @app.post("/webapp/submit")
 async def webapp_submit(payload: dict = Body(...)):
     try:
@@ -3033,8 +3365,9 @@ async def webapp_submit(payload: dict = Body(...)):
         email = (payload.get("email") or "").strip()
         phone = (payload.get("phone") or "").strip()
         tg_user = payload.get("tg_user") or {}
-        page_lang = (payload.get("lang") or "").strip().lower()  
+        page_lang = (payload.get("lang") or "").strip().lower()  # تأكدنا من التحويل للصيغة الموحدة
 
+        # التحقق من صحة البيانات
         if not name or len(name) < 2:
             return JSONResponse(status_code=400, content={"error": "الاسم قصير جدًا أو مفقود."})
         if not EMAIL_RE.match(email):
@@ -3042,6 +3375,7 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "رقم الهاتف غير صالح."})
 
+        # ✅ تحديد اللغة بشكل واضح
         if page_lang in ("ar", "en"):
             detected_lang = page_lang
         else:
@@ -3051,11 +3385,12 @@ async def webapp_submit(payload: dict = Body(...)):
             else:
                 detected_lang = "ar"
 
-        display_lang = detected_lang  
+        display_lang = detected_lang  # اللغة التي سنستخدمها في الرسائل
 
         telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
         telegram_username = tg_user.get("username") if isinstance(tg_user, dict) else None
 
+        # حفظ أو تحديث بيانات المشترك
         result, subscriber = save_or_update_subscriber(
             name=name,
             email=email,
@@ -3065,14 +3400,17 @@ async def webapp_submit(payload: dict = Body(...)):
             telegram_username=telegram_username
         )
 
+        # الحصول على المرجع إذا كان موجوداً
         ref = get_form_ref(telegram_id) if telegram_id else None
 
+        # إذا كان تعديل بيانات من قسم "بياناتي وحساباتي"
         is_edit_mode = payload.get("edit") == "1"
         if ref and ref.get("origin") == "my_accounts" and (is_edit_mode or result == "updated"):
             await refresh_user_accounts_interface(telegram_id, display_lang, ref["chat_id"], ref["message_id"])
             msg = "تم التحديث بنجاح." if display_lang == "ar" else "Updated successfully."
             return JSONResponse(content={"message": msg})
 
+        # إذا كان التسجيل من طلب EA
         if ref and ref.get("origin") == "open_form_ea":
             ea_link = "https://t.me/Nagyfx"
             if display_lang == "ar":
@@ -3111,6 +3449,7 @@ async def webapp_submit(payload: dict = Body(...)):
             msg = "تم الإرسال بنجاح." if display_lang == "ar" else "Sent successfully."
             return JSONResponse(content={"message": msg})
 
+        # إذا كان التسجيل الأولي من نموذج اللغة
         elif ref and ref.get("origin") == "initial_registration":
             if telegram_id:
                 try:
@@ -3123,7 +3462,7 @@ async def webapp_submit(payload: dict = Body(...)):
                         sections = [("💹 Forex Trading", "forex_main"), ("💻 Programming Services", "dev_main")]
                         title = "Main Sections"
                         back_button = ("🔙 Back to language", "back_language")
-                        description = "\n\nHello! These are the current sections."
+                        description = "\n\nHello! These are the main sections."
 
                     keyboard = [[InlineKeyboardButton(name, callback_data=cb)] for name, cb in sections]
                     keyboard.append([InlineKeyboardButton(back_button[0], callback_data=back_button[1])])
@@ -3161,6 +3500,7 @@ async def webapp_submit(payload: dict = Body(...)):
             return JSONResponse(content={"message": msg})
 
         else:
+            # الحالة الافتراضية: عرض وسطاء التداول بعد التسجيل
             if display_lang == "ar":
                 header_title = "اختر وسيطك الآن"
                 brokers_title = ""
@@ -3211,6 +3551,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 except Exception:
                     logger.exception("Failed to send brokers message to user")
 
+        # ✅ الإرجاع النهائي باللغة الصحيحة
         if result == "created":
             msg = "تم التسجيل بنجاح." if display_lang == "ar" else "Registered successfully."
         elif result == "updated":
@@ -3383,16 +3724,20 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         withdrawals = float(acc['withdrawals'])
                         start_date_str = acc['copy_start_date']
                         
+                       
                         if 'T' in start_date_str:
                             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                         else:
                             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                         
+                       
                         delta = today - start_date
                         total_days = delta.days
                         
+                        
                         months = total_days // 30
                         remaining_days = total_days % 30
+                        
                         
                         period_text = ""
                         if months > 0:
@@ -3408,16 +3753,20 @@ async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE,
                             if total_days > 1:
                                 period_text += "s"
                         
+                        
                         if initial > 0:
                             total_value = current + withdrawals
                             profit_amount = total_value - initial
                             profit_percentage = (profit_amount / initial) * 100
                             
+                           
                             account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
                             
                     except (ValueError, TypeError) as e:
+                       
                         account_text += f"   📈 <b>Achieved Return:</b> Calculating...\n"
                 else:
+                   
                     account_text += f"   📈 <b>Achieved Return:</b> Requires complete data\n"
                     
             message += account_text
@@ -3657,6 +4006,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_user_accounts(update, context, user_id, lang)
         return
 
+    # =============================================
+    # NEW: Handle all service buttons with proper formatting
+    # =============================================
+    
+    
     service_titles = {
         "📈 برمجة المؤشرات": {"ar": "برمجة المؤشرات", "en": "Indicators Programming"},
         "📈 Indicators": {"ar": "برمجة المؤشرات", "en": "Indicators Programming"},
@@ -3945,7 +4299,9 @@ application.add_handler(CallbackQueryHandler(handle_notification_confirmation, p
 application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
 application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^admin_reset_sequences$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-
+# ===============================
+# Webhook setup
+# ===============================
 @app.get("/")
 def root():
     return {"status": "ok", "message": "Bot is running"}
