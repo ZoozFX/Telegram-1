@@ -3924,8 +3924,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sections_data = {
         "forex_main": {
-            "ar": ["📊 نسخ الصفقات", "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)"],
-            "en": ["📊 Copy Trading", "🤖 Request to Test YesFX Systems (Agents Only)"],
+            "ar": ["📊 نسخ الصفقات", "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)", "🛡️ طلب حساب مشاهدة"],
+            "en": ["📊 Copy Trading", "🤖 Request to Test YesFX Systems (Agents Only)", "🛡️ Request Demo Account"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -3956,6 +3956,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for name in options:
             if name in ("🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)", "🤖 Request to Test YesFX Systems (Agents Only)"):
                 keyboard.append([InlineKeyboardButton(name, url="https://t.me/Nagyfx")])
+            elif name in ("🛡️ طلب حساب مشاهدة", "🛡️ Request Demo Account"):
+                keyboard.append([InlineKeyboardButton(name, callback_data="request_demo_account")])
             else:
                 keyboard.append([InlineKeyboardButton(name, callback_data=name)])
         keyboard.append([InlineKeyboardButton(back_label, callback_data="back_main")])
@@ -3965,6 +3967,60 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin=q.data, lang=lang)
         except Exception:
             await context.bot.send_message(chat_id=q.message.chat_id, text=box + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    if q.data == "request_demo_account":
+        if lang == "ar":
+            title = "حساب مشاهدة"
+            details = """
+Account Number : 555013
+Password : yesfx2025
+Server : oneroyal-real
+Platform : MT4
+            """
+            ok_button = "✅ حسناً"
+        else:
+            title = "Demo Account"
+            details = """
+Account Number : 555013
+Password : yesfx2025
+Server : oneroyal-real
+Platform : MT4
+            """
+            ok_button = "✅ OK"
+
+        labels = [ok_button]
+        header = build_header_html(title, labels, header_emoji="🛡️", arabic_indent=1 if lang == "ar" else 0)
+        message = f"{header}\n\n{details}"
+
+        keyboard = [[InlineKeyboardButton(ok_button, callback_data="delete_demo_message")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        sent = await context.bot.send_message(
+            chat_id=user_id,
+            text=message,
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
+
+        # Save the message ID for deletion
+        context.user_data['demo_message_id'] = sent.message_id
+        context.user_data['demo_chat_id'] = sent.chat_id
+        return
+
+    if q.data == "delete_demo_message":
+        message_id = context.user_data.get('demo_message_id')
+        chat_id = context.user_data.get('demo_chat_id')
+        if message_id and chat_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=chat_id,
+                    message_id=message_id
+                )
+                context.user_data.pop('demo_message_id', None)
+                context.user_data.pop('demo_chat_id', None)
+            except Exception as e:
+                logger.exception(f"Failed to delete demo message: {e}")
         return
 
     if q.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
