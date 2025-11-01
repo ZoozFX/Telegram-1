@@ -4733,9 +4733,9 @@ application.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
 application.add_handler(CallbackQueryHandler(handle_notification_confirmation, pattern="^confirm_notification_"))
 application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
 application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^admin_reset_sequences$"))
-application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_admin_demo_message_"))
 application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_demo_message$"))
+application.add_handler(CallbackQueryHandler(menu_handler))
 # ===============================
 # Webhook setup
 # ===============================
