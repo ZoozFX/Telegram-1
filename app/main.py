@@ -4257,7 +4257,7 @@ Platform : MT4
 👤 المستخدم: {subscriber.name}
 📧 البريد: {subscriber.email}
 📞 الهاتف: {subscriber.phone}
-🆔 Telegram ID: {subscriber.telegram_id}
+\u200F🆔 Telegram ID: {subscriber.telegram_id}
 @{subscriber.telegram_username or 'N/A'}
                     """
                     admin_ok_button = "✅ حسناً"
@@ -4734,6 +4734,7 @@ application.add_handler(CallbackQueryHandler(handle_notification_confirmation, p
 application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
 application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^admin_reset_sequences$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
+application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_admin_demo_message_"))
 application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_demo_message$"))
 # ===============================
 # Webhook setup
