@@ -4262,7 +4262,7 @@ Platform : MT4
                     """
                     admin_ok_button = "✅ حسناً"
                 else:
-                    admin_title = "New Demo Account Request"
+                    admin_title = "New Watch Account Request"
                     admin_details = f"""
 👤 User: {subscriber.name}
 📧 Email: {subscriber.email}
