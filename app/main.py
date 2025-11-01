@@ -3,6 +3,7 @@ import re
 import json
 import logging
 import unicodedata
+import aiohttp
 from typing import List, Optional, Tuple, Dict, Any
 from urllib.parse import urlencode, quote_plus
 from datetime import datetime, timedelta
@@ -34,6 +35,414 @@ AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
 # -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# -------------------------------
+# WhatsApp API Configuration - NEW
+# -------------------------------
+WHATSAPP_API_URL = os.getenv("WHATSAPP_API_URL", "https://graph.facebook.com/v18.0")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_TEMPLATE_NAME = os.getenv("WHATSAPP_TEMPLATE_NAME", "broadcast_message")
+# -------------------------------
+# WhatsApp API Service - NEW
+# -------------------------------
+class WhatsAppService:
+    def __init__(self):
+        self.api_url = WHATSAPP_API_URL
+        self.phone_number_id = WHATSAPP_PHONE_NUMBER_ID
+        self.access_token = WHATSAPP_ACCESS_TOKEN
+        self.template_name = WHATSAPP_TEMPLATE_NAME
+        
+    async def send_text_message(self, phone_number: str, message: str) -> bool:
+        """إرسال رسالة نصية عبر واتساب"""
+        try:
+            # تنظيف رقم الهاتف والتأكد من تنسيقه الدولي
+            cleaned_phone = self.clean_phone_number(phone_number)
+            if not cleaned_phone:
+                logger.error(f"Invalid phone number: {phone_number}")
+                return False
+                
+            url = f"{self.api_url}/{self.phone_number_id}/messages"
+            
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": cleaned_phone,
+                "type": "text",
+                "text": {
+                    "body": message
+                }
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        logger.info(f"✅ WhatsApp message sent to {cleaned_phone}")
+                        return True
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"❌ WhatsApp API error for {cleaned_phone}: {response.status} - {error_text}")
+                        return False
+                        
+        except Exception as e:
+            logger.exception(f"❌ Failed to send WhatsApp to {phone_number}: {e}")
+            return False
+    
+    async def send_template_message(self, phone_number: str, template_name: str, parameters: list = None) -> bool:
+        """إرسال رسالة باستخدام قالب معتمد"""
+        try:
+            cleaned_phone = self.clean_phone_number(phone_number)
+            if not cleaned_phone:
+                return False
+                
+            url = f"{self.api_url}/{self.phone_number_id}/messages"
+            
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            template_data = {
+                "name": template_name,
+                "language": {"code": "ar"}
+            }
+            
+            if parameters:
+                template_data["components"] = [{
+                    "type": "body",
+                    "parameters": parameters
+                }]
+            
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": cleaned_phone,
+                "type": "template",
+                "template": template_data
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        logger.info(f"✅ WhatsApp template sent to {cleaned_phone}")
+                        return True
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"❌ WhatsApp template error for {cleaned_phone}: {response.status} - {error_text}")
+                        return False
+                        
+        except Exception as e:
+            logger.exception(f"❌ Failed to send WhatsApp template to {phone_number}: {e}")
+            return False
+    
+    def clean_phone_number(self, phone_number: str) -> str:
+        """تنظيف وتنسيق رقم الهاتف للتأكد من صحته"""
+        if not phone_number:
+            return None
+            
+        # إزالة جميع المسافات والرموز الخاصة
+        cleaned = re.sub(r'[\s+\-\(\).-]', '', phone_number)
+        
+        # إذا بدأ بـ 00 استبدله بـ +
+        if cleaned.startswith('00'):
+            cleaned = '+' + cleaned[2:]
+        
+        # إذا بدأ بـ 0 وأضف +966 للمملكة العربية السعودية (يمكن تعديله حسب الدولة)
+        if cleaned.startswith('0') and len(cleaned) == 10:
+            cleaned = '+966' + cleaned[1:]
+        
+        # التأكد من أن الرقم يبدأ بـ +
+        if not cleaned.startswith('+'):
+            cleaned = '+' + cleaned
+        
+        # التحقق من الطول الأساسي (على الأقل 8 أرقام بعد الرمز الدولي)
+        if len(cleaned) < 10:
+            logger.error(f"Phone number too short: {cleaned}")
+            return None
+            
+        return cleaned
+    
+    def validate_phone_number(self, phone_number: str) -> bool:
+        """التحقق من صحة رقم الهاتف"""
+        cleaned = self.clean_phone_number(phone_number)
+        if not cleaned:
+            return False
+        
+        # تحقق أساسي من التنسيق
+        pattern = r'^\+\d{8,15}$'  # + يتبعه 8 إلى 15 رقم
+        return bool(re.match(pattern, cleaned))
+
+# إنشاء instance من الخدمة
+whatsapp_service = WhatsAppService()
+
+# -------------------------------
+# Enhanced WhatsApp broadcast execution - MODIFIED
+# -------------------------------
+async def execute_whatsapp_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_message' not in context.user_data or 'target_users' not in context.user_data:
+        return
+    
+    message_text = context.user_data['broadcast_message']
+    target_users = context.user_data['target_users']
+    target_name = context.user_data['target_name']
+    admin_lang = get_admin_language(user_id)
+    
+    # التحقق من تكوين واتساب
+    if not WHATSAPP_PHONE_NUMBER_ID or not WHATSAPP_ACCESS_TOKEN:
+        error_msg = """
+❌ **تكوين واتساب غير مكتمل**
+        
+يرجى إضافة المتغيرات التالية إلى ملف .env:
+        
+WHATSAPP_PHONE_NUMBER_ID=رقم_الهاتف_المعرف
+WHATSAPP_ACCESS_TOKEN=رمز_الوصول
+WHATSAPP_API_URL=https://graph.facebook.com/v18.0
+        
+راجع documentation لمعرفة كيفية الحصول على هذه المفاتيح.
+        """ if admin_lang == "ar" else """
+❌ **WhatsApp configuration incomplete**
+        
+Please add the following variables to your .env file:
+        
+WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+WHATSAPP_ACCESS_TOKEN=your_access_token
+WHATSAPP_API_URL=https://graph.facebook.com/v18.0
+        
+Check documentation for how to obtain these keys.
+        """
+        await q.edit_message_text(error_msg)
+        return
+    
+    if admin_lang == "ar":
+        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم عبر واتساب...")
+        validating_msg = "🔍 جاري التحقق من أرقام الهواتف..."
+    else:
+        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users via WhatsApp...")
+        validating_msg = "🔍 Validating phone numbers..."
+    
+    await progress_msg.edit_text(validating_msg)
+    
+    # تصفية الأرقام الصالحة فقط
+    valid_users = []
+    invalid_phones = []
+    
+    for user in target_users:
+        if whatsapp_service.validate_phone_number(user['phone']):
+            valid_users.append(user)
+        else:
+            invalid_phones.append({
+                'name': user['name'],
+                'phone': user['phone']
+            })
+    
+    if admin_lang == "ar":
+        progress_text = f"""
+✅ التحقق من الأرقام مكتمل:
+📞 الأرقام الصالحة: {len(valid_users)}
+❌ الأرقام غير الصالحة: {len(invalid_phones)}
+
+⏳ جاري الإرسال...
+        """
+    else:
+        progress_text = f"""
+✅ Phone validation complete:
+📞 Valid numbers: {len(valid_users)}
+❌ Invalid numbers: {len(invalid_phones)}
+
+⏳ Sending messages...
+        """
+    
+    await progress_msg.edit_text(progress_text)
+    
+    # إرسال الرسائل
+    successful = 0
+    failed = 0
+    failed_details = []
+    
+    for i, user in enumerate(valid_users, 1):
+        try:
+            # إضافة تذييل بالاسم إذا كان متوفراً
+            personalized_message = message_text
+            if user.get('name'):
+                personalized_message += f"\n\n- {user['name']}"
+            
+            success = await whatsapp_service.send_text_message(user['phone'], personalized_message)
+            
+            if success:
+                successful += 1
+            else:
+                failed += 1
+                failed_details.append({
+                    'name': user.get('name', 'Unknown'),
+                    'phone': user['phone'],
+                    'reason': 'API Error'
+                })
+                
+        except Exception as e:
+            failed += 1
+            failed_details.append({
+                'name': user.get('name', 'Unknown'),
+                'phone': user['phone'],
+                'reason': str(e)
+            })
+            logger.error(f"Failed to send WhatsApp to {user['phone']}: {e}")
+        
+        # تحديث التقدم كل 10 رسائل
+        if i % 10 == 0 or i == len(valid_users):
+            if admin_lang == "ar":
+                await progress_msg.edit_text(f"⏳ جاري الإرسال... {i}/{len(valid_users)}")
+            else:
+                await progress_msg.edit_text(f"⏳ Sending... {i}/{len(valid_users)}")
+        
+        # تأخير بسيط لتجنب rate limits
+        await asyncio.sleep(0.5)
+    
+    # إنشاء تقرير مفصل
+    if admin_lang == "ar":
+        report_text = f"""
+✅ **تقرير البث عبر واتساب**
+
+🎯 **المستهدف:** {target_name}
+📊 **الإجمالي المستهدف:** {len(target_users)}
+✅ **تم الإرسال بنجاح:** {successful}
+❌ **فشل في الإرسال:** {failed}
+🔍 **الأرقام غير الصالحة:** {len(invalid_phones)}
+
+"""
+        
+        if invalid_phones:
+            report_text += f"\n📋 **الأرقام غير الصالحة ({len(invalid_phones)}):**\n"
+            for invalid in invalid_phones[:10]:  # عرض أول 10 فقط
+                report_text += f"• {invalid['name']}: {invalid['phone']}\n"
+            if len(invalid_phones) > 10:
+                report_text += f"• ... و {len(invalid_phones) - 10} أخرى\n"
+        
+        if failed_details:
+            report_text += f"\n⚠️ **تفاصيل الأخطاء ({len(failed_details)}):**\n"
+            for error in failed_details[:5]:  # عرض أول 5 أخطاء فقط
+                report_text += f"• {error['name']}: {error['reason'][:50]}...\n"
+            if len(failed_details) > 5:
+                report_text += f"• ... و {len(failed_details) - 5} أخرى\n"
+                
+    else:
+        report_text = f"""
+✅ **WhatsApp Broadcast Report**
+
+🎯 **Target:** {target_name}
+📊 **Total Target:** {len(target_users)}
+✅ **Successful:** {successful}
+❌ **Failed:** {failed}
+🔍 **Invalid Numbers:** {len(invalid_phones)}
+
+"""
+        
+        if invalid_phones:
+            report_text += f"\n📋 **Invalid Numbers ({len(invalid_phones)}):**\n"
+            for invalid in invalid_phones[:10]:
+                report_text += f"• {invalid['name']}: {invalid['phone']}\n"
+            if len(invalid_phones) > 10:
+                report_text += f"• ... and {len(invalid_phones) - 10} more\n"
+        
+        if failed_details:
+            report_text += f"\n⚠️ **Error Details ({len(failed_details)}):**\n"
+            for error in failed_details[:5]:
+                report_text += f"• {error['name']}: {error['reason'][:50]}...\n"
+            if len(failed_details) > 5:
+                report_text += f"• ... and {len(failed_details) - 5} more\n"
+    
+    await progress_msg.edit_text(report_text)
+    
+    # تنظيف بيانات البث
+    context.user_data.pop('broadcast_type', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_users', None)
+    context.user_data.pop('target_name', None)
+    context.user_data.pop('broadcast_platform', None)
+    
+    # العودة للوحة التحكم بعد 5 ثواني
+    await asyncio.sleep(5)
+    await admin_panel_from_callback(update, context)
+async def admin_whatsapp_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إدارة قوالب واتساب"""
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        title = "إدارة قوالب واتساب"
+        buttons = [
+            "📋 عرض القوالب",
+            "🆕 إنشاء قالب",
+            "✏️ تعديل قالب",
+            "🔙 رجوع"
+        ]
+        description = "\n\nإدارة قوالب رسائل واتساب."
+    else:
+        title = "WhatsApp Templates Management"
+        buttons = [
+            "📋 View Templates",
+            "🆕 Create Template",
+            "✏️ Edit Template", 
+            "🔙 Back"
+        ]
+        description = "\n\nManage WhatsApp message templates."
+    
+    header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+    
+    keyboard = [
+        [InlineKeyboardButton(buttons[0], callback_data="admin_whatsapp_view_templates")],
+        [InlineKeyboardButton(buttons[1], callback_data="admin_whatsapp_create_template")],
+        [InlineKeyboardButton(buttons[2], callback_data="admin_whatsapp_edit_template")],
+        [InlineKeyboardButton(buttons[3], callback_data="admin_broadcast_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
+async def test_whatsapp_connection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """اختبار اتصال واتساب API"""
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    admin_lang = get_admin_language(user_id)
+    
+    if not WHATSAPP_PHONE_NUMBER_ID or not WHATSAPP_ACCESS_TOKEN:
+        error_msg = "❌ تكوين واتساب غير مكتمل" if admin_lang == "ar" else "❌ WhatsApp configuration incomplete"
+        await q.edit_message_text(error_msg)
+        return
+    
+    test_message = "🔍 اختبار اتصال واتساب API..." if admin_lang == "ar" else "🔍 Testing WhatsApp API connection..."
+    await q.edit_message_text(test_message)
+    
+    # اختبار بإرسال رسالة إلى رقم المسؤول (إذا كان مسجلاً)
+    admin_user = get_subscriber_by_telegram_id(user_id)
+    if admin_user and admin_user.phone:
+        test_phone = admin_user.phone
+        test_msg = "✅ هذا رسالة اختبار من بوت YesFX" if admin_lang == "ar" else "✅ This is a test message from YesFX bot"
+        
+        success = await whatsapp_service.send_text_message(test_phone, test_msg)
+        
+        if success:
+            result_msg = f"✅ تم إرسال رسالة اختبار بنجاح إلى {test_phone}" if admin_lang == "ar" else f"✅ Test message sent successfully to {test_phone}"
+        else:
+            result_msg = f"❌ فشل إرسال رسالة الاختبار إلى {test_phone}" if admin_lang == "ar" else f"❌ Failed to send test message to {test_phone}"
+    else:
+        result_msg = "❌ لم يتم العثور على رقم هاتف مسجل للمسؤول" if admin_lang == "ar" else "❌ No registered phone number found for admin"
+    
+    await q.edit_message_text(result_msg)
+    await asyncio.sleep(3)
+    await admin_panel_from_callback(update, context)
 
 # -------------------------------
 # DB model
@@ -342,7 +751,65 @@ async def admin_broadcast_platform(update: Update, context: ContextTypes.DEFAULT
     
     await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
-async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -------------------------------
+# Admin and notification functions - MODIFIED
+# -------------------------------
+
+
+async def admin_whatsapp_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    admin_lang = get_admin_language(user_id)
+    
+    # عرض حالة تكوين واتساب
+    config_status = "✅ مكتمل" if WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN else "❌ غير مكتمل"
+    
+    if admin_lang == "ar":
+        title = "بث عبر واتساب"
+        buttons = [
+            "📢 للجميع",
+            "👥 للمسجلين فقط", 
+            "✅ للمقبولين فقط",
+            "🔧 الإعدادات",
+            "🔍 اختبار الاتصال",
+            "🔙 رجوع"
+        ]
+        description = f"\n\nحالة التكوين: {config_status}\nاختر الخيار."
+    else:
+        title = "WhatsApp Broadcast"
+        buttons = [
+            "📢 To All",
+            "👥 To Registered",
+            "✅ To Approved", 
+            "🔧 Settings",
+            "🔍 Test Connection",
+            "🔙 Back"
+        ]
+        description = f"\n\nConfig Status: {config_status}\nChoose option."
+    
+    header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+    
+    keyboard = [
+        [
+            InlineKeyboardButton(buttons[0], callback_data="admin_whatsapp_broadcast_all"),
+            InlineKeyboardButton(buttons[1], callback_data="admin_whatsapp_broadcast_registered")
+        ],
+        [
+            InlineKeyboardButton(buttons[2], callback_data="admin_whatsapp_broadcast_approved"),
+            InlineKeyboardButton(buttons[3], callback_data="admin_whatsapp_templates")
+        ],
+        [
+            InlineKeyboardButton(buttons[4], callback_data="admin_test_whatsapp"),
+            InlineKeyboardButton(buttons[5], callback_data="admin_broadcast_menu")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
+
+async def admin_telegram_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
@@ -350,17 +817,17 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
-        title = "ارسل رسالة"
+        title = "بث عبر تليجرام"
         buttons = [
             "📢 للجميع",
             "👥 للمسجلين فقط",
-            "✅ للمقبولين فقط",
+            "✅ للمقبولين فقط", 
             "🔍 لشخص واحد",
             "🔙 رجوع"
         ]
         description = "\n\nاختر الخيار."
     else:
-        title = "Send Message"
+        title = "Telegram Broadcast"
         buttons = [
             "📢 To All",
             "👥 To Registered",
@@ -378,19 +845,578 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
         keyboard_row = []
         for btn in row:
             if btn == "📢 للجميع" or btn == "📢 To All":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_all"))
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_telegram_broadcast_all"))
             elif btn == "👥 للمسجلين فقط" or btn == "👥 To Registered":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_registered"))
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_telegram_broadcast_registered"))
             elif btn == "✅ للمقبولين فقط" or btn == "✅ To Approved":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_approved"))
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_telegram_broadcast_approved"))
             elif btn == "🔍 لشخص واحد" or btn == "🔍 Individual":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_individual_message"))
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_telegram_individual_message"))
         keyboard.append(keyboard_row)
     
-    keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_broadcast_platform")])
+    keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_broadcast_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
+
+# -------------------------------
+# WhatsApp broadcast handlers - NEW
+# -------------------------------
+async def handle_admin_whatsapp_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    context.user_data['broadcast_type'] = q.data
+    context.user_data['broadcast_platform'] = 'whatsapp'
+    
+    if admin_lang == "ar":
+        message = "📝 يرجى إرسال الرسالة التي تريد بثها عبر واتساب:"
+        cancel_btn = "❌ إلغاء"
+    else:
+        message = "📝 Please send the message you want to broadcast via WhatsApp:"
+        cancel_btn = "❌ Cancel"
+    
+    keyboard = [[InlineKeyboardButton(cancel_btn, callback_data="admin_cancel_broadcast")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(message, reply_markup=reply_markup)
+
+async def process_admin_whatsapp_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_type' not in context.user_data or context.user_data.get('broadcast_platform') != 'whatsapp':
+        return
+    
+    broadcast_type = context.user_data['broadcast_type']
+    message_text = update.message.text
+    admin_lang = get_admin_language(user_id)
+    
+    if broadcast_type == "admin_whatsapp_broadcast_all":
+        target_users = get_all_subscribers_with_phones()
+        target_name = "جميع المشتركين" if admin_lang == "ar" else "All Subscribers"
+    elif broadcast_type == "admin_whatsapp_broadcast_registered":
+        target_users = get_registered_users_with_phones()
+        target_name = "المسجلين ببيانات" if admin_lang == "ar" else "Registered Users"
+    elif broadcast_type == "admin_whatsapp_broadcast_approved":
+        target_users = get_approved_accounts_users_with_phones()
+        target_name = "أصحاب الحسابات المقبولة" if admin_lang == "ar" else "Approved Accounts Owners"
+    else:
+        return
+    
+    if admin_lang == "ar":
+        confirm_text = f"""
+📊 تفاصيل البث عبر واتساب:
+🎯 المستهدف: {target_name}
+👥 عدد المستخدمين: {len(target_users)}
+📝 الرسالة:
+{message_text}
+
+هل تريد متابعة البث؟
+        """
+    else:
+        confirm_text = f"""
+📊 WhatsApp Broadcast Details:
+🎯 Target: {target_name}
+👥 Users Count: {len(target_users)}
+📝 Message:
+{message_text}
+
+Do you want to proceed with broadcasting?
+        """
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ نعم، إرسال" if admin_lang == "ar" else "✅ Yes, Send", 
+                               callback_data="admin_confirm_whatsapp_broadcast"),
+            InlineKeyboardButton("❌ إلغاء" if admin_lang == "ar" else "❌ Cancel", 
+                               callback_data="admin_cancel_broadcast")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.user_data['broadcast_message'] = message_text
+    context.user_data['target_users'] = target_users
+    context.user_data['target_name'] = target_name
+    
+    await update.message.reply_text(confirm_text, reply_markup=reply_markup)
+
+async def execute_whatsapp_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_message' not in context.user_data or 'target_users' not in context.user_data:
+        return
+    
+    message_text = context.user_data['broadcast_message']
+    target_users = context.user_data['target_users']
+    target_name = context.user_data['target_name']
+    admin_lang = get_admin_language(user_id)
+    
+    # التحقق من تكوين واتساب
+    if not WHATSAPP_PHONE_NUMBER_ID or not WHATSAPP_ACCESS_TOKEN:
+        error_msg = """
+❌ **تكوين واتساب غير مكتمل**
+        
+يرجى إضافة المتغيرات التالية إلى ملف .env:
+        
+WHATSAPP_PHONE_NUMBER_ID=رقم_الهاتف_المعرف
+WHATSAPP_ACCESS_TOKEN=رمز_الوصول
+WHATSAPP_API_URL=https://graph.facebook.com/v18.0
+        
+راجع documentation لمعرفة كيفية الحصول على هذه المفاتيح.
+        """ if admin_lang == "ar" else """
+❌ **WhatsApp configuration incomplete**
+        
+Please add the following variables to your .env file:
+        
+WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+WHATSAPP_ACCESS_TOKEN=your_access_token
+WHATSAPP_API_URL=https://graph.facebook.com/v18.0
+        
+Check documentation for how to obtain these keys.
+        """
+        await q.edit_message_text(error_msg)
+        return
+    
+    if admin_lang == "ar":
+        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم عبر واتساب...")
+        validating_msg = "🔍 جاري التحقق من أرقام الهواتف..."
+    else:
+        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users via WhatsApp...")
+        validating_msg = "🔍 Validating phone numbers..."
+    
+    await progress_msg.edit_text(validating_msg)
+    
+    # تصفية الأرقام الصالحة فقط
+    valid_users = []
+    invalid_phones = []
+    
+    for user in target_users:
+        if whatsapp_service.validate_phone_number(user['phone']):
+            valid_users.append(user)
+        else:
+            invalid_phones.append({
+                'name': user['name'],
+                'phone': user['phone']
+            })
+    
+    if admin_lang == "ar":
+        progress_text = f"""
+✅ التحقق من الأرقام مكتمل:
+📞 الأرقام الصالحة: {len(valid_users)}
+❌ الأرقام غير الصالحة: {len(invalid_phones)}
+
+⏳ جاري الإرسال...
+        """
+    else:
+        progress_text = f"""
+✅ Phone validation complete:
+📞 Valid numbers: {len(valid_users)}
+❌ Invalid numbers: {len(invalid_phones)}
+
+⏳ Sending messages...
+        """
+    
+    await progress_msg.edit_text(progress_text)
+    
+    # إرسال الرسائل
+    successful = 0
+    failed = 0
+    failed_details = []
+    
+    for i, user in enumerate(valid_users, 1):
+        try:
+            # إضافة تذييل بالاسم إذا كان متوفراً
+            personalized_message = message_text
+            if user.get('name'):
+                personalized_message += f"\n\n- {user['name']}"
+            
+            success = await whatsapp_service.send_text_message(user['phone'], personalized_message)
+            
+            if success:
+                successful += 1
+            else:
+                failed += 1
+                failed_details.append({
+                    'name': user.get('name', 'Unknown'),
+                    'phone': user['phone'],
+                    'reason': 'API Error'
+                })
+                
+        except Exception as e:
+            failed += 1
+            failed_details.append({
+                'name': user.get('name', 'Unknown'),
+                'phone': user['phone'],
+                'reason': str(e)
+            })
+            logger.error(f"Failed to send WhatsApp to {user['phone']}: {e}")
+        
+        # تحديث التقدم كل 10 رسائل
+        if i % 10 == 0 or i == len(valid_users):
+            if admin_lang == "ar":
+                await progress_msg.edit_text(f"⏳ جاري الإرسال... {i}/{len(valid_users)}")
+            else:
+                await progress_msg.edit_text(f"⏳ Sending... {i}/{len(valid_users)}")
+        
+        # تأخير بسيط لتجنب rate limits
+        await asyncio.sleep(0.5)
+    
+    # إنشاء تقرير مفصل
+    if admin_lang == "ar":
+        report_text = f"""
+✅ **تقرير البث عبر واتساب**
+
+🎯 **المستهدف:** {target_name}
+📊 **الإجمالي المستهدف:** {len(target_users)}
+✅ **تم الإرسال بنجاح:** {successful}
+❌ **فشل في الإرسال:** {failed}
+🔍 **الأرقام غير الصالحة:** {len(invalid_phones)}
+
+"""
+        
+        if invalid_phones:
+            report_text += f"\n📋 **الأرقام غير الصالحة ({len(invalid_phones)}):**\n"
+            for invalid in invalid_phones[:10]:
+                report_text += f"• {invalid['name']}: {invalid['phone']}\n"
+            if len(invalid_phones) > 10:
+                report_text += f"• ... و {len(invalid_phones) - 10} أخرى\n"
+        
+        if failed_details:
+            report_text += f"\n⚠️ **تفاصيل الأخطاء ({len(failed_details)}):**\n"
+            for error in failed_details[:5]:
+                report_text += f"• {error['name']}: {error['reason'][:50]}...\n"
+            if len(failed_details) > 5:
+                report_text += f"• ... و {len(failed_details) - 5} أخرى\n"
+                
+    else:
+        report_text = f"""
+✅ **WhatsApp Broadcast Report**
+
+🎯 **Target:** {target_name}
+📊 **Total Target:** {len(target_users)}
+✅ **Successful:** {successful}
+❌ **Failed:** {failed}
+🔍 **Invalid Numbers:** {len(invalid_phones)}
+
+"""
+        
+        if invalid_phones:
+            report_text += f"\n📋 **Invalid Numbers ({len(invalid_phones)}):**\n"
+            for invalid in invalid_phones[:10]:
+                report_text += f"• {invalid['name']}: {invalid['phone']}\n"
+            if len(invalid_phones) > 10:
+                report_text += f"• ... and {len(invalid_phones) - 10} more\n"
+        
+        if failed_details:
+            report_text += f"\n⚠️ **Error Details ({len(failed_details)}):**\n"
+            for error in failed_details[:5]:
+                report_text += f"• {error['name']}: {error['reason'][:50]}...\n"
+            if len(failed_details) > 5:
+                report_text += f"• ... and {len(failed_details) - 5} more\n"
+    
+    await progress_msg.edit_text(report_text)
+    
+    # تنظيف بيانات البث
+    context.user_data.pop('broadcast_type', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_users', None)
+    context.user_data.pop('target_name', None)
+    context.user_data.pop('broadcast_platform', None)
+    
+    # العودة للوحة التحكم بعد 5 ثواني
+    await asyncio.sleep(5)
+    await admin_panel_from_callback(update, context)
+
+# -------------------------------
+# Telegram broadcast handlers - MODIFIED
+# -------------------------------
+async def handle_admin_telegram_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    context.user_data['broadcast_type'] = q.data
+    context.user_data['broadcast_platform'] = 'telegram'
+    
+    if admin_lang == "ar":
+        message = "📝 يرجى إرسال الرسالة التي تريد بثها عبر تليجرام:"
+        cancel_btn = "❌ إلغاء"
+    else:
+        message = "📝 Please send the message you want to broadcast via Telegram:"
+        cancel_btn = "❌ Cancel"
+    
+    keyboard = [[InlineKeyboardButton(cancel_btn, callback_data="admin_cancel_broadcast")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(message, reply_markup=reply_markup)
+
+async def process_admin_telegram_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_type' not in context.user_data or context.user_data.get('broadcast_platform') != 'telegram':
+        return
+    
+    broadcast_type = context.user_data['broadcast_type']
+    message_text = update.message.text
+    admin_lang = get_admin_language(user_id)
+    
+    if broadcast_type == "admin_telegram_broadcast_all":
+        target_users = get_all_subscribers()
+        target_name = "جميع المشتركين" if admin_lang == "ar" else "All Subscribers"
+    elif broadcast_type == "admin_telegram_broadcast_registered":
+        target_users = get_registered_users()
+        target_name = "المسجلين ببيانات" if admin_lang == "ar" else "Registered Users"
+    elif broadcast_type == "admin_telegram_broadcast_approved":
+        target_users = get_approved_accounts_users()
+        target_name = "أصحاب الحسابات المقبولة" if admin_lang == "ar" else "Approved Accounts Owners"
+    else:
+        return
+    
+    if admin_lang == "ar":
+        confirm_text = f"""
+📊 تفاصيل البث عبر تليجرام:
+🎯 المستهدف: {target_name}
+👥 عدد المستخدمين: {len(target_users)}
+📝 الرسالة:
+{message_text}
+
+هل تريد متابعة البث؟
+        """
+    else:
+        confirm_text = f"""
+📊 Telegram Broadcast Details:
+🎯 Target: {target_name}
+👥 Users Count: {len(target_users)}
+📝 Message:
+{message_text}
+
+Do you want to proceed with broadcasting?
+        """
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ نعم، إرسال" if admin_lang == "ar" else "✅ Yes, Send", 
+                               callback_data="admin_confirm_telegram_broadcast"),
+            InlineKeyboardButton("❌ إلغاء" if admin_lang == "ar" else "❌ Cancel", 
+                               callback_data="admin_cancel_broadcast")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.user_data['broadcast_message'] = message_text
+    context.user_data['target_users'] = target_users
+    context.user_data['target_name'] = target_name
+    
+    await update.message.reply_text(confirm_text, reply_markup=reply_markup)
+
+async def execute_telegram_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    if user_id not in ADMIN_TELEGRAM_IDS:
+        return
+    
+    if 'broadcast_message' not in context.user_data or 'target_users' not in context.user_data:
+        return
+    
+    message_text = context.user_data['broadcast_message']
+    target_users = context.user_data['target_users']
+    target_name = context.user_data['target_name']
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم عبر تليجرام...")
+    else:
+        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users via Telegram...")
+    
+    successful = 0
+    failed = 0
+    
+    for user in target_users:
+        try:
+            await application.bot.send_message(
+                chat_id=user['telegram_id'],
+                text=message_text
+            )
+            successful += 1
+        except Exception as e:
+            logger.error(f"Failed to send Telegram to {user['telegram_id']}: {e}")
+            failed += 1
+        
+        if (successful + failed) % 10 == 0:
+            if admin_lang == "ar":
+                await progress_msg.edit_text(f"⏳ جاري الإرسال... {successful + failed}/{len(target_users)}")
+            else:
+                await progress_msg.edit_text(f"⏳ Sending... {successful + failed}/{len(target_users)}")
+    
+    if admin_lang == "ar":
+        report_text = f"""
+✅ تقرير البث عبر تليجرام:
+🎯 المستهدف: {target_name}
+✅ تم الإرسال بنجاح: {successful}
+❌ فشل في الإرسال: {failed}
+📊 الإجمالي: {len(target_users)}
+        """
+    else:
+        report_text = f"""
+✅ Telegram Broadcast Report:
+🎯 Target: {target_name}
+✅ Successful: {successful}
+❌ Failed: {failed}
+📊 Total: {len(target_users)}
+        """
+    
+    await progress_msg.edit_text(report_text)
+    
+    context.user_data.pop('broadcast_type', None)
+    context.user_data.pop('broadcast_message', None)
+    context.user_data.pop('target_users', None)
+    context.user_data.pop('target_name', None)
+    context.user_data.pop('broadcast_platform', None)
+    
+    await admin_panel_from_callback(update, context)
+
+# -------------------------------
+# Database helper functions for WhatsApp - NEW
+# -------------------------------
+def get_all_subscribers_with_phones() -> List[Dict[str, Any]]:
+    """جلب جميع المشتركين مع أرقام هواتفهم"""
+    try:
+        db = SessionLocal()
+        subscribers = db.query(Subscriber).all()
+        result = []
+        for sub in subscribers:
+            if sub.phone:  # التأكد من وجود رقم الهاتف
+                result.append({
+                    "telegram_id": sub.telegram_id,
+                    "name": sub.name,
+                    "phone": sub.phone,
+                    "lang": sub.lang
+                })
+        db.close()
+        return result
+    except Exception as e:
+        logger.exception(f"Failed to get all subscribers with phones: {e}")
+        return []
+
+def get_registered_users_with_phones() -> List[Dict[str, Any]]:
+    """جلب المستخدمين المسجلين مع أرقام هواتفهم"""
+    try:
+        db = SessionLocal()
+        subscribers = db.query(Subscriber).all()
+        result = []
+        for sub in subscribers:
+            if sub.phone:  # التأكد من وجود رقم الهاتف
+                result.append({
+                    "telegram_id": sub.telegram_id,
+                    "name": sub.name,
+                    "phone": sub.phone,
+                    "lang": sub.lang
+                })
+        db.close()
+        return result
+    except Exception as e:
+        logger.exception(f"Failed to get registered users with phones: {e}")
+        return []
+
+def get_approved_accounts_users_with_phones() -> List[Dict[str, Any]]:
+    """جلب أصحاب الحسابات المقبولة مع أرقام هواتفهم"""
+    try:
+        db = SessionLocal()
+        approved_accounts = db.query(TradingAccount).filter(TradingAccount.status == "active").all()
+        result = []
+        processed_users = set()
+        
+        for account in approved_accounts:
+            subscriber = account.subscriber
+            if subscriber.telegram_id and subscriber.telegram_id not in processed_users and subscriber.phone:
+                result.append({
+                    "telegram_id": subscriber.telegram_id,
+                    "name": subscriber.name,
+                    "phone": subscriber.phone,
+                    "lang": subscriber.lang,
+                    "account_number": account.account_number,
+                    "broker_name": account.broker_name
+                })
+                processed_users.add(subscriber.telegram_id)
+        
+        db.close()
+        return result
+    except Exception as e:
+        logger.exception(f"Failed to get approved accounts users with phones: {e}")
+        return []
+
+# -------------------------------
+# Updated text message handler for admin - MODIFIED
+# -------------------------------
+async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await handle_rejection_reason(update, context):
+        return
+    
+    user_id = update.message.from_user.id
+    
+    # معالجة بث الواتساب
+    if ('broadcast_type' in context.user_data and 
+        'broadcast_message' not in context.user_data and
+        context.user_data.get('broadcast_platform') == 'whatsapp'):
+        await process_admin_whatsapp_broadcast(update, context)
+        return
+    
+    # معالجة بث التليجرام
+    if ('broadcast_type' in context.user_data and 
+        'broadcast_message' not in context.user_data and
+        context.user_data.get('broadcast_platform') == 'telegram'):
+        await process_admin_telegram_broadcast(update, context)
+        return
+    
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        help_text = """
+🎯 **أدوات المسؤول المتاحة:**
+
+• استخدام /admin للوحة التحكم
+• البث للمستخدمين عبر واتساب وتليجرام
+• تفعيل/رفض الحسابات من خلال الإشعارات
+
+💡 **للبث:** استخدم /admin ثم اختر نوع البث
+💡 **لإدارة الحسابات:** اضغط على أزرار التفعيل/الرفض في الإشعارات
+        """
+    else:
+        help_text = """
+🎯 **Available Admin Tools:**
+
+• Use /admin for control panel
+• Broadcast to users via WhatsApp and Telegram
+• Activate/reject accounts through notifications
+
+💡 **For broadcasting:** Use /admin then choose broadcast type
+💡 **For account management:** Click activate/reject buttons in notifications
+        """
+    
+    try:
+        await update.message.reply_text(help_text, parse_mode="HTML")
+    except Exception as e:
+        logger.exception(f"Failed to send admin help message: {e}")
+
+
 
 async def admin_accounts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -838,160 +1864,10 @@ def get_approved_accounts_users() -> List[Dict[str, Any]]:
         logger.exception(f"Failed to get approved accounts users: {e}")
         return []
 
-async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
-    q = update.callback_query
-    await q.answer()
-    
-    user_id = q.from_user.id
-    if user_id not in ADMIN_TELEGRAM_IDS:
-        return
-    
-    platform = q.data.split("_")[2]  # admin_broadcast_telegram -> telegram
-    context.user_data['broadcast_platform'] = platform
-    
-    await admin_broadcast_menu(update, context)
 
-async def process_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-   
-    user_id = update.message.from_user.id
-    if user_id not in ADMIN_TELEGRAM_IDS:
-        return
-    
-    if 'broadcast_type' not in context.user_data:
-        return
-    
-    broadcast_type = context.user_data['broadcast_type']
-    message_text = update.message.text
-    admin_lang = get_admin_language(user_id)
-    
-    if broadcast_type == "admin_broadcast_all":
-        target_users = get_all_subscribers()
-        target_name = "جميع المشتركين" if admin_lang == "ar" else "All Subscribers"
-    elif broadcast_type == "admin_broadcast_registered":
-        target_users = get_registered_users()
-        target_name = "المسجلين ببيانات" if admin_lang == "ar" else "Registered Users"
-    elif broadcast_type == "admin_broadcast_approved":
-        target_users = get_approved_accounts_users()
-        target_name = "أصحاب الحسابات المقبولة" if admin_lang == "ar" else "Approved Accounts Owners"
-    else:
-        return
-    
-    if admin_lang == "ar":
-        confirm_text = f"""
-📊 تفاصيل البث:
-🎯 المستهدف: {target_name}
-👥 عدد المستخدمين: {len(target_users)}
-📝 الرسالة:
-{message_text}
 
-هل تريد متابعة البث؟
-        """
-    else:
-        confirm_text = f"""
-📊 Broadcast Details:
-🎯 Target: {target_name}
-👥 Users Count: {len(target_users)}
-📝 Message:
-{message_text}
 
-Do you want to proceed with broadcasting?
-        """
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ نعم، إرسال" if admin_lang == "ar" else "✅ Yes, Send", 
-                               callback_data="admin_confirm_broadcast"),
-            InlineKeyboardButton("❌ إلغاء" if admin_lang == "ar" else "❌ Cancel", 
-                               callback_data="admin_cancel_broadcast")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    context.user_data['broadcast_message'] = message_text
-    context.user_data['target_users'] = target_users
-    context.user_data['target_name'] = target_name
-    
-    await update.message.reply_text(confirm_text, reply_markup=reply_markup)
 
-async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-   
-    q = update.callback_query
-    await q.answer()
-    
-    user_id = q.from_user.id
-    if user_id not in ADMIN_TELEGRAM_IDS:
-        return
-    
-    if 'broadcast_message' not in context.user_data or 'target_users' not in context.user_data:
-        return
-    
-    message_text = context.user_data['broadcast_message']
-    target_users = context.user_data['target_users']
-    target_name = context.user_data['target_name']
-    platform = context.user_data.get('broadcast_platform', 'telegram')
-    admin_lang = get_admin_language(user_id)
-    
-    if admin_lang == "ar":
-        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم عبر {platform}...")
-    else:
-        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users via {platform}...")
-    
-    successful = 0
-    failed = 0
-    
-    for user in target_users:
-        try:
-            if platform == 'telegram':
-                await application.bot.send_message(
-                    chat_id=user['telegram_id'],
-                    text=message_text
-                )
-            elif platform == 'whatsapp':
-                if twilio_client and 'phone' in user and user['phone']:
-                    twilio_client.messages.create(
-                        body=message_text,
-                        from_=TWILIO_WHATSAPP_NUMBER,
-                        to=f"whatsapp:{user['phone']}"
-                    )
-                else:
-                    raise ValueError("No phone number or Twilio not configured")
-            successful += 1
-        except Exception as e:
-            logger.error(f"Failed to send broadcast to {user.get('telegram_id', user.get('phone'))} via {platform}: {e}")
-            failed += 1
-        
-        if (successful + failed) % 10 == 0:
-            if admin_lang == "ar":
-                await progress_msg.edit_text(f"⏳ جاري الإرسال... {successful + failed}/{len(target_users)}")
-            else:
-                await progress_msg.edit_text(f"⏳ Sending... {successful + failed}/{len(target_users)}")
-    
-    if admin_lang == "ar":
-        report_text = f"""
-✅ تقرير البث:
-🎯 المستهدف: {target_name}
-✅ تم الإرسال بنجاح: {successful}
-❌ فشل في الإرسال: {failed}
-📊 الإجمالي: {len(target_users)}
-        """
-    else:
-        report_text = f"""
-✅ Broadcast Report:
-🎯 Target: {target_name}
-✅ Successful: {successful}
-❌ Failed: {failed}
-📊 Total: {len(target_users)}
-        """
-    
-    await progress_msg.edit_text(report_text)
-    
-    context.user_data.pop('broadcast_type', None)
-    context.user_data.pop('broadcast_message', None)
-    context.user_data.pop('target_users', None)
-    context.user_data.pop('target_name', None)
-    context.user_data.pop('broadcast_platform', None)
-    
-    await admin_panel_from_callback(update, context)
 
 async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
@@ -1794,15 +2670,25 @@ async def update_user_interface_after_status_change(telegram_id: int, lang: str)
             await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
 
 async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
     if await handle_rejection_reason(update, context):
         return
     
-    if 'broadcast_type' in context.user_data and 'broadcast_message' not in context.user_data:
-        await process_admin_broadcast(update, context)
+    user_id = update.message.from_user.id
+    
+    # معالجة بث الواتساب
+    if ('broadcast_type' in context.user_data and 
+        'broadcast_message' not in context.user_data and
+        context.user_data.get('broadcast_platform') == 'whatsapp'):
+        await process_admin_whatsapp_broadcast(update, context)
         return
     
-    user_id = update.message.from_user.id
+    # معالجة بث التليجرام
+    if ('broadcast_type' in context.user_data and 
+        'broadcast_message' not in context.user_data and
+        context.user_data.get('broadcast_platform') == 'telegram'):
+        await process_admin_telegram_broadcast(update, context)
+        return
+    
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
@@ -1810,7 +2696,7 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 🎯 **أدوات المسؤول المتاحة:**
 
 • استخدام /admin للوحة التحكم
-• البث للمستخدمين عبر لوحة التحكم
+• البث للمستخدمين عبر واتساب وتليجرام
 • تفعيل/رفض الحسابات من خلال الإشعارات
 
 💡 **للبث:** استخدم /admin ثم اختر نوع البث
@@ -1821,7 +2707,7 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 🎯 **Available Admin Tools:**
 
 • Use /admin for control panel
-• Broadcast to users via control panel  
+• Broadcast to users via WhatsApp and Telegram
 • Activate/reject accounts through notifications
 
 💡 **For broadcasting:** Use /admin then choose broadcast type
@@ -3052,7 +3938,7 @@ def webapp_edit_accounts(request: Request):
             }}
           }} catch (e) {{
             statusEl.style.color = '#ff4444';
-            statusEl.textContent = '{labels["error"]}': ' + e.message;
+            statusEl.textContent = '{labels["error"]}: ' + e.message;
           }}
         }}
 
@@ -4826,6 +5712,14 @@ application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^ad
 application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_admin_demo_message_"))
 application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_demo_message$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
+application.add_handler(CallbackQueryHandler(admin_telegram_broadcast_menu, pattern="^admin_telegram_broadcast$"))
+application.add_handler(CallbackQueryHandler(handle_admin_whatsapp_broadcast, pattern="^admin_whatsapp_broadcast_"))
+application.add_handler(CallbackQueryHandler(handle_admin_telegram_broadcast, pattern="^admin_telegram_broadcast_"))
+application.add_handler(CallbackQueryHandler(execute_whatsapp_broadcast, pattern="^admin_confirm_whatsapp_broadcast$"))
+application.add_handler(CallbackQueryHandler(execute_telegram_broadcast, pattern="^admin_confirm_telegram_broadcast$"))
+application.add_handler(CallbackQueryHandler(admin_whatsapp_templates, pattern="^admin_whatsapp_templates$"))
+application.add_handler(CallbackQueryHandler(test_whatsapp_connection, pattern="^admin_test_whatsapp$"))
+application.add_handler(CallbackQueryHandler(admin_whatsapp_broadcast_menu, pattern="^admin_whatsapp_broadcast$"))
 # ===============================
 # Webhook setup
 # ===============================
