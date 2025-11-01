@@ -4474,7 +4474,10 @@ async def delete_admin_demo_message(update: Update, context: ContextTypes.DEFAUL
     
     # حذف الرسالة
     try:
-        await q.message.delete()
+        await context.bot.delete_message(
+            chat_id=q.message.chat_id,
+            message_id=q.message.message_id
+        )
     except Exception as e:
         logger.exception(f"Failed to delete admin demo message: {e}")
 # ===============================
