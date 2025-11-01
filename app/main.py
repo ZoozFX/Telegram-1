@@ -24,6 +24,9 @@ from sqlalchemy.orm import relationship
 import asyncio
 from sqlalchemy import text, inspect
 
+# إضافة Twilio لدعم WhatsApp
+from twilio.rest import Client
+
 ADMIN_TELEGRAM_IDS = [int(x.strip()) for x in os.getenv("ADMIN_TELEGRAM_ID", "").split(",") if x.strip()]
 AGENTS_LIST = os.getenv("AGENTS_LIST", "ملك الدهب").split(",")
 # -------------------------------
@@ -216,10 +219,20 @@ WEBHOOK_PATH = os.getenv("BOT_WEBHOOK_PATH", f"/webhook/{TOKEN}")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBAPP_URL = os.getenv("WEBAPP_URL") or (f"{WEBHOOK_URL}/webapp" if WEBHOOK_URL else None)
 
+# Twilio credentials for WhatsApp
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")  # مثل 'whatsapp:+14155238886'
+
 if not TOKEN:
     logger.error("❌ TELEGRAM_TOKEN not set")
 if not WEBAPP_URL:
     logger.warning("⚠️ WEBAPP_URL not set — WebApp button may not work without a public URL.")
+
+if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_NUMBER:
+    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+else:
+    logger.warning("⚠️ Twilio credentials not set — WhatsApp broadcasting disabled.")
 
 application = ApplicationBuilder().token(TOKEN).build()
 app = FastAPI()
@@ -280,7 +293,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard_row = []
         for btn in row:
             if btn == "📢 ارسل رسالة" or btn == "📢 Send Message":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_menu"))
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_platform"))
             elif btn == "📊 التقارير" or btn == "📊 Reports":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_stats"))
             elif btn == "🏦 إدارة الحسابات" or btn == "🛠 Management":
@@ -293,6 +306,41 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
+
+async def admin_broadcast_platform(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    user_id = q.from_user.id
+    admin_lang = get_admin_language(user_id)
+    
+    if admin_lang == "ar":
+        title = "اختر المنصة"
+        buttons = [
+            "📱 تليجرام",
+            "📱 واتساب",
+            "🔙 رجوع"
+        ]
+        description = "\n\nاختر المنصة لإرسال الرسالة."
+    else:
+        title = "Choose Platform"
+        buttons = [
+            "📱 Telegram",
+            "📱 WhatsApp",
+            "🔙 Back"
+        ]
+        description = "\n\nChoose platform to send message."
+    
+    header = build_header_html(title, buttons, header_emoji=HEADER_EMOJI, arabic_indent=1 if admin_lang == "ar" else 0)
+    
+    keyboard = [
+        [InlineKeyboardButton(buttons[0], callback_data="admin_broadcast_telegram")],
+        [InlineKeyboardButton(buttons[1], callback_data="admin_broadcast_whatsapp")],
+        [InlineKeyboardButton(buttons[2], callback_data="admin_main")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -339,7 +387,7 @@ async def admin_broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYP
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_individual_message"))
         keyboard.append(keyboard_row)
     
-    keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_main")])
+    keyboard.append([InlineKeyboardButton(buttons[-1], callback_data="admin_broadcast_platform")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML")
@@ -734,7 +782,8 @@ def get_all_subscribers() -> List[Dict[str, Any]]:
             result.append({
                 "telegram_id": sub.telegram_id,
                 "name": sub.name,
-                "lang": sub.lang
+                "lang": sub.lang,
+                "phone": sub.phone
             })
         db.close()
         return result
@@ -753,7 +802,8 @@ def get_registered_users() -> List[Dict[str, Any]]:
             result.append({
                 "telegram_id": sub.telegram_id,
                 "name": sub.name,
-                "lang": sub.lang
+                "lang": sub.lang,
+                "phone": sub.phone
             })
         db.close()
         return result
@@ -777,7 +827,8 @@ def get_approved_accounts_users() -> List[Dict[str, Any]]:
                     "name": subscriber.name,
                     "lang": subscriber.lang,
                     "account_number": account.account_number,
-                    "broker_name": account.broker_name
+                    "broker_name": account.broker_name,
+                    "phone": subscriber.phone
                 })
                 processed_users.add(subscriber.telegram_id)
         
@@ -796,20 +847,10 @@ async def handle_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_T
     if user_id not in ADMIN_TELEGRAM_IDS:
         return
     
-    admin_lang = get_admin_language(user_id)
-    context.user_data['broadcast_type'] = q.data
+    platform = q.data.split("_")[2]  # admin_broadcast_telegram -> telegram
+    context.user_data['broadcast_platform'] = platform
     
-    if admin_lang == "ar":
-        message = "📝 يرجى إرسال الرسالة التي تريد بثها:"
-        cancel_btn = "❌ إلغاء"
-    else:
-        message = "📝 Please send the message you want to broadcast:"
-        cancel_btn = "❌ Cancel"
-    
-    keyboard = [[InlineKeyboardButton(cancel_btn, callback_data="admin_cancel_broadcast")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await q.edit_message_text(message, reply_markup=reply_markup)
+    await admin_broadcast_menu(update, context)
 
 async def process_admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
    
@@ -887,25 +928,36 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = context.user_data['broadcast_message']
     target_users = context.user_data['target_users']
     target_name = context.user_data['target_name']
+    platform = context.user_data.get('broadcast_platform', 'telegram')
     admin_lang = get_admin_language(user_id)
     
     if admin_lang == "ar":
-        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم...")
+        progress_msg = await q.message.reply_text(f"⏳ جاري إرسال الرسالة لـ {len(target_users)} مستخدم عبر {platform}...")
     else:
-        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users...")
+        progress_msg = await q.message.reply_text(f"⏳ Sending message to {len(target_users)} users via {platform}...")
     
     successful = 0
     failed = 0
     
     for user in target_users:
         try:
-            await application.bot.send_message(
-                chat_id=user['telegram_id'],
-                text=message_text
-            )
+            if platform == 'telegram':
+                await application.bot.send_message(
+                    chat_id=user['telegram_id'],
+                    text=message_text
+                )
+            elif platform == 'whatsapp':
+                if twilio_client and 'phone' in user and user['phone']:
+                    twilio_client.messages.create(
+                        body=message_text,
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        to=f"whatsapp:{user['phone']}"
+                    )
+                else:
+                    raise ValueError("No phone number or Twilio not configured")
             successful += 1
         except Exception as e:
-            logger.error(f"Failed to send broadcast to {user['telegram_id']}: {e}")
+            logger.error(f"Failed to send broadcast to {user.get('telegram_id', user.get('phone'))} via {platform}: {e}")
             failed += 1
         
         if (successful + failed) % 10 == 0:
@@ -937,6 +989,7 @@ async def execute_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop('broadcast_message', None)
     context.user_data.pop('target_users', None)
     context.user_data.pop('target_name', None)
+    context.user_data.pop('broadcast_platform', None)
     
     await admin_panel_from_callback(update, context)
 
@@ -976,7 +1029,7 @@ async def admin_panel_from_callback(update: Update, context: ContextTypes.DEFAUL
         keyboard_row = []
         for btn in row:
             if btn == "📢 ارسل رسالة" or btn == "📢 Send Message":
-                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_menu"))
+                keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_broadcast_platform"))
             elif btn == "📊 التقارير" or btn == "📊 Reports":
                 keyboard_row.append(InlineKeyboardButton(btn, callback_data="admin_stats"))
             elif btn == "🏦 إدارة الحسابات" or btn == "🛠 Management":
@@ -2999,7 +3052,7 @@ def webapp_edit_accounts(request: Request):
             }}
           }} catch (e) {{
             statusEl.style.color = '#ff4444';
-            statusEl.textContent = '{labels["error"]}: ' + e.message;
+            statusEl.textContent = '{labels["error"]}': ' + e.message;
           }}
         }}
 
@@ -3078,7 +3131,7 @@ def webapp_edit_accounts(request: Request):
           // تعطيل النموذج في البداية
           disableForm();
 
-          // إضافة مستمعين للتحقق من الحقول
+          // إضافة مستمعين للأحداث لمسح رسائل الخطأ عند الكتابة
           document.querySelectorAll('input, select').forEach(element => {{
             element.addEventListener('input', function() {{
               const value = this.value.trim();
@@ -4750,7 +4803,8 @@ application.add_handler(CommandHandler("admin", admin_start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.User(ADMIN_TELEGRAM_IDS), admin_text_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 application.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.Regex(r'.*'), web_app_message_handler))
-application.add_handler(CallbackQueryHandler(admin_broadcast_menu, pattern="^admin_broadcast_menu$"))
+application.add_handler(CallbackQueryHandler(admin_broadcast_platform, pattern="^admin_broadcast_platform$"))
+application.add_handler(CallbackQueryHandler(admin_broadcast_menu, pattern="^admin_broadcast_(telegram|whatsapp)$"))
 application.add_handler(CallbackQueryHandler(admin_accounts_menu, pattern="^admin_accounts_menu$"))
 application.add_handler(CallbackQueryHandler(admin_settings, pattern="^admin_settings$"))
 application.add_handler(CallbackQueryHandler(admin_change_language, pattern="^admin_change_language$"))
