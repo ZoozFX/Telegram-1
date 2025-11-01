@@ -19,7 +19,7 @@ from telegram.ext import (
 )
 from app.db import Base, engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
+from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, Boolean
 from sqlalchemy.orm import relationship
 import asyncio
 from sqlalchemy import text, inspect
@@ -65,6 +65,10 @@ class TradingAccount(Base):
     created_at = Column(String(50), default=lambda: datetime.now().isoformat())
     status = Column(String(20), default="under_review")
     rejection_reason = Column(String(255), nullable=True)
+    account_category = Column(String(20), nullable=True)  # real/demo
+    platform = Column(String(20), default="MT4")
+    account_currency_type = Column(String(20), nullable=True)  # cent/dollar
+    is_trial = Column(Boolean, default=False)
     subscriber = relationship("Subscriber", back_populates="trading_accounts")
 
 # الجدول الجديد المطلوب
@@ -1225,7 +1229,11 @@ def save_trading_account(
     withdrawals: str = None,
     copy_start_date: str = None,
     agent: str = None,
-    expected_return: str = None
+    expected_return: str = None,
+    account_category: str = None,  # real/demo
+    platform: str = "MT4",
+    account_currency_type: str = None,  # cent/dollar
+    is_trial: bool = False
 ) -> Tuple[bool, TradingAccount]:
     
     try:
@@ -1266,7 +1274,11 @@ def save_trading_account(
             copy_start_date=copy_start_date,
             agent=agent,
             expected_return=expected_return,
-            status="under_review"
+            status="under_review",
+            account_category=account_category,
+            platform=platform,
+            account_currency_type=account_currency_type,
+            is_trial=is_trial
         )
         
         db.add(trading_account)
@@ -1284,7 +1296,11 @@ def save_trading_account(
             "withdrawals": withdrawals,
             "copy_start_date": copy_start_date,
             "agent": agent,
-            "expected_return": expected_return
+            "expected_return": expected_return,
+            "account_category": account_category,
+            "platform": platform,
+            "account_currency_type": account_currency_type,
+            "is_trial": is_trial
         }
         
         subscriber_data = {
@@ -1359,6 +1375,10 @@ def update_trading_account(account_id: int, **kwargs) -> Tuple[bool, TradingAcco
             "copy_start_date": account.copy_start_date,
             "agent": account.agent,
             "expected_return": account.expected_return,
+            "account_category": account.account_category,
+            "platform": account.platform,
+            "account_currency_type": account.account_currency_type,
+            "is_trial": account.is_trial,
             "old_data": old_data
         }
         
@@ -1461,7 +1481,11 @@ def get_subscriber_with_accounts(tg_id: int) -> Optional[Dict[str, Any]]:
                         "expected_return": acc.expected_return,
                         "created_at": acc.created_at,
                         "status": acc.status,
-                        "rejection_reason": acc.rejection_reason
+                        "rejection_reason": acc.rejection_reason,
+                        "account_category": acc.account_category,
+                        "platform": acc.platform,
+                        "account_currency_type": acc.account_currency_type,
+                        "is_trial": acc.is_trial
                     }
                     for acc in subscriber.trading_accounts
                 ]
@@ -1742,10 +1766,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if await handle_rejection_reason(update, context):
         return
     
-    if 'broadcast_type' in context.user_data and 'broadcast_message' not in context.user_data:
-        await process_admin_broadcast(update, context)
-        return
-    
     user_id = update.message.from_user.id
     admin_lang = get_admin_language(user_id)
     
@@ -1865,6 +1885,11 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>💸 المسحوبات:</b> {account_data.get('withdrawals', 'N/A')}
 <b>📅 تاريخ البدء:</b> {account_data.get('copy_start_date', 'N/A')}
 
+<b>نوع الحساب:</b> {account_data.get('account_category', 'N/A')}
+<b>نوع المنصة:</b> {account_data.get('platform', 'N/A')}
+<b>نوع العملة:</b> {account_data.get('account_currency_type', 'N/A')}
+<b>تجربة مجانية:</b> {'نعم' if account_data.get('is_trial', False) else 'لا'}
+
 <b>🌐 معرف الحساب:</b> {account_data['id']}
                     """
                     
@@ -1893,6 +1918,11 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>💳 Current Balance:</b> {account_data.get('current_balance', 'N/A')}  
 <b>💸 Withdrawals:</b> {account_data.get('withdrawals', 'N/A')}
 <b>📅 Start Date:</b> {account_data.get('copy_start_date', 'N/A')}
+
+<b>Account Type:</b> {account_data.get('account_category', 'N/A')}
+<b>Platform:</b> {account_data.get('platform', 'N/A')}
+<b>Currency Type:</b> {account_data.get('account_currency_type', 'N/A')}
+<b>Free Trial:</b> {'Yes' if account_data.get('is_trial', False) else 'No'}
 
 <b>🌐 Account ID:</b> {account_data['id']}
                     """
@@ -2498,6 +2528,367 @@ def webapp_existing_account(request: Request):
     """
     return HTMLResponse(content=html, status_code=200)
 
+@app.get("/webapp/free-trial")
+def webapp_free_trial(request: Request):
+    lang = (request.query_params.get("lang") or "ar").lower()
+    is_ar = lang == "ar"
+
+    page_title = "🧾 تجربة النسخ المجاني" if is_ar else "🧾 Free Copy Trial"
+    labels = {
+        "broker": "اسم الشركة" if is_ar else "Company Name",
+        "account_category": "نوع الحساب" if is_ar else "Account Type",
+        "platform": "نوع المنصة" if is_ar else "Platform Type",
+        "account": "رقم الحساب" if is_ar else "Account Number",
+        "password": "كلمة السر" if is_ar else "Password",
+        "server": "السيرفر" if is_ar else "Server",
+        "account_currency_type": "نوع الحساب" if is_ar else "Account Type",
+        "balance": "رصيد الحساب" if is_ar else "Account Balance",
+        "submit": "تسجيل" if is_ar else "Submit",
+        "close": "إغلاق" if is_ar else "Close",
+        "error": "فشل في الاتصال بالخادم" if is_ar else "Failed to connect to server",
+        "required_field": "هذا الحقل مطلوب" if is_ar else "This field is required",
+        "min_balance_cent": "الرصيد يجب أن يكون على الأقل 50 للحساب Cent" if is_ar else "Balance must be at least 50 for Cent account",
+        "min_balance_dollar": "الرصيد يجب أن يكون على الأقل 5000 للحساب Dollar" if is_ar else "Balance must be at least 5000 for Dollar account",
+        "warning": "الشركة غير مسؤولة عن أي خسائر أو أضرار قد تحدث نتيجة سحب الرصيد أثناء تنفيذ الصفقات." if is_ar else "The company is not responsible for any losses or damages that may occur as a result of withdrawing the balance during the execution of trades."
+    }
+    dir_attr = "rtl" if is_ar else "ltr"
+    text_align = "right" if is_ar else "left"
+
+    form_labels = [
+        labels['broker'],
+        labels['account_category'],
+        labels['platform'],
+        labels['account'],
+        labels['password'],
+        labels['server'],
+        labels['account_currency_type'],
+        labels['balance']
+    ]
+    header_html = build_header_html(page_title, form_labels, header_emoji=HEADER_EMOJI, underline_enabled=False, arabic_indent=1 if lang == "ar" else 0)
+
+    html = f"""
+    <!doctype html>
+    <html lang="{ 'ar' if is_ar else 'en' }" dir="{dir_attr}">
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <title>{page_title}</title>
+      <style>
+        body{{font-family:Arial;padding:16px;background:#f7f7f7;direction:{dir_attr};}}
+        .card{{max-width:600px;margin:24px auto;padding:16px;border-radius:10px;background:white;box-shadow:0 4px 12px rgba(0,0,0,0.1)}}
+        label{{display:block;margin-top:10px;font-weight:600;text-align:{text_align}}}
+        input, select{{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:16px;}}
+        .btn{{display:inline-block;margin-top:16px;padding:10px 14px;border-radius:8px;border:none;font-weight:700;cursor:pointer}}
+        .btn-primary{{background:#1E90FF;color:white}}
+        .btn-ghost{{background:transparent;border:1px solid #ccc}}
+        .small{{font-size:13px;color:#666;text-align:{text_align}}}
+        .form-row{{display:flex;gap:10px;margin-top:10px;}}
+        .form-row > div{{flex:1;}}
+        .warning{{font-size:12px;color:#ff6b35;margin:10px 0;text-align:{text_align};font-weight:500;padding:10px;background:#fff3cd;border:1px solid #ffeeba;border-radius:6px;}}
+        .header-container{{text-align:{text_align}; margin-bottom:20px;}}
+        .required{{color:#ff4444;}}
+        .field-error{{color:#ff4444;font-size:12px;margin-top:2px;display:none;}}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header-container">
+          {header_html}
+        </div>
+        
+        <div class="warning">{labels['warning']}</div>
+        
+        <label>{labels['broker']} <span class="required">*</span></label>
+        <select id="broker" required>
+          <option value="">{ 'اختر الشركة' if is_ar else 'Select Company' }</option>
+          <option value="Oneroyal">Oneroyal</option>
+          <option value="Scope">Scope</option>
+        </select>
+        <div id="broker_error" class="field-error">{labels['required_field']}</div>
+
+        <label>{labels['account_category']} <span class="required">*</span></label>
+        <select id="account_category" required>
+          <option value="">{ 'اختر نوع الحساب' if is_ar else 'Select Account Type' }</option>
+          <option value="real">{'حقيقي' if is_ar else 'Real'}</option>
+          <option value="demo">{'تجريبي' if is_ar else 'Demo'}</option>
+        </select>
+        <div id="account_category_error" class="field-error">{labels['required_field']}</div>
+
+        <label>{labels['platform']} <span class="required">*</span></label>
+        <select id="platform" required>
+          <option value="MT4">MT4</option>
+        </select>
+        <div id="platform_error" class="field-error">{labels['required_field']}</div>
+
+        <div class="form-row">
+          <div>
+            <label>{labels['account']} <span class="required">*</span></label>
+            <input id="account" placeholder="123456" required />
+            <div id="account_error" class="field-error">{labels['required_field']}</div>
+          </div>
+          <div>
+            <label>{labels['password']} <span class="required">*</span></label>
+            <input id="password" type="password" placeholder="••••••••" required />
+            <div id="password_error" class="field-error">{labels['required_field']}</div>
+          </div>
+        </div>
+
+        <label>{labels['server']} <span class="required">*</span></label>
+        <input id="server" placeholder="Oneroyal-Live" required />
+        <div id="server_error" class="field-error">{labels['required_field']}</div>
+
+        <div class="form-row">
+          <div>
+            <label>{labels['account_currency_type']} <span class="required">*</span></label>
+            <select id="account_currency_type" required>
+              <option value="">{ 'اختر نوع الحساب' if is_ar else 'Select Account Type' }</option>
+              <option value="cent">{'Cent' if is_ar else 'Cent'}</option>
+              <option value="dollar">{'Dollar' if is_ar else 'Dollar'}</option>
+            </select>
+            <div id="account_currency_type_error" class="field-error">{labels['required_field']}</div>
+          </div>
+          <div>
+            <label>{labels['balance']} <span class="required">*</span></label>
+            <input id="balance" type="number" placeholder="0.00" step="0.01" required />
+            <div id="balance_error" class="field-error">{labels['required_field']}</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;text-align:{text_align}">
+          <button class="btn btn-primary" id="submit">{labels['submit']}</button>
+          <button class="btn btn-ghost" id="close">{labels['close']}</button>
+        </div>
+        <div id="status" class="small" style="margin-top:10px;color:#b00;"></div>
+      </div>
+
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <script>
+        const tg = window.Telegram.WebApp || {{}};
+        try{{tg.expand();}}catch(e){{}}
+        const statusEl = document.getElementById('status');
+
+        function validateForm() {{
+          const fields = [
+            {{id: 'broker', name: '{labels['broker']}'}},
+            {{id: 'account_category', name: '{labels['account_category']}'}},
+            {{id: 'platform', name: '{labels['platform']}'}},
+            {{id: 'account', name: '{labels['account']}'}},
+            {{id: 'password', name: '{labels['password']}'}},
+            {{id: 'server', name: '{labels['server']}'}},
+            {{id: 'account_currency_type', name: '{labels['account_currency_type']}'}},
+            {{id: 'balance', name: '{labels['balance']}'}}
+          ];
+
+          let isValid = true;
+          
+          fields.forEach(field => {{
+            const errorEl = document.getElementById(field.id + '_error');
+            if (errorEl) errorEl.style.display = 'none';
+          }});
+
+          fields.forEach(field => {{
+            const inputEl = document.getElementById(field.id);
+            const value = inputEl.value.trim();
+            
+            if (!value) {{
+              const errorEl = document.getElementById(field.id + '_error');
+              if (errorEl) {{
+                errorEl.style.display = 'block';
+                errorEl.textContent = '{labels['required_field']}';
+              }}
+              isValid = false;
+              inputEl.style.borderColor = '#ff4444';
+            }} else {{
+              inputEl.style.borderColor = '#ccc';
+            }}
+          }});
+
+          // التحقق الإضافي لرصيد الحساب
+          const account_currency_type = document.getElementById('account_currency_type').value;
+          const balance = parseFloat(document.getElementById('balance').value);
+          const balanceErrorEl = document.getElementById('balance_error');
+          
+          if (account_currency_type && !isNaN(balance)) {{
+            if (account_currency_type === 'cent' && balance < 50) {{
+              balanceErrorEl.style.display = 'block';
+              balanceErrorEl.textContent = '{labels['min_balance_cent']}';
+              document.getElementById('balance').style.borderColor = '#ff4444';
+              isValid = false;
+            }} else if (account_currency_type === 'dollar' && balance < 5000) {{
+              balanceErrorEl.style.display = 'block';
+              balanceErrorEl.textContent = '{labels['min_balance_dollar']}';
+              document.getElementById('balance').style.borderColor = '#ff4444';
+              isValid = false;
+            }}
+          }}
+
+          return isValid;
+        }}
+
+        function clearFieldError(fieldId) {{
+          const inputEl = document.getElementById(fieldId);
+          const errorEl = document.getElementById(fieldId + '_error');
+          
+          if (inputEl && errorEl) {{
+            inputEl.style.borderColor = '#ccc';
+            errorEl.style.display = 'none';
+          }}
+        }}
+
+        async function submitForm(){{
+          if (!validateForm()) {{
+            statusEl.textContent = '{ "يرجى ملء جميع الحقول المطلوبة بشكل صحيح" if is_ar else "Please fill all required fields correctly" }';
+            statusEl.style.color = '#ff4444';
+            return;
+          }}
+
+          const broker = document.getElementById('broker').value.trim();
+          const account_category = document.getElementById('account_category').value.trim();
+          const platform = document.getElementById('platform').value.trim();
+          const account = document.getElementById('account').value.trim();
+          const password = document.getElementById('password').value.trim();
+          const server = document.getElementById('server').value.trim();
+          const account_currency_type = document.getElementById('account_currency_type').value.trim();
+          const balance = document.getElementById('balance').value.trim();
+
+          const initUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+          const payload = {{
+            broker: broker,
+            account_category: account_category,
+            platform: platform,
+            account: account,
+            password: password,
+            server: server,
+            account_currency_type: account_currency_type,
+            balance: balance,
+            tg_user: initUser,
+            lang: "{lang}"
+          }};
+
+          try{{
+            statusEl.textContent = '{ "جاري الحفظ..." if is_ar else "Saving..." }';
+            statusEl.style.color = '#1E90FF';
+            
+            const resp = await fetch(window.location.origin + '/webapp/free-trial/submit', {{
+              method:'POST',
+              headers:{{'Content-Type':'application/json'}},
+              body:JSON.stringify(payload)
+            }});
+            const data = await resp.json();
+            if(resp.ok){{
+              statusEl.style.color='green';
+              statusEl.textContent=data.message||'{ "تم الحفظ بنجاح" if is_ar else "Saved successfully" }';
+              setTimeout(()=>{{try{{tg.close();}}catch(e){{}}}},1500);
+              try{{tg.sendData(JSON.stringify({{status:'sent',type:'free_trial', lang:"{lang}" }}));}}catch(e){{}}
+            }}else{{
+              statusEl.textContent=data.error||'{labels["error"]}';
+              statusEl.style.color='#ff4444';
+            }}
+          }}catch(e){{
+            statusEl.textContent='{labels["error"]}: '+e.message;
+            statusEl.style.color='#ff4444';
+          }}
+        }}
+
+        document.querySelectorAll('input, select').forEach(element => {{
+          element.addEventListener('input', function() {{
+            clearFieldError(this.id);
+          }});
+        }});
+
+        document.getElementById('submit').addEventListener('click',submitForm);
+        document.getElementById('close').addEventListener('click',()=>{{try{{tg.close();}}catch(e){{}}}});
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+@app.post("/webapp/free-trial/submit")
+async def submit_free_trial(payload: dict = Body(...)):
+    try:
+        tg_user = payload.get("tg_user") or {}
+        telegram_id = tg_user.get("id") if isinstance(tg_user, dict) else None
+        broker = (payload.get("broker") or "").strip()
+        account_category = (payload.get("account_category") or "").strip()
+        platform = (payload.get("platform") or "MT4").strip()
+        account = (payload.get("account") or "").strip()
+        password = (payload.get("password") or "").strip()
+        server = (payload.get("server") or "").strip()
+        account_currency_type = (payload.get("account_currency_type") or "").strip()
+        balance = (payload.get("balance") or "").strip()
+        lang = (payload.get("lang") or "ar").lower()
+
+        required_fields = {
+            'broker': broker,
+            'account_category': account_category,
+            'platform': platform,
+            'account': account,
+            'password': password,
+            'server': server,
+            'account_currency_type': account_currency_type,
+            'balance': balance
+        }
+        
+        missing_fields = []
+        for field_name, field_value in required_fields.items():
+            if not field_value:
+                missing_fields.append(field_name)
+        
+        if missing_fields:
+            error_message = "Missing required fields: " + ", ".join(missing_fields)
+            return JSONResponse(status_code=400, content={"error": error_message})
+
+        if not telegram_id:
+            return JSONResponse(status_code=400, content={"error": "Missing user ID."})
+
+        subscriber = get_subscriber_by_telegram_id(telegram_id)
+        if not subscriber:
+            return JSONResponse(status_code=404, content={"error": "User not found. Please complete registration first."})
+
+        success, _ = save_trading_account(
+            subscriber_id=subscriber.id,
+            broker_name=broker,
+            account_number=account,
+            password=password,
+            server=server,
+            initial_balance=balance,
+            current_balance=balance,  # افتراضي
+            withdrawals="0",
+            copy_start_date=datetime.now().strftime('%Y-%m-%d'),
+            agent="",
+            expected_return="",
+            account_category=account_category,
+            platform=platform,
+            account_currency_type=account_currency_type,
+            is_trial=True
+        )
+
+        if not success:
+            return JSONResponse(status_code=500, content={"error": "Failed to save trial account."})
+
+        ref = get_form_ref(telegram_id)
+        
+        if ref:
+            await refresh_user_accounts_interface(telegram_id, lang, ref["chat_id"], ref["message_id"])
+        else:
+            msg_text = "✅ تم تسجيل طلب التجربة المجانية بنجاح! سيتم مراجعته قريباً." if lang == "ar" else "✅ Free trial request registered successfully! It will be reviewed soon."
+            
+            try:
+                await application.bot.send_message(
+                    chat_id=telegram_id, 
+                    text=msg_text, 
+                    parse_mode="HTML", 
+                    disable_web_page_preview=True
+                )
+            except Exception:
+                logger.exception("Failed to send confirmation message")
+
+        return JSONResponse(content={"message": "Saved successfully."})
+    except Exception as e:
+        logger.exception("Error saving free trial account: %s", e)
+        return JSONResponse(status_code=500, content={"error": "Server error."})
+
 @app.get("/webapp/edit-accounts")
 def webapp_edit_accounts(request: Request):
     lang = (request.query_params.get("lang") or "ar").lower()
@@ -2855,7 +3246,7 @@ def webapp_edit_accounts(request: Request):
             const acc = accounts.find(a => a.id == accountId);
             
             if (acc) {{
-              // تعيين معرف الحساب الحالي وحالته
+              // تعيين معرف مع الحساب الحالي وحالته
               currentAccountId = acc.id;
               currentAccountStatus = acc.status;
               document.getElementById('current_account_id').value = acc.id;
@@ -3199,6 +3590,12 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   👤 الوكيل: {acc['agent']}\n"
                 if acc.get('expected_return'):
                     account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
+                if acc.get('account_category'):
+                    account_text += f"   نوع الحساب: {acc['account_category']}\n"
+                if acc.get('platform'):
+                    account_text += f"   نوع المنصة: {acc['platform']}\n"
+                if acc.get('account_currency_type'):
+                    account_text += f"   نوع العملة: {acc['account_currency_type']}\n"
                 
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
@@ -3252,7 +3649,12 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   👤 Agent: {acc['agent']}\n"
                 if acc.get('expected_return'):
                     account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
-                
+                if acc.get('account_category'):
+                    account_text += f"   Account Category: {acc['account_category']}\n"
+                if acc.get('platform'):
+                    account_text += f"   Platform: {acc['platform']}\n"
+                if acc.get('account_currency_type'):
+                    account_text += f"   Currency Type: {acc['account_currency_type']}\n"
                 
                 if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
                     try:
@@ -3375,7 +3777,7 @@ async def webapp_submit(payload: dict = Body(...)):
         if not PHONE_RE.match(phone):
             return JSONResponse(status_code=400, content={"error": "رقم الهاتف غير صالح."})
 
-        # ✅ تحديد اللغة بشكل واضح
+        # ✅ تحديد اللغة بشكل بشكل واضح
         if page_lang in ("ar", "en"):
             detected_lang = page_lang
         else:
@@ -3525,7 +3927,7 @@ async def webapp_submit(payload: dict = Body(...)):
                 try:
                     await application.bot.edit_message_text(
                         text=build_header_html(header_title, ["🏦 Oneroyall", "🏦 Scope", back_label, accounts_label],
-                                               header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0) + f"\n\n{brokers_title}",
+                                               header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                         chat_id=ref["chat_id"],
                         message_id=ref["message_id"],
                         reply_markup=reply_markup,
@@ -3542,7 +3944,7 @@ async def webapp_submit(payload: dict = Body(...)):
                     sent = await application.bot.send_message(
                         chat_id=telegram_id,
                         text=build_header_html(header_title, ["🏦 Oneroyall", "🏦 Scope", back_label, accounts_label],
-                                               header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang == "ar" else 0) + f"\n\n{brokers_title}",
+                                               header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + f"\n\n{brokers_title}",
                         reply_markup=reply_markup,
                         parse_mode="HTML",
                         disable_web_page_preview=True
@@ -3566,269 +3968,16 @@ async def webapp_submit(payload: dict = Body(...)):
         return JSONResponse(status_code=500, content={"error": "حدث خطأ في الخادم."})
 
 
-async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE, telegram_id: int, lang: str):
-    user_data = get_subscriber_with_accounts(telegram_id)
-    
-    if not user_data:
-        
-        header = build_header_html(
-            "⚠️" + (" تنبيه" if lang == "ar" else " Alert"),
-            [],
-            header_emoji="⚠️",
-            arabic_indent=1 if lang == "ar" else 0
-        )
-        
-        text = "⚠️ لم تقم بالتسجيل بعد. يرجى التسجيل أولاً." if lang == "ar" else "⚠️ You haven't registered yet. Please register first."
-        description = "\n\nمرحباً! " if lang == "ar" else "\n\nHello! "
-        
-        if update.callback_query and update.callback_query.message:
-            await update.callback_query.edit_message_text(header + description + text)
-        else:
-            await context.bot.send_message(chat_id=telegram_id, text=header + description + text)
+async def show_user_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query:
         return
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    lang = context.user_data.get("lang", "ar")
+    await show_user_accounts(update, context, user_id, lang)
+    return
 
-    if lang == "ar":
-        header_title = "👤 بياناتي وحساباتي"
-        add_account_label = "➕ إضافة حساب تداول"
-        edit_accounts_label = "✏️ تعديل حساباتي" if len(user_data['trading_accounts']) > 0 else None
-        edit_data_label = "✏️ تعديل بياناتي"
-        back_label = "🔙 الرجوع لتداول الفوركس"
-        labels = [header_title, add_account_label]
-        if edit_accounts_label:
-            labels.append(edit_accounts_label)
-        labels.extend([edit_data_label, back_label])
-        header = build_header_html(
-            header_title, 
-            labels,
-            header_emoji=HEADER_EMOJI,
-            arabic_indent=1
-        )
-        description = "\n\nمرحباً! هذه بياناتك وحساباتك."
-        user_info = f"👤 <b>الاسم:</b> {user_data['name']}\n📧 <b>البريد:</b> {user_data['email']}\n📞 <b>الهاتف:</b> {user_data['phone']}"
-        accounts_header = "\n\n🏦 <b>حسابات التداول:</b>"
-        no_accounts = "\nلا توجد حسابات مسجلة بعد."
-        
-    else:
-        header_title = "👤 My Data & Accounts"
-        add_account_label = "➕ Add Trading Account"
-        edit_accounts_label = "✏️ Edit My Accounts" if len(user_data['trading_accounts']) > 0 else None
-        edit_data_label = "✏️ Edit my data"
-        back_label = "🔙 Back to Forex"
-        labels = [header_title, add_account_label]
-        if edit_accounts_label:
-            labels.append(edit_accounts_label)
-        labels.extend([edit_data_label, back_label])
-        header = build_header_html(
-            header_title, 
-            labels,
-            header_emoji=HEADER_EMOJI,
-            arabic_indent=0
-        )
-        description = "\n\nHello! This is your data and accounts."
-        user_info = f"👤 <b>Name:</b> {user_data['name']}\n📧 <b>Email:</b> {user_data['email']}\n📞 <b>Phone:</b> {user_data['phone']}"
-        accounts_header = "\n\n🏦 <b>Trading Accounts:</b>"
-        no_accounts = "\nNo trading accounts registered yet."
-
-    message = f"{header}{description}\n\n{user_info}{accounts_header}\n"
-    
-    today = datetime.now()  
-    
-    if user_data['trading_accounts']:
-        for i, acc in enumerate(user_data['trading_accounts'], 1):
-            status_text = get_account_status_text(acc['status'], lang, acc.get('rejection_reason'))
-            
-            if lang == "ar":
-                account_text = f"\n\u200F{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   \u200F🖥️ {acc['server']}\n   📊 <b>الحالة:</b> {status_text}\n"
-                
-                if acc.get('initial_balance'):
-                    account_text += f"   💰 رصيد البداية: {acc['initial_balance']}\n"
-                if acc.get('current_balance'):
-                    account_text += f"   💳 الرصيد الحالي: {acc['current_balance']}\n"
-                if acc.get('withdrawals'):
-                    account_text += f"   💸 المسحوبات: {acc['withdrawals']}\n"
-                if acc.get('copy_start_date'):
-                    account_text += f"   📅 تاريخ بدء النسخ: {acc['copy_start_date']}\n"
-                if acc.get('agent'):
-                    account_text += f"   👤 الوكيل: {acc['agent']}\n"
-                if acc.get('expected_return'):
-                    account_text += f"   📈 العائد المتوقع: {acc['expected_return']}\n"
-                
-               
-                if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
-                    try:
-                        initial = float(acc['initial_balance'])
-                        current = float(acc['current_balance'])
-                        withdrawals = float(acc['withdrawals'])
-                        start_date_str = acc['copy_start_date']
-                        
-                        
-                        if 'T' in start_date_str:
-                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                        else:
-                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                        
-                       
-                        delta = today - start_date
-                        total_days = delta.days
-                        
-                        
-                        months = total_days // 30
-                        remaining_days = total_days % 30
-                        
-                        
-                        period_text = ""
-                        if months > 0:
-                            period_text += f"{months} شهر"
-                            if remaining_days > 0:
-                                period_text += f" و{remaining_days} يوم"
-                        else:
-                            period_text += f"{total_days} يوم"
-                        
-                        
-                        if initial > 0:
-                            total_value = current + withdrawals
-                            profit_amount = total_value - initial
-                            profit_percentage = (profit_amount / initial) * 100
-                            
-                           
-                            account_text += f"   📈 <b>العائد المحقق:</b> {profit_percentage:.0f}% خلال {period_text}\n"
-                            
-                    except (ValueError, TypeError) as e:
-                        
-                        account_text += f"   📈 <b>العائد المحقق:</b> جاري الحساب\n"
-                else:
-                    
-                    account_text += f"   📈 <b>العائد المحقق:</b> يتطلب بيانات كاملة\n"
-                    
-            else:
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
-                
-                if acc.get('initial_balance'):
-                    account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
-                if acc.get('current_balance'):
-                    account_text += f"   💳 Current Balance: {acc['current_balance']}\n"
-                if acc.get('withdrawals'):
-                    account_text += f"   💸 Withdrawals: {acc['withdrawals']}\n"
-                if acc.get('copy_start_date'):
-                    account_text += f"   📅 Start Date: {acc['copy_start_date']}\n"
-                if acc.get('agent'):
-                    account_text += f"   👤 Agent: {acc['agent']}\n"
-                if acc.get('expected_return'):
-                    account_text += f"   📈 Expected Return: {acc['expected_return']}\n"
-                
-                
-                if acc.get('initial_balance') and acc.get('current_balance') and acc.get('withdrawals') and acc.get('copy_start_date'):
-                    try:
-                        initial = float(acc['initial_balance'])
-                        current = float(acc['current_balance'])
-                        withdrawals = float(acc['withdrawals'])
-                        start_date_str = acc['copy_start_date']
-                        
-                       
-                        if 'T' in start_date_str:
-                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                        else:
-                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                        
-                       
-                        delta = today - start_date
-                        total_days = delta.days
-                        
-                        
-                        months = total_days // 30
-                        remaining_days = total_days % 30
-                        
-                        
-                        period_text = ""
-                        if months > 0:
-                            period_text += f"{months} month"
-                            if months > 1:
-                                period_text += "s"
-                            if remaining_days > 0:
-                                period_text += f" and {remaining_days} day"
-                                if remaining_days > 1:
-                                    period_text += "s"
-                        else:
-                            period_text += f"{total_days} day"
-                            if total_days > 1:
-                                period_text += "s"
-                        
-                        
-                        if initial > 0:
-                            total_value = current + withdrawals
-                            profit_amount = total_value - initial
-                            profit_percentage = (profit_amount / initial) * 100
-                            
-                           
-                            account_text += f"   📈 <b>Achieved Return:</b> {profit_percentage:.0f}% over {period_text}\n"
-                            
-                    except (ValueError, TypeError) as e:
-                       
-                        account_text += f"   📈 <b>Achieved Return:</b> Calculating...\n"
-                else:
-                   
-                    account_text += f"   📈 <b>Achieved Return:</b> Requires complete data\n"
-                    
-            message += account_text
-    else:
-        message += f"\n{no_accounts}"
-
-    keyboard = []
-    if WEBAPP_URL:
-        url_with_lang = f"{WEBAPP_URL}/existing-account?lang={lang}"
-        keyboard.append([InlineKeyboardButton(add_account_label, web_app=WebAppInfo(url=url_with_lang))])
-    if WEBAPP_URL and len(user_data['trading_accounts']) > 0:
-        edit_accounts_url = f"{WEBAPP_URL}/edit-accounts?lang={lang}"
-        keyboard.append([InlineKeyboardButton(edit_accounts_label, web_app=WebAppInfo(url=edit_accounts_url))])
-    if WEBAPP_URL:
-        params = {
-            "lang": lang,
-            "edit": "1",
-            "name": user_data['name'],
-            "email": user_data['email'],
-            "phone": user_data['phone']
-        }
-        edit_url = f"{WEBAPP_URL}?{urlencode(params, quote_via=quote_plus)}"
-        keyboard.append([InlineKeyboardButton(edit_data_label, web_app=WebAppInfo(url=edit_url))])
-    keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    try:
-        if update.callback_query and update.callback_query.message:
-            await update.callback_query.edit_message_text(
-                message, 
-                reply_markup=reply_markup, 
-                parse_mode="HTML", 
-                disable_web_page_preview=True
-            )
-            
-            save_form_ref(telegram_id, update.callback_query.message.chat_id, update.callback_query.message.message_id, origin="my_accounts", lang=lang)
-        else:
-            sent = await context.bot.send_message(
-                chat_id=telegram_id,
-                text=message,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True
-            )
-            
-            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
-    except Exception as e:
-        logger.exception("Failed to show user accounts: %s", e)
-        
-       
-        try:
-            sent = await context.bot.send_message(
-                chat_id=telegram_id,
-                text=message,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-                disable_web_page_preview=True
-            )
-           
-            save_form_ref(telegram_id, sent.chat_id, sent.message_id, origin="my_accounts", lang=lang)
-        except Exception as fallback_error:
-            logger.exception("Failed to send fallback message for user accounts: %s", fallback_error)
 # ===============================
 # menu_handler
 # ===============================
@@ -3870,6 +4019,33 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception:
                 logger.exception("Failed to open account form directly")
+        else:
+            text = "⚠️ لا يمكن فتح النموذج حالياً." if lang == "ar" else "⚠️ Cannot open form at the moment."
+            await q.edit_message_text(text)
+        return
+
+    if q.data == "free_copy_trial":
+        save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="my_accounts", lang=lang)
+        if WEBAPP_URL:
+            url_with_lang = f"{WEBAPP_URL}/free-trial?lang={lang}"
+            
+            try:
+                await q.edit_message_text(
+                    "⏳ جاري فتح نموذج التجربة المجانية..." if lang == "ar" else "⏳ Opening free trial form...",
+                    parse_mode="HTML"
+                )
+                
+                open_label = "🧾 افتح نموذج التجربة المجانية" if lang == "ar" else "🧾 Open Free Trial Form"
+                keyboard = [[InlineKeyboardButton(open_label, web_app=WebAppInfo(url=url_with_lang))]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="اضغط لفتح نموذج التجربة المجانية:" if lang == "ar" else "Click to open free trial form:",
+                    reply_markup=reply_markup
+                )
+            except Exception:
+                logger.exception("Failed to open free trial form directly")
         else:
             text = "⚠️ لا يمكن فتح النموذج حالياً." if lang == "ar" else "⚠️ Cannot open form at the moment."
             await q.edit_message_text(text)
@@ -3925,7 +4101,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sections_data = {
         "forex_main": {
             "ar": ["📊 نسخ الصفقات", "🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)", "🛡️ طلب حساب مشاهدة"],
-            "en": ["📊 Copy Trading", "🤖 Request to Test YesFX Systems (Agents Only)", "🛡️ Request Demo Account"],
+            "en": ["📊 Copy Trading", "🤖 Request to Test YesFX Systems (Agents Only)", "🛡️ Request an account to watch"],
             "title_ar": "تداول الفوركس",
             "title_en": "Forex Trading"
         },
@@ -3956,7 +4132,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for name in options:
             if name in ("🤖 طلب اختبار أنظمة YesFX (الوكلاء فقط)", "🤖 Request to Test YesFX Systems (Agents Only)"):
                 keyboard.append([InlineKeyboardButton(name, url="https://t.me/Nagyfx")])
-            elif name in ("🛡️ طلب حساب مشاهدة", "🛡️ Request Demo Account"):
+            elif name in ("🛡️ طلب حساب مشاهدة", "🛡️ Request an account to watch"):
                 keyboard.append([InlineKeyboardButton(name, callback_data="request_demo_account")])
             else:
                 keyboard.append([InlineKeyboardButton(name, callback_data=name)])
@@ -4026,36 +4202,38 @@ Platform : MT4
     if q.data in ("📊 نسخ الصفقات", "📊 Copy Trading"):
         display_lang = lang
         if display_lang == "ar":
-            header_title = "اختر وسيطك الآن"
-            brokers_title = ""
-            back_label = "🔙 الرجوع لتداول الفوركس"
+            header_title = "نسخ الصفقات"
+            free_trial_label = "🆓 تجربة النسخ المجاني"
             accounts_label = "👤 بياناتي وحساباتي"
-            description = "\n\nمرحباً! اختر وسيطك."
+            back_label = "🔙 الرجوع لتداول الفوركس"
+            labels = [header_title, free_trial_label, accounts_label, back_label]
+            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=1)
+            description = "\n\nمرحباً! اختر خيارك."
         else:
-            header_title = "Choose your broker now"
-            brokers_title = ""
-            back_label = "🔙 Back to Forex"
+            header_title = "Copy Trading"
+            free_trial_label = "🆓 Free Copy Trial"
             accounts_label = "👤 My Data & Accounts"
-            description = "\n\nHello! Choose your broker."
+            back_label = "🔙 Back to Forex"
+            labels = [header_title, free_trial_label, accounts_label, back_label]
+            header = build_header_html(header_title, labels, header_emoji=HEADER_EMOJI, arabic_indent=0)
+            description = "\n\nHello! Choose your option."
 
         keyboard = [
-            [InlineKeyboardButton("🏦 Oneroyall", url="https://vc.cabinet.oneroyal.com/ar/links/go/10118"),
-             InlineKeyboardButton("🏦 Scope", url="https://my.tickmill.com?utm_campaign=ib_link&utm_content=IB60363655&utm_medium=Open+Account&utm_source=link&lp=https%3A%2F%2Fmy.tickmill.com%2Far%2Fsign-up%2F")]
+            [InlineKeyboardButton(free_trial_label, callback_data="free_copy_trial")],
+            [InlineKeyboardButton(accounts_label, callback_data="my_accounts")],
+            [InlineKeyboardButton(back_label, callback_data="forex_main")]
         ]
-
-        keyboard.append([InlineKeyboardButton(accounts_label, callback_data="my_accounts")])
-        keyboard.append([InlineKeyboardButton(back_label, callback_data="forex_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            await q.edit_message_text(build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + description + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="brokers", lang=display_lang)
+            await q.edit_message_text(header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+            save_form_ref(user_id, q.message.chat_id, q.message.message_id, origin="copy_trading", lang=display_lang)
         except Exception:
             try:
-                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=build_header_html(header_title, ["🏦 Oneroyall","🏦 Scope", back_label, accounts_label], header_emoji=HEADER_EMOJI, arabic_indent=1 if display_lang=="ar" else 0) + description + f"\n\n{brokers_title}", reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
-                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="brokers", lang=display_lang)
+                sent = await context.bot.send_message(chat_id=q.message.chat_id, text=header + description, reply_markup=reply_markup, parse_mode="HTML", disable_web_page_preview=True)
+                save_form_ref(user_id, sent.chat_id, sent.message_id, origin="copy_trading", lang=display_lang)
             except Exception:
-                logger.exception("Failed to show congrats screen for already-registered user.")
+                logger.exception("Failed to show copy trading options.")
         return
 
     if q.data in ("👤 بياناتي وحساباتي", "👤 My Data & Accounts"):
@@ -4219,7 +4397,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
             await show_user_accounts(update, context, user_id, lang)
             return
 
-        if data_type == "existing_account" or data_type == "edit_account" or data_type == "delete_account":
+        if data_type == "existing_account" or data_type == "edit_account" or data_type == "delete_account" or data_type == "free_trial":
             # تحديث واجهة الحسابات
             await refresh_user_accounts_interface(user_id, lang, ref["chat_id"], ref["message_id"])
         elif data_type == "registration":
@@ -4237,7 +4415,7 @@ async def web_app_message_handler(update: Update, context: ContextTypes.DEFAULT_
         await msg.reply_text("⚠️ Invalid status.")
 
 # ===============================
-# New: endpoint to receive existing-account form submissions
+# POST endpoint: receive existing-account form submissions from WebApp
 # ===============================
 @app.post("/webapp/existing-account/submit")
 async def submit_existing_account(payload: dict = Body(...)):
