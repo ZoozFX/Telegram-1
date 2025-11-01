@@ -4257,8 +4257,8 @@ Platform : MT4
 👤 المستخدم: {subscriber.name}
 📧 البريد: {subscriber.email}
 📞 الهاتف: {subscriber.phone}
-\u200F🆔 Telegram ID: {subscriber.telegram_id}
-@{subscriber.telegram_username or 'N/A'}
+\u200F🆔: {subscriber.telegram_id}
+\u200F@{subscriber.telegram_username or 'N/A'}
                     """
                     admin_ok_button = "✅ حسناً"
                 else:
