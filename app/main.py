@@ -3150,8 +3150,9 @@ def webapp_free_trial(request: Request):
         <label>{labels['account_type']} <span class="required">*</span></label>
         <select id="account_type" required>
           <option value="">{ 'اختر' if is_ar else 'Select' }</option>
-          <option value="حقيقي">حقيقي</option>
-          <option value="تجريبي">تجريبي</option>
+          <option value="">{ 'حقيقي' if is_ar else 'Real' }</option>
+          <option value="">{ 'تجريبي' if is_ar else 'Demo' }</option>
+
         </select>
         <div id="account_type_error" class="field-error">{labels['required_field']}</div>
 
@@ -3476,7 +3477,7 @@ async def refresh_user_accounts_interface(telegram_id: int, lang: str, chat_id: 
                     account_text += f"   📈 <b>العائد المحقق:</b> يتطلب بيانات كاملة\n"
                     
             else:
-                account_text = f"\n{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
+                account_text = f"\n\u200E{i}. <b>{acc['broker_name']}</b> - {acc['account_number']}\n   🖥️ {acc['server']}\n   📊 <b>Status:</b> {status_text}\n"
                 if acc.get('initial_balance'):
                     account_text += f"   💰 Initial Balance: {acc['initial_balance']}\n"
                 if acc.get('current_balance'):
@@ -4208,7 +4209,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if q.data == "request_demo_account":
         if lang == "ar":
-            title = "حساب مشاهدة"
+            title = "حساب حقيقي"
             details = """
 Account Number : 555013
 Password : yesfx2025
@@ -4217,7 +4218,7 @@ Platform : MT4
             """
             ok_button = "✅ حسناً"
         else:
-            title = "Demo Account"
+            title = "Real Account"
             details = """
 Account Number : 555013
 Password : yesfx2025
