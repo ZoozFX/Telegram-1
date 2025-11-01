@@ -1501,6 +1501,9 @@ PHONE_RE = re.compile(r"^[+0-9\-\s]{6,20}$")
 # -------------------------------
 # Admin and notification functions
 # -------------------------------
+# -------------------------------
+# Admin and notification functions
+# -------------------------------
 def get_user_current_language(account_id: int) -> str:
     
     try:
@@ -1820,13 +1823,24 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
                 
                 admin_lang = get_admin_language(admin_id)
                 
+                # التحقق مما إذا كان الحساب تجريبيًا (بناءً على agent أو expected_return)
+                is_trial = account_data.get('agent') == "Trial" or account_data.get('expected_return') == "Trial"
+                
                 if action_type == "new_account":
-                    if admin_lang == "ar":
-                        title = "🛎 حساب تداول جديد"
-                        action_desc = "تم إضافة حساب تداول جديد"
+                    if is_trial:
+                        if admin_lang == "ar":
+                            title = "🛎 حساب تداول تجريبي جديد"
+                            action_desc = "تم إضافة حساب تداول تجريبي جديد"
+                        else:
+                            title = "🆕 New Trial Trading Account"
+                            action_desc = "New trial trading account added"
                     else:
-                        title = "🆕 New Trading Account"
-                        action_desc = "New trading account added"
+                        if admin_lang == "ar":
+                            title = "🛎 حساب تداول جديد"
+                            action_desc = "تم إضافة حساب تداول جديد"
+                        else:
+                            title = "🆕 New Trading Account"
+                            action_desc = "New trading account added"
                 elif action_type == "updated_account":
                     if admin_lang == "ar":
                         title = "✏️ تعديل على حساب تداول"
@@ -1857,6 +1871,10 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>🔢 رقم الحساب:</b> {account_data['account_number']}
 <b>🔐 كلمة المرور:</b> {account_data.get('password', 'N/A')}
 <b>🖥️ السيرفر:</b> {account_data['server']}
+"""
+                    # إذا لم يكن تجريبيًا، أضف الحقول الإضافية
+                    if not is_trial:
+                        message += f"""
 <b>📈 العائد المتوقع:</b> {account_data.get('expected_return', 'N/A')}
 <b>👤 الوكيل:</b> {account_data.get('agent', 'N/A')}
 
@@ -1864,7 +1882,14 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>💳 الرصيد الحالي:</b> {account_data.get('current_balance', 'N/A')}  
 <b>💸 المسحوبات:</b> {account_data.get('withdrawals', 'N/A')}
 <b>📅 تاريخ البدء:</b> {account_data.get('copy_start_date', 'N/A')}
+"""
+                    else:
+                        message += f"""
+<b>💰 رصيد البداية:</b> {account_data.get('initial_balance', 'N/A')}
+<b>📅 تاريخ البدء:</b> {account_data.get('copy_start_date', 'N/A')}
+"""
 
+                    message += f"""
 <b>🌐 معرف الحساب:</b> {account_data['id']}
                     """
                     
@@ -1886,6 +1911,10 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>🔢 Account Number:</b> {account_data['account_number']}
 <b>🔐 Password:</b> {account_data.get('password', 'N/A')}
 <b>🖥️ Server:</b> {account_data['server']}
+"""
+                    # إذا لم يكن تجريبيًا، أضف الحقول الإضافية
+                    if not is_trial:
+                        message += f"""
 <b>📈 Expected Return:</b> {account_data.get('expected_return', 'N/A')}
 <b>👤 Agent:</b> {account_data.get('agent', 'N/A')}
 
@@ -1893,7 +1922,14 @@ async def send_admin_notification(action_type: str, account_data: dict, subscrib
 <b>💳 Current Balance:</b> {account_data.get('current_balance', 'N/A')}  
 <b>💸 Withdrawals:</b> {account_data.get('withdrawals', 'N/A')}
 <b>📅 Start Date:</b> {account_data.get('copy_start_date', 'N/A')}
+"""
+                    else:
+                        message += f"""
+<b>💰 Initial Balance:</b> {account_data.get('initial_balance', 'N/A')}
+<b>📅 Start Date:</b> {account_data.get('copy_start_date', 'N/A')}
+"""
 
+                    message += f"""
 <b>🌐 Account ID:</b> {account_data['id']}
                     """
                     
