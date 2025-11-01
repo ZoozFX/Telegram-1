@@ -3150,8 +3150,8 @@ def webapp_free_trial(request: Request):
         <label>{labels['account_type']} <span class="required">*</span></label>
         <select id="account_type" required>
           <option value="">{ 'اختر' if is_ar else 'Select' }</option>
-          <option value="">{ 'حقيقي' if is_ar else 'Real' }</option>
-          <option value="">{ 'تجريبي' if is_ar else 'Demo' }</option>
+          <option value="{ 'حقيقي' if is_ar else 'Real' }">{ 'حقيقي' if is_ar else 'Real' }</option>
+          <option value="{ 'تجريبي' if is_ar else 'Demo' }">{ 'تجريبي' if is_ar else 'Demo' }</option>
 
         </select>
         <div id="account_type_error" class="field-error">{labels['required_field']}</div>
@@ -4208,43 +4208,86 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if q.data == "request_demo_account":
-        if lang == "ar":
-            title = "حساب حقيقي"
-            details = """
+    # أولاً: إرسال تفاصيل الحساب إلى المستخدم (كما في الكود الأصلي)
+    if lang == "ar":
+        title = "حساب حقيقي"
+        details = """
 Account Number : 555013
 Password : yesfx2025
 Server : oneroyal-real
 Platform : MT4
-            """
-            ok_button = "✅ حسناً"
-        else:
-            title = "Real Account"
-            details = """
+        """
+        ok_button = "✅ حسناً"
+    else:
+        title = "Real Account"
+        details = """
 Account Number : 555013
 Password : yesfx2025
 Server : oneroyal-real
 Platform : MT4
-            """
-            ok_button = "✅ OK"
+        """
+        ok_button = "✅ OK"
 
-        labels = [ok_button]
-        header = build_header_html(title, labels, header_emoji="🛡️", arabic_indent=1 if lang == "ar" else 0)
-        message = f"{header}\n\n{details}"
+    labels = [ok_button]
+    header = build_header_html(title, labels, header_emoji="🛡️", arabic_indent=1 if lang == "ar" else 0)
+    message = f"{header}\n\n{details}"
 
-        keyboard = [[InlineKeyboardButton(ok_button, callback_data="delete_demo_message")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    keyboard = [[InlineKeyboardButton(ok_button, callback_data="delete_demo_message")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-        sent = await context.bot.send_message(
-            chat_id=user_id,
-            text=message,
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
+    sent_user = await context.bot.send_message(
+        chat_id=user_id,
+        text=message,
+        reply_markup=reply_markup,
+        parse_mode="HTML"
+    )
 
-        # Save the message ID for deletion
-        context.user_data['demo_message_id'] = sent.message_id
-        context.user_data['demo_chat_id'] = sent.chat_id
-        return
+    # حفظ للحذف لاحقاً (لرسالة المستخدم)
+    context.user_data['demo_message_id'] = sent_user.message_id
+    context.user_data['demo_chat_id'] = sent_user.chat_id
+
+    # ثانياً: إرسال إخطار إلى الأدمن مع تفاصيل الطلب
+    subscriber = get_subscriber_by_telegram_id(user_id)
+    if subscriber:
+        for admin_id in ADMIN_TELEGRAM_IDS:
+            admin_lang = get_admin_language(admin_id)
+            if admin_lang == "ar":
+                admin_title = "طلب حساب مشاهدة جديد"
+                admin_details = f"""
+👤 المستخدم: {subscriber.name}
+📧 البريد: {subscriber.email}
+📞 الهاتف: {subscriber.phone}
+🆔 Telegram ID: {subscriber.telegram_id}
+@{subscriber.telegram_username or 'N/A'}
+                """
+                admin_ok_button = "✅ حسناً"
+            else:
+                admin_title = "New Demo Account Request"
+                admin_details = f"""
+👤 User: {subscriber.name}
+📧 Email: {subscriber.email}
+📞 Phone: {subscriber.phone}
+🆔 Telegram ID: {subscriber.telegram_id}
+@{subscriber.telegram_username or 'N/A'}
+                """
+                admin_ok_button = "✅ OK"
+
+            admin_labels = [admin_ok_button]
+            admin_header = build_header_html(admin_title, admin_labels, header_emoji="🛡️", arabic_indent=1 if admin_lang == "ar" else 0)
+            admin_message = f"{admin_header}\n\n{admin_details}"
+
+            admin_keyboard = [[InlineKeyboardButton(admin_ok_button, callback_data=f"delete_admin_demo_message_{admin_id}")]]
+            admin_reply_markup = InlineKeyboardMarkup(admin_keyboard)
+
+            sent_admin = await context.bot.send_message(
+                chat_id=admin_id,
+                text=admin_message,
+                reply_markup=admin_reply_markup,
+                parse_mode="HTML"
+            )
+
+            
+    return
 
     if q.data == "delete_demo_message":
         message_id = context.user_data.get('demo_message_id')
@@ -4424,7 +4467,16 @@ Help with {service_title}.
             parse_mode="HTML",
             disable_web_page_preview=True
         )
-
+        
+async def delete_admin_demo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    # حذف الرسالة
+    try:
+        await q.message.delete()
+    except Exception as e:
+        logger.exception(f"Failed to delete admin demo message: {e}")
 # ===============================
 # web_app_message_handler fallback
 # ===============================
@@ -4679,6 +4731,7 @@ application.add_handler(CallbackQueryHandler(handle_notification_confirmation, p
 application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
 application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^admin_reset_sequences$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
+application.add_handler(CallbackQueryHandler(delete_admin_demo_message, pattern="^delete_admin_demo_message_"))
 # ===============================
 # Webhook setup
 # ===============================
