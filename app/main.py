@@ -4468,18 +4468,18 @@ Help with {service_title}.
             disable_web_page_preview=True
         )
         
-async def delete_admin_demo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_demo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
-    # حذف الرسالة
+    # حذف الرسالة التي تحتوي على الزر مباشرة
     try:
         await context.bot.delete_message(
             chat_id=q.message.chat_id,
             message_id=q.message.message_id
         )
     except Exception as e:
-        logger.exception(f"Failed to delete admin demo message: {e}")
+        logger.exception(f"Failed to delete user demo message: {e}")
 # ===============================
 # web_app_message_handler fallback
 # ===============================
@@ -4734,7 +4734,7 @@ application.add_handler(CallbackQueryHandler(handle_notification_confirmation, p
 application.add_handler(CallbackQueryHandler(admin_update_performances, pattern="^admin_update_performances$"))
 application.add_handler(CallbackQueryHandler(admin_reset_sequences, pattern="^admin_reset_sequences$"))
 application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(CallbackQueryHandler(delete_admin_demo_message, pattern="^delete_admin_demo_message_"))
+application.add_handler(CallbackQueryHandler(delete_demo_message, pattern="^delete_demo_message$"))
 # ===============================
 # Webhook setup
 # ===============================
